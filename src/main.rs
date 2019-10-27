@@ -72,7 +72,7 @@ impl Lexer {
         Lexer {
             definition: vec![
                 TokenDefinition::new(TokenType::Int, r"^int"),
-                TokenDefinition::new(TokenType::Return, r"^return\s+"),
+                TokenDefinition::new(TokenType::Return, r"^\breturn\b"),
                 TokenDefinition::new(TokenType::Identifier, r"^[a-zA-Z]\w*"),
                 TokenDefinition::new(TokenType::IntegerLiteral, r"^\d+"),
                 TokenDefinition::new(TokenType::OpenParenthesis, r"^\("),
