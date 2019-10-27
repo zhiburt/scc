@@ -1,5 +1,5 @@
 use regex::Regex;
-use std::io::{Read, Result};
+use std::io::{Read, Write};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum TokenType {
@@ -63,11 +63,6 @@ struct TokenMatch<'a> {
     remainingText: &'a str,
 }
 
-// Token{
-//                     tokenType: self.token,
-//                     pos: Pos{start: m.start(), end: m.end()},
-//                 }
-
 struct Lexer {
     definition: Vec<TokenDefinition>,
 }
@@ -77,7 +72,7 @@ impl Lexer {
         Lexer {
             definition: vec![
                 TokenDefinition::new(TokenType::Int, r"^int"),
-                TokenDefinition::new(TokenType::Return, r"^return"),
+                TokenDefinition::new(TokenType::Return, r"^return\s+"),
                 TokenDefinition::new(TokenType::Identifier, r"^[a-zA-Z]\w*"),
                 TokenDefinition::new(TokenType::IntegerLiteral, r"^\d+"),
                 TokenDefinition::new(TokenType::OpenParenthesis, r"^\("),
@@ -91,7 +86,7 @@ impl Lexer {
 
     fn lex<R: Read>(&self, mut reader: R) -> Result<Vec<Token>> {
         let mut file = String::new();
-        reader.read_to_string(&mut file)?;
+        reader.read_to_string(&mut file).unwrap();
 
         let mut lexemes = Vec::new();
         let mut remain_text = file.as_str();
