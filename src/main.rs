@@ -227,6 +227,33 @@ fn compare_token(tok: Token, tok_type: TokenType) -> Result<Token> {
     }
 }
 
+fn gen(p: Program) -> String {
+    gen_decl(p.0)
+}
+
+fn gen_decl(st: Declaration) -> String{
+    match st {
+        Declaration::Func(name, statement) => {
+            format!(r"
+  .globl {}
+{0}:
+    {}", name, gen_statement(statement))
+        },
+    }
+}
+
+fn gen_statement(st: Statement) -> String{
+    match st {
+        Statement::Return(expr) => {
+            match expr {
+                Expression::Const(n) =>
+                format!(r"movl    ${}, %eax
+    ret", n)
+            }
+        },
+    }
+}
+
 fn main() {
     let c_file = std::fs::File::open("main.c1").unwrap();
     let lexer = Lexer::new();
