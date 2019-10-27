@@ -162,6 +162,71 @@ impl error::Error for CompilerError {
     }
 }
 
+enum Expression {
+    Const(isize),
+}
+
+impl Expression {
+    fn parse(tokens: &mut Vec<Token>) -> Result<Self> {
+        let int_constant = compare_token(tokens.remove(0), TokenType::IntegerLiteral)?;
+        Ok(Expression::Const(int_constant.val.as_ref().unwrap().parse().unwrap()))
+    }
+}
+
+enum Statement {
+    Return(Expression),
+}
+
+impl Statement {
+    fn parse(tokens: &mut Vec<Token>) -> Result<Self> {
+        compare_token(tokens.remove(0), TokenType::Return)?;
+        let expr = Expression::parse(tokens)?;
+        compare_token(tokens.remove(0), TokenType::Semicolon)?;
+        Ok(Statement::Return(expr))
+    }
+}
+
+enum Declaration {
+    Func(String, Statement),
+}
+
+impl Declaration {
+    fn parse_func_decl(mut tokens: &mut Vec<Token>) -> Result<Self> {        
+        compare_token(tokens.remove(0), TokenType::Int)?;
+        let func_name = compare_token(tokens.remove(0), TokenType::Identifier)?;
+        compare_token(tokens.remove(0), TokenType::OpenParenthesis)?;
+        compare_token(tokens.remove(0), TokenType::CloseParenthesis)?;
+        compare_token(tokens.remove(0), TokenType::OpenBrace)?;
+        let body = Statement::parse(&mut tokens)?;
+        compare_token(tokens.remove(0), TokenType::CloseBrace)?;
+
+
+        Ok(Declaration::Func(func_name.val.unwrap().clone(), body))
+    }
+}
+
+struct Program(Declaration);
+
+impl Program {
+    fn parse(mut tokens: &mut Vec<Token>) -> Result<Self> {
+        Ok(Program(
+            Declaration::parse_func_decl(&mut tokens)?
+        ))
+    }
+}
+
+fn check_token(tok: Option<&Token>) -> Result<&Token> {
+    tok.map_or(Err(CompilerError::ParsingError), |tok| Ok(tok))
+}
+
+fn compare_token(tok: Token, tok_type: TokenType) -> Result<Token> {
+    if tok.token_type == tok_type {
+        Ok(tok)
+    } else {
+        Err(CompilerError::ParsingError)
+    }
+}
+
 fn main() {
     let c_file = std::fs::File::open("main.c1").unwrap();
     let lexer = Lexer::new();
