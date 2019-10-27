@@ -140,6 +140,28 @@ impl Lexer {
     }
 }
 
+use std::error;
+use std::fmt;
+
+type Result<T> = std::result::Result<T, CompilerError>;
+
+#[derive(Debug)]
+enum CompilerError {
+    ParsingError,
+}
+
+impl fmt::Display for CompilerError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "invalid first item to double")
+    }
+}
+
+impl error::Error for CompilerError {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        None
+    }
+}
+
 fn main() {
     let c_file = std::fs::File::open("main.c1").unwrap();
     let lexer = Lexer::new();
