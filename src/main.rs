@@ -255,17 +255,21 @@ fn gen_statement(st: Statement) -> String{
 }
 
 fn main() {
-    let c_file = std::fs::File::open("main.c1").unwrap();
+    let file = std::env::args().collect::<Vec<String>>()[1].clone();
+    let program = std::fs::File::open(file).unwrap();
     let lexer = Lexer::new();
+    let mut tokens = lexer.lex(program).unwrap();
     println!(
         "{:?}",
-        lexer
-            .lex(c_file)
-            .unwrap()
+        tokens
             .iter()
             .map(|t| t.token_type)
             .collect::<Vec<TokenType>>()
     );
+
+    let program = Program::parse(&mut tokens).expect("Cannot parse program");
+    let mut asm_file = std::fs::File::create("assembly.s").expect("Cannot create assembler code");
+    asm_file.write_all(gen(program).as_ref()).unwrap();
 }
 
 mod tests {
