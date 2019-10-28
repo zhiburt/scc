@@ -231,7 +231,7 @@ fn gen(p: Program) -> String {
     gen_decl(p.0)
 }
 
-fn gen_decl(st: Declaration) -> String{
+fn gen_decl(st: Declaration) -> String {
     match st {
         Declaration::Func(name, statement) => {
             format!(r"
@@ -254,20 +254,50 @@ fn gen_statement(st: Statement) -> String{
     }
 }
 
-fn main() {
-    let file = std::env::args().collect::<Vec<String>>()[1].clone();
-    let program = std::fs::File::open(file).unwrap();
-    let lexer = Lexer::new();
-    let mut tokens = lexer.lex(program).unwrap();
-    println!(
+fn pretty_tokens(tokens: &Vec<Token>) -> String {
+    format!(
         "{:?}",
         tokens
             .iter()
             .map(|t| t.token_type)
             .collect::<Vec<TokenType>>()
-    );
+    )
+}
 
+fn pretty_program(program: &Program) -> String {
+    pretty_decl(&program.0)
+}
+
+fn pretty_decl(d: &Declaration) -> String {
+    match d {
+        Declaration::Func(name, statement) => {
+            format!("FUN {}:\n   body:\n      {}", name, pretty_statement(&statement))
+        },
+    }
+}
+
+fn pretty_statement(s: &Statement) -> String {
+    match s {
+        Statement::Return(expr) => format!("RETURN {}", pretty_expr(expr))
+    }
+}
+
+fn pretty_expr(s: &Expression) -> String {
+    match s {
+        Expression::Const(val) => format!("Int<{}>", val)
+    }
+}
+
+fn main() {
+    let file = std::env::args().collect::<Vec<String>>()[1].clone();
+    let program = std::fs::File::open(file).unwrap();
+    let lexer = Lexer::new();
+    let mut tokens = lexer.lex(program).unwrap();
+    
     let program = Program::parse(&mut tokens).expect("Cannot parse program");
+    
+    println!("{}", pretty_program(&program));
+    
     let mut asm_file = std::fs::File::create("assembly.s").expect("Cannot create assembler code");
     asm_file.write_all(gen(program).as_ref()).unwrap();
 }
