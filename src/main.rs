@@ -12,6 +12,9 @@ enum TokenType {
     Int,
     Identifier,
     IntegerLiteral,
+    Negation,
+    BitwiseComplement,
+    LogicalNegation,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -80,6 +83,9 @@ impl Lexer {
                 TokenDefinition::new(TokenType::OpenBrace, r"^\{"),
                 TokenDefinition::new(TokenType::CloseBrace, r"^}"),
                 TokenDefinition::new(TokenType::Semicolon, r"^;"),
+                TokenDefinition::new(TokenType::Negation, r"^-"),
+                TokenDefinition::new(TokenType::BitwiseComplement, r"^~"),
+                TokenDefinition::new(TokenType::LogicalNegation, r"^!"),
             ],
         }
     }
@@ -162,14 +168,28 @@ impl error::Error for CompilerError {
     }
 }
 
+#[derive(Debug)]
+enum UnaryOp {
+    Negation,
+    BitwiseComplement,
+    LogicalNegation,
+}
+
 enum Expression {
     Const(isize),
+    UnOp(UnaryOp, Box<Expression>),
 }
 
 impl Expression {
     fn parse(tokens: &mut Vec<Token>) -> Result<Self> {
-        let int_constant = compare_token(tokens.remove(0), TokenType::IntegerLiteral)?;
-        Ok(Expression::Const(int_constant.val.as_ref().unwrap().parse().unwrap()))
+        let token = tokens.remove(0);
+        match token.token_type {
+            TokenType::IntegerLiteral => Ok(Expression::Const(token.val.as_ref().unwrap().parse().unwrap())),
+            TokenType::Negation => Ok(Expression::UnOp(UnaryOp::Negation, Box::new(Expression::parse(tokens)?))),
+            TokenType::BitwiseComplement => Ok(Expression::UnOp(UnaryOp::BitwiseComplement, Box::new(Expression::parse(tokens)?))),
+            TokenType::LogicalNegation => Ok(Expression::UnOp(UnaryOp::LogicalNegation, Box::new(Expression::parse(tokens)?))),
+            _ => Err(CompilerError::ParsingError),
+        }
     }
 }
 
@@ -228,29 +248,53 @@ fn compare_token(tok: Token, tok_type: TokenType) -> Result<Token> {
 }
 
 fn gen(p: Program) -> String {
-    gen_decl(p.0)
+    gen_decl(&p.0)
 }
 
-fn gen_decl(st: Declaration) -> String {
+fn gen_decl(st: &Declaration) -> String {
     match st {
         Declaration::Func(name, statement) => {
             format!(r"
   .globl {}
 {0}:
-    {}", name, gen_statement(statement))
+{}", name, gen_statement(&statement))
         },
     }
 }
 
-fn gen_statement(st: Statement) -> String{
+fn gen_statement(st: &Statement) -> String {
     match st {
         Statement::Return(expr) => {
-            match expr {
-                Expression::Const(n) =>
-                format!(r"movl    ${}, %eax
-    ret", n)
-            }
+            let mut expr_code = gen_expr(&expr);
+            expr_code.push_str("\n  ret");
+            expr_code
         },
+    }
+}
+
+
+fn gen_expr(expr: &Expression) -> String {
+    match expr {
+        Expression::Const(n) => format!(r"  movl    ${}, %eax", n),
+        Expression::UnOp(op, expr) => {
+            let mut expr_code = gen_expr(expr.as_ref());
+
+            match op {
+                UnaryOp::BitwiseComplement => {
+                    expr_code.push_str("\n  not    %eax");
+                },
+                UnaryOp::Negation => {
+                    expr_code.push_str("\n  neg    %eax");
+                },
+                UnaryOp::LogicalNegation => {
+                    expr_code.push_str("\n  cmpl    $0, %eax");
+                    expr_code.push_str("\n  movl    $0, %eax");
+                    expr_code.push_str("\n  sete    %al");
+                },
+            }
+
+            expr_code
+        }
     }
 }
 
@@ -284,7 +328,8 @@ fn pretty_statement(s: &Statement) -> String {
 
 fn pretty_expr(s: &Expression) -> String {
     match s {
-        Expression::Const(val) => format!("Int<{}>", val)
+        Expression::Const(val) => format!("Int<{}>", val),
+        Expression::UnOp(op, val) => format!("UnOp<{:?}> {}", op, pretty_expr(val)),
     }
 }
 
