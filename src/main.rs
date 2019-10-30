@@ -15,6 +15,9 @@ enum TokenType {
     Negation,
     BitwiseComplement,
     LogicalNegation,
+    Addition,
+    Multiplication,
+    Division,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -86,6 +89,9 @@ impl Lexer {
                 TokenDefinition::new(TokenType::Negation, r"^-"),
                 TokenDefinition::new(TokenType::BitwiseComplement, r"^~"),
                 TokenDefinition::new(TokenType::LogicalNegation, r"^!"),
+                TokenDefinition::new(TokenType::Addition, r"^\+"),
+                TokenDefinition::new(TokenType::Multiplication, r"^\*"),
+                TokenDefinition::new(TokenType::Division, r"^/"),
             ],
         }
     }
@@ -175,21 +181,118 @@ enum UnaryOp {
     LogicalNegation,
 }
 
+impl UnaryOp {
+    fn from_token_type(t: TokenType) -> Option<UnaryOp> {
+        match t {
+            TokenType::Negation => Some(UnaryOp::Negation),
+            TokenType::LogicalNegation => Some(UnaryOp::LogicalNegation),
+            TokenType::BitwiseComplement => Some(UnaryOp::BitwiseComplement),
+            _ => None
+        }
+    }
+}
+
 enum Expression {
+    Term(Term),
+    BinOp(Box<Term>, BinOp, Box<Term>),
+}
+
+enum BinOp {
+    Plus,
+    Minus,
+}
+
+enum FactOp {
+    Multiplication,
+    Division,
+}
+
+enum Term {
+    Fact(Factor),
+    FactorOp(Box<Factor>, FactOp, Box<Factor>),
+}
+
+impl Term {
+    fn parse(tokens: &mut Vec<Token>) -> Result<Self> {
+        let fact = Factor::parse(&mut tokens)?;
+        let expr = Term::Fact(fact);
+        let toks = tokens.iter().peekable();
+        while let Some(&&token) = toks.peek() {
+            match token.token_type {
+                TokenType::Multiplication => {
+                    tokens.remove(0);
+                    let next_fact = Factor::parse(&mut tokens)?;
+                    expr = Term::FactorOp(Box::new(fact) , FactOp::Multiplication, Box::new(next_fact));
+                },
+                TokenType::Division => {
+                    tokens.remove(0);
+                    let next_fact = Factor::parse(&mut tokens)?;
+                    expr = Term::FactorOp(Box::new(fact) , FactOp::Division, Box::new(next_fact));
+                },
+                _ => { break; },
+            }
+        }
+
+        Ok(expr)
+    }
+}
+
+enum Factor {
+    Expr(Box<Expression>),
+    UnOp(UnaryOp, Box<Factor>),
     Const(isize),
-    UnOp(UnaryOp, Box<Expression>),
+}
+
+
+impl Factor {
+    fn parse(tokens: &mut Vec<Token>) -> Result<Self> {
+        let token = tokens.remove(0);
+        match token.token_type {
+            TokenType::OpenParenthesis => {
+                let expr = Expression::parse(tokens)?;
+                token = tokens.remove(0);
+                if token.token_type != TokenType::CloseParenthesis {
+                    return Err(CompilerError::ParsingError);
+                }
+            
+                Ok(Factor::Expr(Box::new(expr)))
+            },
+            TokenType::IntegerLiteral => {
+                Ok(Factor::Const(token.val.as_ref().unwrap().parse().unwrap()))
+            },
+            TokenType::Negation | TokenType::LogicalNegation | TokenType::BitwiseComplement => {
+                let factor = Factor::parse(&mut tokens)?;
+                Ok(Factor::UnOp(UnaryOp::from_token_type(token.token_type).unwrap(), Box::new(factor)))
+            }
+            _ => {
+                Err(CompilerError::ParsingError)
+            }
+        }
+    }
 }
 
 impl Expression {
     fn parse(tokens: &mut Vec<Token>) -> Result<Self> {
-        let token = tokens.remove(0);
-        match token.token_type {
-            TokenType::IntegerLiteral => Ok(Expression::Const(token.val.as_ref().unwrap().parse().unwrap())),
-            TokenType::Negation => Ok(Expression::UnOp(UnaryOp::Negation, Box::new(Expression::parse(tokens)?))),
-            TokenType::BitwiseComplement => Ok(Expression::UnOp(UnaryOp::BitwiseComplement, Box::new(Expression::parse(tokens)?))),
-            TokenType::LogicalNegation => Ok(Expression::UnOp(UnaryOp::LogicalNegation, Box::new(Expression::parse(tokens)?))),
-            _ => Err(CompilerError::ParsingError),
+        let term = Term::parse(&mut tokens)?;
+        let expr = Expression::Term(term);
+        let toks = tokens.iter().peekable();
+        while let Some(&&token) = toks.peek() {
+            match token.token_type {
+                TokenType::Addition => {
+                    tokens.remove(0);
+                    let next_term = Term::parse(&mut tokens)?;
+                    expr = Expression::BinOp(Box::new(term) , BinOp::Plus, Box::new(next_term));
+                },
+                TokenType::Negation => {
+                    tokens.remove(0);
+                    let next_term = Term::parse(&mut tokens)?;
+                    expr = Expression::BinOp(Box::new(term) , BinOp::Minus, Box::new(next_term));
+                },
+                _ => { break; },
+            }
         }
+
+        Ok(expr)
     }
 }
 
