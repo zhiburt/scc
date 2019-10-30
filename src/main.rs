@@ -213,27 +213,34 @@ enum Term {
 }
 
 impl Term {
-    fn parse(tokens: &mut Vec<Token>) -> Result<Self> {
+    fn parse(mut tokens: &mut Vec<Token>) -> Result<Self> {
         let fact = Factor::parse(&mut tokens)?;
-        let expr = Term::Fact(fact);
-        let toks = tokens.iter().peekable();
-        while let Some(&&token) = toks.peek() {
+        let mut term = Term::Fact(fact);
+        while let Some(token) = tokens.iter().peekable().peek() {
             match token.token_type {
                 TokenType::Multiplication => {
                     tokens.remove(0);
                     let next_fact = Factor::parse(&mut tokens)?;
-                    expr = Term::FactorOp(Box::new(fact) , FactOp::Multiplication, Box::new(next_fact));
+                    let f = match term {
+                        Term::Fact(fact) => fact,
+                        _ => unreachable!(),
+                    };
+                    term = Term::FactorOp(Box::new(f) , FactOp::Multiplication, Box::new(next_fact));
                 },
                 TokenType::Division => {
                     tokens.remove(0);
                     let next_fact = Factor::parse(&mut tokens)?;
-                    expr = Term::FactorOp(Box::new(fact) , FactOp::Division, Box::new(next_fact));
+                    let f = match term {
+                        Term::Fact(fact) => fact,
+                        _ => unreachable!(),
+                    };
+                    term = Term::FactorOp(Box::new(f) , FactOp::Division, Box::new(next_fact));
                 },
                 _ => { break; },
             }
         }
 
-        Ok(expr)
+        Ok(term)
     }
 }
 
@@ -245,8 +252,8 @@ enum Factor {
 
 
 impl Factor {
-    fn parse(tokens: &mut Vec<Token>) -> Result<Self> {
-        let token = tokens.remove(0);
+    fn parse(mut tokens: &mut Vec<Token>) -> Result<Self> {
+        let mut token = tokens.remove(0);
         match token.token_type {
             TokenType::OpenParenthesis => {
                 let expr = Expression::parse(tokens)?;
@@ -272,21 +279,28 @@ impl Factor {
 }
 
 impl Expression {
-    fn parse(tokens: &mut Vec<Token>) -> Result<Self> {
+    fn parse(mut tokens: &mut Vec<Token>) -> Result<Self> {
         let term = Term::parse(&mut tokens)?;
-        let expr = Expression::Term(term);
-        let toks = tokens.iter().peekable();
-        while let Some(&&token) = toks.peek() {
+        let mut expr = Expression::Term(term);
+        while let Some(token) = tokens.iter().peekable().peek() {
             match token.token_type {
                 TokenType::Addition => {
                     tokens.remove(0);
                     let next_term = Term::parse(&mut tokens)?;
-                    expr = Expression::BinOp(Box::new(term) , BinOp::Plus, Box::new(next_term));
+                    let e = match expr {
+                        Expression::Term(expr) => expr,
+                        _ => unreachable!(),
+                    };
+                    expr = Expression::BinOp(Box::new(e) , BinOp::Plus, Box::new(next_term));
                 },
                 TokenType::Negation => {
                     tokens.remove(0);
                     let next_term = Term::parse(&mut tokens)?;
-                    expr = Expression::BinOp(Box::new(term) , BinOp::Minus, Box::new(next_term));
+                    let e = match expr {
+                        Expression::Term(expr) => expr,
+                        _ => unreachable!(),
+                    };
+                    expr = Expression::BinOp(Box::new(e) , BinOp::Minus, Box::new(next_term));
                 },
                 _ => { break; },
             }
@@ -375,31 +389,94 @@ fn gen_statement(st: &Statement) -> String {
     }
 }
 
-
 fn gen_expr(expr: &Expression) -> String {
     match expr {
-        Expression::Const(n) => format!(r"  movl    ${}, %eax", n),
-        Expression::UnOp(op, expr) => {
-            let mut expr_code = gen_expr(expr.as_ref());
+        Expression::Term(term) => {
+            gen_term(term)
+        },
+        Expression::BinOp(left_term, op, right_term) => {
+            let mut fact = gen_term(left_term);
+            fact.push_str("\n  push %rax");
+            fact.push_str(&gen_term(right_term));
+            fact.push_str("\n  pop %rcx");
 
             match op {
-                UnaryOp::BitwiseComplement => {
-                    expr_code.push_str("\n  not    %eax");
+                BinOp::Plus => {
+                    fact.push_str("\n  add %rcx, %rax");
                 },
-                UnaryOp::Negation => {
-                    expr_code.push_str("\n  neg    %eax");
-                },
-                UnaryOp::LogicalNegation => {
-                    expr_code.push_str("\n  cmpl    $0, %eax");
-                    expr_code.push_str("\n  movl    $0, %eax");
-                    expr_code.push_str("\n  sete    %al");
-                },
+                BinOp::Minus => fact.push_str("\n  sub %rax, %rcx"),
             }
 
-            expr_code
-        }
+            fact
+        },
     }
 }
+
+fn gen_term(term: &Term) -> String {
+    match term {
+        Term::Fact(fact) => {
+            gen_fact(fact)
+        },
+        Term::FactorOp(left_fact, op, right_fact) => {
+            let mut fact = gen_fact(left_fact);
+            fact.push_str("\n  push %rax");
+            fact.push_str(&gen_fact(right_fact));
+            fact.push_str("\n  pop %rcx");
+
+            match op {
+                FactOp::Division => {
+                    fact.push_str("\n  imul %rcx, %rax");
+                },
+                FactOp::Multiplication => fact.push_str("\n  imul %rcx, %rax"),
+            }
+
+            fact
+        },
+    }
+}
+
+fn gen_fact(fact: &Factor) -> String {
+    match fact {
+        Factor::Const(val) => {
+            format!("\n  movl    ${}, %eax", val)
+        },
+        Factor::Expr(expr) => {
+            gen_expr(expr)
+        },
+        Factor::UnOp(op, factor) => {
+            let mut fact_code = gen_fact(factor);
+            match op {
+                UnaryOp::BitwiseComplement => {
+                    fact_code.push_str("\n  not    %eax");
+                },
+                UnaryOp::Negation => {
+                    fact_code.push_str("\n  neg    %eax");
+                },
+                UnaryOp::LogicalNegation => {
+                    fact_code.push_str("\n  cmpl    $0, %eax");
+                    fact_code.push_str("\n  movl    $0, %eax");
+                    fact_code.push_str("\n  sete    %al");
+                },
+            }
+            
+            fact_code
+        },
+    }
+}
+
+            // match op {
+            //     UnaryOp::BitwiseComplement => {
+            //         expr_code.push_str("\n  not    %eax");
+            //     },
+            //     UnaryOp::Negation => {
+            //         expr_code.push_str("\n  neg    %eax");
+            //     },
+            //     UnaryOp::LogicalNegation => {
+            //         expr_code.push_str("\n  cmpl    $0, %eax");
+            //         expr_code.push_str("\n  movl    $0, %eax");
+            //         expr_code.push_str("\n  sete    %al");
+            //     },
+            // }
 
 fn pretty_tokens(tokens: &Vec<Token>) -> String {
     format!(
@@ -430,10 +507,11 @@ fn pretty_statement(s: &Statement) -> String {
 }
 
 fn pretty_expr(s: &Expression) -> String {
-    match s {
-        Expression::Const(val) => format!("Int<{}>", val),
-        Expression::UnOp(op, val) => format!("UnOp<{:?}> {}", op, pretty_expr(val)),
-    }
+    // match s {
+        // Expression::Const(val) => format!("Int<{}>", val),
+        // Expression::UnOp(op, val) => format!("UnOp<{:?}> {}", op, pretty_expr(val)),
+    // }
+    String::from("")
 }
 
 fn main() {
@@ -444,7 +522,7 @@ fn main() {
     
     let program = Program::parse(&mut tokens).expect("Cannot parse program");
     
-    println!("{}", pretty_program(&program));
+    // println!("{}", pretty_program(&program));
     
     let mut asm_file = std::fs::File::create("assembly.s").expect("Cannot create assembler code");
     asm_file.write_all(gen(program).as_ref()).unwrap();
