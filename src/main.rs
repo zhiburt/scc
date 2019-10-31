@@ -197,11 +197,13 @@ enum Expression {
     BinOp(Box<Term>, BinOp, Box<Term>),
 }
 
+#[derive(Debug)]
 enum BinOp {
     Plus,
     Minus,
 }
 
+#[derive(Debug)]
 enum FactOp {
     Multiplication,
     Division,
@@ -514,11 +516,25 @@ fn pretty_statement(s: &Statement) -> String {
 }
 
 fn pretty_expr(s: &Expression) -> String {
-    // match s {
-        // Expression::Const(val) => format!("Int<{}>", val),
-        // Expression::UnOp(op, val) => format!("UnOp<{:?}> {}", op, pretty_expr(val)),
-    // }
-    String::from("")
+    match s {
+        Expression::Term(term) => format!("Term<{}>", pretty_term(term)),
+        Expression::BinOp(lt, op, rt) => format!("{} BinOp<{:?}> {}", pretty_term(lt), op, pretty_term(rt)),
+    }
+}
+
+fn pretty_term(t: &Term) -> String {
+    match t {
+        Term::Fact(factor) => format!("Fact<{}>", pretty_fact(factor)),
+        Term::FactorOp(lf, op, rf) => format!("{} Op<{:?}> {}", pretty_fact(lf), op, pretty_fact(rf)),
+       }
+}
+
+fn pretty_fact(f: &Factor) -> String {
+    match f {
+        Factor::Const(e) => format!("Const<{}>", e),
+        Factor::Expr(expr) => pretty_expr(expr),
+        Factor::UnOp(op, f) => format!("UnOp<{:?}> Operation<{}>", op, pretty_fact(f)),
+    }
 }
 
 fn main() {
@@ -529,7 +545,7 @@ fn main() {
     
     let program = Program::parse(&mut tokens).expect("Cannot parse program");
     
-    // println!("{}", pretty_program(&program));
+    println!("{}", pretty_program(&program));
     
     let mut asm_file = std::fs::File::create("assembly.s").expect("Cannot create assembler code");
     asm_file.write_all(gen(program).as_ref()).unwrap();
