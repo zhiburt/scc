@@ -223,7 +223,7 @@ impl Term {
                     let next_fact = Factor::parse(&mut tokens)?;
                     let f = match term {
                         Term::Fact(fact) => fact,
-                        _ => unreachable!(),
+                        _ => Factor::Expr(Box::new(Expression::Term(term))),
                     };
                     term = Term::FactorOp(Box::new(f) , FactOp::Multiplication, Box::new(next_fact));
                 },
@@ -232,7 +232,7 @@ impl Term {
                     let next_fact = Factor::parse(&mut tokens)?;
                     let f = match term {
                         Term::Fact(fact) => fact,
-                        _ => unreachable!(),
+                        _ => Factor::Expr(Box::new(Expression::Term(term))),
                     };
                     term = Term::FactorOp(Box::new(f) , FactOp::Division, Box::new(next_fact));
                 },
@@ -287,20 +287,20 @@ impl Expression {
                 TokenType::Addition => {
                     tokens.remove(0);
                     let next_term = Term::parse(&mut tokens)?;
-                    let e = match expr {
-                        Expression::Term(expr) => expr,
-                        _ => unreachable!(),
+                    let term = match expr {
+                        Expression::Term(term) => term,
+                        _ => Term::Fact(Factor::Expr(Box::new(expr))),
                     };
-                    expr = Expression::BinOp(Box::new(e) , BinOp::Plus, Box::new(next_term));
+                    expr = Expression::BinOp(Box::new(term) , BinOp::Plus, Box::new(next_term));
                 },
                 TokenType::Negation => {
                     tokens.remove(0);
                     let next_term = Term::parse(&mut tokens)?;
-                    let e = match expr {
-                        Expression::Term(expr) => expr,
-                        _ => unreachable!(),
+                    let term = match expr {
+                        Expression::Term(term) => term,
+                        _ => Term::Fact(Factor::Expr(Box::new(expr))),
                     };
-                    expr = Expression::BinOp(Box::new(e) , BinOp::Minus, Box::new(next_term));
+                    expr = Expression::BinOp(Box::new(term) , BinOp::Minus, Box::new(next_term));
                 },
                 _ => { break; },
             }
@@ -404,7 +404,10 @@ fn gen_expr(expr: &Expression) -> String {
                 BinOp::Plus => {
                     fact.push_str("\n  add %rcx, %rax");
                 },
-                BinOp::Minus => fact.push_str("\n  sub %rax, %rcx"),
+                BinOp::Minus => {
+                    fact.push_str("\n  sub %rax, %rcx");
+                    fact.push_str("\n  mov %rcx, %rax");
+                },
             }
 
             fact
@@ -425,7 +428,11 @@ fn gen_term(term: &Term) -> String {
 
             match op {
                 FactOp::Division => {
-                    fact.push_str("\n  imul %rcx, %rax");
+                    fact.push_str("\n  mov %rax, %rbx");
+                    fact.push_str("\n  mov %rcx, %rax");
+                    fact.push_str("\n  mov %rbx, %rcx");
+                    fact.push_str("\n  cqo");
+                    fact.push_str("\n  idiv %rcx");
                 },
                 FactOp::Multiplication => fact.push_str("\n  imul %rcx, %rax"),
             }
@@ -438,7 +445,7 @@ fn gen_term(term: &Term) -> String {
 fn gen_fact(fact: &Factor) -> String {
     match fact {
         Factor::Const(val) => {
-            format!("\n  movl    ${}, %eax", val)
+            format!("\n  mov    ${}, %rax", val)
         },
         Factor::Expr(expr) => {
             gen_expr(expr)
@@ -450,7 +457,7 @@ fn gen_fact(fact: &Factor) -> String {
                     fact_code.push_str("\n  not    %eax");
                 },
                 UnaryOp::Negation => {
-                    fact_code.push_str("\n  neg    %eax");
+                    fact_code.push_str("\n  neg    %rax");
                 },
                 UnaryOp::LogicalNegation => {
                     fact_code.push_str("\n  cmpl    $0, %eax");
