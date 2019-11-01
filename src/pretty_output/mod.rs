@@ -1,5 +1,5 @@
-mod program;
+mod decl;
 mod tokens;
 
-pub use program::pretty_program;
+pub use decl::pretty_decl;
 pub use tokens::pretty_tokens;
