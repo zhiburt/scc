@@ -366,49 +366,51 @@ fn compare_token(tok: Token, tok_type: TokenType) -> Result<Token> {
     }
 }
 
-fn gen(p: Program) -> String {
-    gen_decl(&p.0)
+fn gen(p: Program, start_point: &str) -> String {
+    let header = format!("\t.globl {}", start_point);
+    format!("{}\n{}", header, gen_decl(&p.0))
 }
 
 fn gen_decl(st: &Declaration) -> String {
     match st {
         Declaration::Func(name, statement) => {
-            format!(r"
-  .globl {}
-{0}:
-{}", name, gen_statement(&statement))
+            let statements_code = gen_statement(&statement);
+            let mut pretty_code = statements_code.iter().map(|c| format!("\t{}", c)).collect::<Vec<String>>();
+            let func_name = format!("{}:", name);
+            pretty_code.insert(0, func_name);
+            pretty_code.join("\n")
         },
     }
 }
 
-fn gen_statement(st: &Statement) -> String {
+fn gen_statement(st: &Statement) -> Vec<String> {
     match st {
         Statement::Return(expr) => {
             let mut expr_code = gen_expr(&expr);
-            expr_code.push_str("\n  ret");
+            expr_code.push("ret".to_owned());
             expr_code
         },
     }
 }
 
-fn gen_expr(expr: &Expression) -> String {
+fn gen_expr(expr: &Expression) -> Vec<String> {
     match expr {
         Expression::Term(term) => {
             gen_term(term)
         },
         Expression::BinOp(left_term, op, right_term) => {
             let mut fact = gen_term(left_term);
-            fact.push_str("\n  push %rax");
-            fact.push_str(&gen_term(right_term));
-            fact.push_str("\n  pop %rcx");
+            fact.push("push %rax".to_owned());
+            fact.extend(gen_term(right_term));
+            fact.push("pop %rcx".to_owned());
 
             match op {
                 BinOp::Plus => {
-                    fact.push_str("\n  add %rcx, %rax");
+                    fact.push("add %rcx, %rax".to_owned());
                 },
                 BinOp::Minus => {
-                    fact.push_str("\n  sub %rax, %rcx");
-                    fact.push_str("\n  mov %rcx, %rax");
+                    fact.push("sub %rax, %rcx".to_owned());
+                    fact.push("mov %rcx, %rax".to_owned());
                 },
             }
 
@@ -417,26 +419,26 @@ fn gen_expr(expr: &Expression) -> String {
     }
 }
 
-fn gen_term(term: &Term) -> String {
+fn gen_term(term: &Term) -> Vec<String> {
     match term {
         Term::Fact(fact) => {
             gen_fact(fact)
         },
         Term::FactorOp(left_fact, op, right_fact) => {
             let mut fact = gen_fact(left_fact);
-            fact.push_str("\n  push %rax");
-            fact.push_str(&gen_fact(right_fact));
-            fact.push_str("\n  pop %rcx");
+            fact.push("push %rax".to_owned());
+            fact.extend(gen_fact(right_fact));
+            fact.push("pop %rcx".to_owned());
 
             match op {
                 FactOp::Division => {
-                    fact.push_str("\n  mov %rax, %rbx");
-                    fact.push_str("\n  mov %rcx, %rax");
-                    fact.push_str("\n  mov %rbx, %rcx");
-                    fact.push_str("\n  cqo");
-                    fact.push_str("\n  idiv %rcx");
+                    fact.push("mov %rax, %rbx".to_owned());
+                    fact.push("mov %rcx, %rax".to_owned());
+                    fact.push("mov %rbx, %rcx".to_owned());
+                    fact.push("cqo".to_owned());
+                    fact.push("idiv %rcx".to_owned());
                 },
-                FactOp::Multiplication => fact.push_str("\n  imul %rcx, %rax"),
+                FactOp::Multiplication => fact.push("imul %rcx, %rax".to_owned()),
             }
 
             fact
@@ -444,10 +446,10 @@ fn gen_term(term: &Term) -> String {
     }
 }
 
-fn gen_fact(fact: &Factor) -> String {
+fn gen_fact(fact: &Factor) -> Vec<String> {
     match fact {
         Factor::Const(val) => {
-            format!("\n  mov    ${}, %rax", val)
+            vec![format!("mov    ${}, %rax", val)]
         },
         Factor::Expr(expr) => {
             gen_expr(expr)
@@ -456,15 +458,15 @@ fn gen_fact(fact: &Factor) -> String {
             let mut fact_code = gen_fact(factor);
             match op {
                 UnaryOp::BitwiseComplement => {
-                    fact_code.push_str("\n  not    %eax");
+                    fact_code.push("not    %eax".to_owned());
                 },
                 UnaryOp::Negation => {
-                    fact_code.push_str("\n  neg    %rax");
+                    fact_code.push("neg    %rax".to_owned());
                 },
                 UnaryOp::LogicalNegation => {
-                    fact_code.push_str("\n  cmpl    $0, %eax");
-                    fact_code.push_str("\n  movl    $0, %eax");
-                    fact_code.push_str("\n  sete    %al");
+                    fact_code.push("cmpl    $0, %eax".to_owned());
+                    fact_code.push("movl    $0, %eax".to_owned());
+                    fact_code.push("sete    %al".to_owned());
                 },
             }
             
@@ -548,7 +550,7 @@ fn main() {
     println!("{}", pretty_program(&program));
     
     let mut asm_file = std::fs::File::create("assembly.s").expect("Cannot create assembler code");
-    asm_file.write_all(gen(program).as_ref()).unwrap();
+    asm_file.write_all(gen(program, "main").as_ref()).unwrap();
 }
 
 mod tests {
