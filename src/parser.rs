@@ -35,7 +35,7 @@ impl UnaryOp {
             TokenType::Negation => Some(UnaryOp::Negation),
             TokenType::LogicalNegation => Some(UnaryOp::LogicalNegation),
             TokenType::BitwiseComplement => Some(UnaryOp::BitwiseComplement),
-            _ => None
+            _ => None,
         }
     }
 }
@@ -75,8 +75,8 @@ impl Term {
                         Term::Fact(fact) => fact,
                         _ => Factor::Expr(Box::new(Expression::Term(term))),
                     };
-                    term = Term::FactorOp(Box::new(f) , FactOp::Multiplication, Box::new(next_fact));
-                },
+                    term = Term::FactorOp(Box::new(f), FactOp::Multiplication, Box::new(next_fact));
+                }
                 TokenType::Division => {
                     tokens.remove(0);
                     let next_fact = Factor::parse(&mut tokens)?;
@@ -84,9 +84,11 @@ impl Term {
                         Term::Fact(fact) => fact,
                         _ => Factor::Expr(Box::new(Expression::Term(term))),
                     };
-                    term = Term::FactorOp(Box::new(f) , FactOp::Division, Box::new(next_fact));
-                },
-                _ => { break; },
+                    term = Term::FactorOp(Box::new(f), FactOp::Division, Box::new(next_fact));
+                }
+                _ => {
+                    break;
+                }
             }
         }
 
@@ -100,7 +102,6 @@ pub enum Factor {
     Const(isize),
 }
 
-
 impl Factor {
     pub fn parse(mut tokens: &mut Vec<Token>) -> Result<Self> {
         let mut token = tokens.remove(0);
@@ -111,19 +112,19 @@ impl Factor {
                 if token.token_type != TokenType::CloseParenthesis {
                     return Err(CompilerError::ParsingError);
                 }
-            
                 Ok(Factor::Expr(Box::new(expr)))
-            },
+            }
             TokenType::IntegerLiteral => {
                 Ok(Factor::Const(token.val.as_ref().unwrap().parse().unwrap()))
-            },
+            }
             TokenType::Negation | TokenType::LogicalNegation | TokenType::BitwiseComplement => {
                 let factor = Factor::parse(&mut tokens)?;
-                Ok(Factor::UnOp(UnaryOp::from_token_type(token.token_type).unwrap(), Box::new(factor)))
+                Ok(Factor::UnOp(
+                    UnaryOp::from_token_type(token.token_type).unwrap(),
+                    Box::new(factor),
+                ))
             }
-            _ => {
-                Err(CompilerError::ParsingError)
-            }
+            _ => Err(CompilerError::ParsingError),
         }
     }
 }
@@ -141,8 +142,8 @@ impl Expression {
                         Expression::Term(term) => term,
                         _ => Term::Fact(Factor::Expr(Box::new(expr))),
                     };
-                    expr = Expression::BinOp(Box::new(term) , BinOp::Plus, Box::new(next_term));
-                },
+                    expr = Expression::BinOp(Box::new(term), BinOp::Plus, Box::new(next_term));
+                }
                 TokenType::Negation => {
                     tokens.remove(0);
                     let next_term = Term::parse(&mut tokens)?;
@@ -150,9 +151,11 @@ impl Expression {
                         Expression::Term(term) => term,
                         _ => Term::Fact(Factor::Expr(Box::new(expr))),
                     };
-                    expr = Expression::BinOp(Box::new(term) , BinOp::Minus, Box::new(next_term));
-                },
-                _ => { break; },
+                    expr = Expression::BinOp(Box::new(term), BinOp::Minus, Box::new(next_term));
+                }
+                _ => {
+                    break;
+                }
             }
         }
 
@@ -178,7 +181,7 @@ pub enum Declaration {
 }
 
 impl Declaration {
-    pub fn parse_func_decl(mut tokens: &mut Vec<Token>) -> Result<Self> {        
+    pub fn parse_func_decl(mut tokens: &mut Vec<Token>) -> Result<Self> {
         compare_token(tokens.remove(0), TokenType::Int)?;
         let func_name = compare_token(tokens.remove(0), TokenType::Identifier)?;
         compare_token(tokens.remove(0), TokenType::OpenParenthesis)?;
@@ -186,7 +189,6 @@ impl Declaration {
         compare_token(tokens.remove(0), TokenType::OpenBrace)?;
         let body = Statement::parse(&mut tokens)?;
         compare_token(tokens.remove(0), TokenType::CloseBrace)?;
-
 
         Ok(Declaration::Func(func_name.val.unwrap().clone(), body))
     }
@@ -196,9 +198,7 @@ pub struct Program(pub Declaration);
 
 impl Program {
     pub fn parse(mut tokens: &mut Vec<Token>) -> Result<Self> {
-        Ok(Program(
-            Declaration::parse_func_decl(&mut tokens)?
-        ))
+        Ok(Program(Declaration::parse_func_decl(&mut tokens)?))
     }
 }
 

@@ -152,7 +152,6 @@ impl Lexer {
     }
 }
 
-
 mod tests {
     use super::*;
     use std::io::Cursor;
