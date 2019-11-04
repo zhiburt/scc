@@ -18,6 +18,14 @@ pub enum TokenType {
     Addition,
     Multiplication,
     Division,
+    And,
+    Or,
+    Equal,
+    NotEqual,
+    LessThan,
+    LessThanOrEqual,
+    GreaterThan,
+    GreaterThanOrEqual,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -88,10 +96,18 @@ impl Lexer {
                 TokenDefinition::new(TokenType::Semicolon, r"^;"),
                 TokenDefinition::new(TokenType::Negation, r"^-"),
                 TokenDefinition::new(TokenType::BitwiseComplement, r"^~"),
+                TokenDefinition::new(TokenType::NotEqual, r"^!="),
                 TokenDefinition::new(TokenType::LogicalNegation, r"^!"),
                 TokenDefinition::new(TokenType::Addition, r"^\+"),
                 TokenDefinition::new(TokenType::Multiplication, r"^\*"),
                 TokenDefinition::new(TokenType::Division, r"^/"),
+                TokenDefinition::new(TokenType::And, r"^&&"),
+                TokenDefinition::new(TokenType::Or, r"^\|\|"),
+                TokenDefinition::new(TokenType::Equal, r"^=="),
+                TokenDefinition::new(TokenType::LessThanOrEqual, r"^<="),
+                TokenDefinition::new(TokenType::LessThan, r"^<"),
+                TokenDefinition::new(TokenType::GreaterThanOrEqual, r"^>="),
+                TokenDefinition::new(TokenType::GreaterThan, r"^>"),
             ],
         }
     }
@@ -155,6 +171,50 @@ impl Lexer {
 mod tests {
     use super::*;
     use std::io::Cursor;
+
+    #[test]
+    fn bin_operators_test() {
+        test_bin_op("&&", TokenType::And);
+        test_bin_op("||", TokenType::Or);
+        test_bin_op("==", TokenType::Equal);
+        test_bin_op("!=", TokenType::NotEqual);
+        test_bin_op("<", TokenType::LessThan);
+        test_bin_op("<=", TokenType::LessThanOrEqual);
+        test_bin_op(">", TokenType::GreaterThan);
+        test_bin_op(">=", TokenType::GreaterThanOrEqual);
+    }
+
+
+    fn test_bin_op(op: &str, tt: TokenType) {
+        let program = format!("1 {} 2", op);
+        let buff = Cursor::new(program.as_bytes());
+        let lexer = Lexer::new();
+
+        let tokens = lexer.lex(buff);
+
+
+        let first_int = Token {
+            token_type: TokenType::IntegerLiteral,
+            pos: Pos { start: 0, end: 1 },
+            val: Some(String::from("1")),
+        };
+        let bin_op = Token {
+            token_type: tt,
+            pos: Pos { start: 2, end: 2 + op.len() },
+            val: None,
+        };
+        let second_int = Token {
+            token_type: TokenType::IntegerLiteral,
+            pos: Pos { start: bin_op.pos.end + 1, end: bin_op.pos.end + 2 },
+            val: Some(String::from("2")),
+        };
+
+        assert_eq!(
+            tokens,
+            vec![first_int, bin_op, second_int],
+        );
+    }
+
     #[test]
     fn default_test() {
         let program = r#"
