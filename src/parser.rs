@@ -40,9 +40,171 @@ impl UnaryOp {
     }
 }
 
-pub enum Expression {
-    Term(Term),
-    BinOp(Box<Term>, BinOp, Box<Term>),
+pub struct Expression(pub LogicalAndExpr, pub Option<LogicalAndExpr>);
+
+pub struct LogicalAndExpr(pub EqualityExpr, pub Option<EqualityExpr>);
+
+impl LogicalAndExpr {
+    pub fn parse(mut tokens: &mut Vec<Token>) -> Result<Self> {
+        let eq_expr = EqualityExpr::parse(&mut tokens)?;
+        let mut expr = LogicalAndExpr(eq_expr, None);
+        while let Some(token) = tokens.iter().peekable().peek() {
+            if token.token_type != TokenType::And {
+                break;
+            }
+
+            tokens.remove(0);
+            let next = EqualityExpr::parse(&mut tokens)?;
+            match expr.1 {
+                Some(_) => {
+                    expr = LogicalAndExpr(
+                        EqualityExpr(
+                            RelationalExpr(
+                                AdditiveExpr(
+                                    Term::Fact(Factor::Expr(Box::new(Expression(expr, None)))),
+                                    None,
+                                ),
+                                None,
+                            ),
+                            None,
+                        ),
+                        Some(next),
+                    );
+                }
+                None => {
+                    expr.1 = Some(next);
+                }
+            }
+        }
+
+        Ok(expr)
+    }
+}
+
+pub struct EqualityExpr(pub RelationalExpr, pub Option<(EqualityOp, RelationalExpr)>);
+
+#[derive(Debug)]
+pub enum EqualityOp {
+    Equal,
+    NotEqual,
+}
+
+impl EqualityExpr {
+    pub fn parse(mut tokens: &mut Vec<Token>) -> Result<Self> {
+        let eq_expr = RelationalExpr::parse(&mut tokens)?;
+        let mut expr = EqualityExpr(eq_expr, None);
+        while let Some(token) = tokens.iter().peekable().peek() {
+            let op = match token.token_type {
+                TokenType::Equal => EqualityOp::Equal,
+                TokenType::NotEqual => EqualityOp::NotEqual,
+                _ => break,
+            };
+
+            tokens.remove(0);
+            let next = RelationalExpr::parse(&mut tokens)?;
+            match expr.1 {
+                Some(_) => {
+                    expr = EqualityExpr(
+                        RelationalExpr(
+                            AdditiveExpr(
+                                Term::Fact(Factor::Expr(Box::new(Expression(
+                                    LogicalAndExpr(expr, None),
+                                    None,
+                                )))),
+                                None,
+                            ),
+                            None,
+                        ),
+                        Some((op, next)),
+                    );
+                }
+                None => {
+                    expr.1 = Some((op, next));
+                }
+            }
+        }
+
+        Ok(expr)
+    }
+}
+
+pub struct RelationalExpr(pub AdditiveExpr, pub Option<(RelationalOp, AdditiveExpr)>);
+
+#[derive(Debug)]
+pub enum RelationalOp {
+    Less,
+    LessOrEqual,
+    Greater,
+    GreaterOrEqual,
+}
+
+impl RelationalExpr {
+    pub fn parse(mut tokens: &mut Vec<Token>) -> Result<Self> {
+        let eq_expr = AdditiveExpr::parse(&mut tokens)?;
+        let mut expr = RelationalExpr(eq_expr, None);
+        while let Some(token) = tokens.iter().peekable().peek() {
+            let op = match token.token_type {
+                TokenType::LessThan => RelationalOp::Less,
+                TokenType::LessThanOrEqual => RelationalOp::LessOrEqual,
+                TokenType::GreaterThan => RelationalOp::Greater,
+                TokenType::GreaterThanOrEqual => RelationalOp::GreaterOrEqual,
+                _ => break,
+            };
+
+            tokens.remove(0);
+            let next = AdditiveExpr::parse(&mut tokens)?;
+            match expr.1 {
+                Some(_) => {
+                    expr = RelationalExpr(
+                        AdditiveExpr(
+                            Term::Fact(Factor::Expr(Box::new(Expression(
+                                LogicalAndExpr(EqualityExpr(expr, None), None),
+                                None,
+                            )))),
+                            None,
+                        ),
+                        Some((op, next)),
+                    )
+                }
+                None => expr.1 = Some((op, next)),
+            }
+        }
+
+        Ok(expr)
+    }
+}
+
+pub struct AdditiveExpr(pub Term, pub Option<(BinOp, Term)>);
+
+impl AdditiveExpr {
+    pub fn parse(mut tokens: &mut Vec<Token>) -> Result<Self> {
+        let term = Term::parse(&mut tokens)?;
+        let mut expr = AdditiveExpr(term, None);
+        while let Some(token) = tokens.iter().peekable().peek() {
+            let op = match token.token_type {
+                TokenType::Negation => BinOp::Minus,
+                TokenType::Addition => BinOp::Plus,
+                _ => break,
+            };
+
+            tokens.remove(0);
+            let next = Term::parse(&mut tokens)?;
+            match expr.1 {
+                Some(_) => {
+                    expr = AdditiveExpr(
+                        Term::Fact(Factor::Expr(Box::new(Expression(
+                            LogicalAndExpr(EqualityExpr(RelationalExpr(expr, None), None), None),
+                            None,
+                        )))),
+                        Some((op, next)),
+                    )
+                }
+                None => expr.1 = Some((op, next)),
+            }
+        }
+
+        Ok(expr)
+    }
 }
 
 #[derive(Debug)]
@@ -73,7 +235,13 @@ impl Term {
                     let next_fact = Factor::parse(&mut tokens)?;
                     let f = match term {
                         Term::Fact(fact) => fact,
-                        _ => Factor::Expr(Box::new(Expression::Term(term))),
+                        _ => Factor::Expr(Box::new(Expression(
+                            LogicalAndExpr(
+                                EqualityExpr(RelationalExpr(AdditiveExpr(term, None), None), None),
+                                None,
+                            ),
+                            None,
+                        ))),
                     };
                     term = Term::FactorOp(Box::new(f), FactOp::Multiplication, Box::new(next_fact));
                 }
@@ -82,7 +250,13 @@ impl Term {
                     let next_fact = Factor::parse(&mut tokens)?;
                     let f = match term {
                         Term::Fact(fact) => fact,
-                        _ => Factor::Expr(Box::new(Expression::Term(term))),
+                        _ => Factor::Expr(Box::new(Expression(
+                            LogicalAndExpr(
+                                EqualityExpr(RelationalExpr(AdditiveExpr(term, None), None), None),
+                                None,
+                            ),
+                            None,
+                        ))),
                     };
                     term = Term::FactorOp(Box::new(f), FactOp::Division, Box::new(next_fact));
                 }
@@ -131,35 +305,37 @@ impl Factor {
 
 impl Expression {
     pub fn parse(mut tokens: &mut Vec<Token>) -> Result<Self> {
-        let term = Term::parse(&mut tokens)?;
-        let mut expr = Expression::Term(term);
+        let logical_and_exp = LogicalAndExpr::parse(&mut tokens)?;
+        let mut expr = Expression(logical_and_exp, None);
         while let Some(token) = tokens.iter().peekable().peek() {
-            match token.token_type {
-                TokenType::Addition => {
-                    tokens.remove(0);
-                    let next_term = Term::parse(&mut tokens)?;
-                    let term = match expr {
-                        Expression::Term(term) => term,
-                        _ => Term::Fact(Factor::Expr(Box::new(expr))),
-                    };
-                    expr = Expression::BinOp(Box::new(term), BinOp::Plus, Box::new(next_term));
-                }
-                TokenType::Negation => {
-                    tokens.remove(0);
-                    let next_term = Term::parse(&mut tokens)?;
-                    let term = match expr {
-                        Expression::Term(term) => term,
-                        _ => Term::Fact(Factor::Expr(Box::new(expr))),
-                    };
-                    expr = Expression::BinOp(Box::new(term), BinOp::Minus, Box::new(next_term));
-                }
-                _ => {
-                    break;
-                }
+            if token.token_type != TokenType::Or {
+                break;
+            }
+            tokens.remove(0);
+            let next = LogicalAndExpr::parse(&mut tokens)?;
+            match expr.1 {
+                Some(_) => expr = Expression::from(expr, Some(next)),
+                None => expr.1 = Some(next),
             }
         }
 
         Ok(expr)
+    }
+
+    fn from(expr: Expression, next: Option<LogicalAndExpr>) -> Expression {
+        Expression(
+            LogicalAndExpr(
+                EqualityExpr(
+                    RelationalExpr(
+                        AdditiveExpr(Term::Fact(Factor::Expr(Box::new(expr))), None),
+                        None,
+                    ),
+                    None,
+                ),
+                None,
+            ),
+            next,
+        )
     }
 }
 
