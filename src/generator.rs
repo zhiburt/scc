@@ -31,7 +31,95 @@ fn gen_statement(st: &parser::Statement) -> Vec<String> {
 }
 
 fn gen_expr(expr: &parser::Expression) -> Vec<String> {
-    let expr = &(((expr.0).0).0).0;
+    let mut code = gen_logical_expr(&expr.0);
+    if let Some(rhs_expr) = &expr.1 {
+        let label = unique_label("");
+        let end_label = unique_label("end");
+        code.push("cmp    $0, %rax".to_owned());
+        code.push(format!("je    {}", label));
+        code.push("mov    $1, %rax".to_owned());
+        code.push(format!("jmp    {}", end_label));
+        code.push(format!("{}:", label));
+        code.extend(gen_logical_expr(rhs_expr));
+        code.push("cmp    $0, %rax".to_owned());
+        code.push("mov    $0, %rax".to_owned());
+        code.push("setne    %al".to_owned());
+        code.push(format!("{}:", end_label));
+    
+    }
+
+    
+    code
+}
+
+fn gen_logical_expr(expr: &parser::LogicalAndExpr) -> Vec<String> {
+    let mut code = gen_eq_expr(&expr.0);
+    if let Some(rhs_expr) = &expr.1 {
+        let label = unique_label("");
+        let end_label = unique_label("end");
+        code.push("cmp    $0, %rax".to_owned());
+        code.push(format!("jne    {}", label));
+        code.push(format!("jmp    {}", end_label));
+        code.push(format!("{}:", label));
+        code.extend(gen_eq_expr(rhs_expr));
+        code.push("cmp    $0, %rax".to_owned());
+        code.push("mov    $0, %rax".to_owned());
+        code.push("setne    %al".to_owned());
+        code.push(format!("{}:", end_label));
+    }
+    
+    code
+}
+
+fn gen_eq_expr(expr: &parser::EqualityExpr) -> Vec<String> {
+    let mut code = gen_relational_expr(&expr.0);
+    if let Some((op, rhs_expr)) = &expr.1 {
+        code.push("push %rax".to_owned());
+        code.extend(gen_relational_expr(rhs_expr));
+        code.push("pop %rcx".to_owned());
+        code.push("cmp    %rax, %rcx".to_owned());
+        code.push("mov    $0, %eax".to_owned());
+        match op {
+            parser::EqualityOp::Equal => {
+                code.push("sete    %al".to_owned());
+            }
+            parser::EqualityOp::NotEqual => {
+                code.push("setne    %al".to_owned());
+            }
+        }
+    }
+    
+    code
+}
+
+fn gen_relational_expr(expr: &parser::RelationalExpr) -> Vec<String> {
+    let mut code = gen_addictive_expr(&expr.0);
+    if let Some((op, rhs_expr)) = &expr.1 {
+        code.push("push %rax".to_owned());
+        code.extend(gen_addictive_expr(rhs_expr));
+        code.push("pop %rcx".to_owned());
+        code.push("cmp    %rax, %rcx".to_owned());
+        code.push("mov    $0, %eax".to_owned());
+        match op {
+            parser::RelationalOp::Greater => {
+                code.push("setg    %al".to_owned());
+            }
+            parser::RelationalOp::GreaterOrEqual => {
+                code.push("setge    %al".to_owned());
+            }
+            parser::RelationalOp::Less => {
+                code.push("setl    %al".to_owned());
+            }
+            parser::RelationalOp::LessOrEqual => {
+                code.push("setle    %al".to_owned());
+            }
+        }
+    }
+
+    code
+}
+
+fn gen_addictive_expr(expr: &parser::AdditiveExpr) -> Vec<String> {
     let mut code = gen_term(&expr.0);
     if let Some((op, right_term)) = &expr.1 {
         code.push("push %rax".to_owned());
@@ -96,6 +184,19 @@ fn gen_fact(fact: &parser::Factor) -> Vec<String> {
                 }
             }
             fact_code
+        }
+    }
+}
+
+
+fn unique_label(prefix: &str) -> String {
+    static mut LABEL_COUNTER: usize = 0;
+    unsafe {
+        LABEL_COUNTER += 1;
+        if prefix.is_empty() {
+            format!("_clause{}", LABEL_COUNTER)
+        } else {
+            format!("_{}{}", prefix, LABEL_COUNTER)
         }
     }
 }
