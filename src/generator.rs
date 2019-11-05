@@ -1,13 +1,13 @@
-use crate::{BinOp, Declaration, Expression, FactOp, Factor, Program, Statement, Term, UnaryOp};
+use crate::{parser};
 
-pub fn gen(p: Program, start_point: &str) -> String {
+pub fn gen(p: parser::Program, start_point: &str) -> String {
     let header = format!("\t.globl {}", start_point);
     format!("{}\n{}", header, gen_decl(&p.0))
 }
 
-fn gen_decl(st: &Declaration) -> String {
+fn gen_decl(st: &parser::Declaration) -> String {
     match st {
-        Declaration::Func(name, statement) => {
+        parser::Declaration::Func(name, statement) => {
             let statements_code = gen_statement(&statement);
             let mut pretty_code = statements_code
                 .iter()
@@ -20,9 +20,9 @@ fn gen_decl(st: &Declaration) -> String {
     }
 }
 
-fn gen_statement(st: &Statement) -> Vec<String> {
+fn gen_statement(st: &parser::Statement) -> Vec<String> {
     match st {
-        Statement::Return(expr) => {
+        parser::Statement::Return(expr) => {
             let mut expr_code = gen_expr(&expr);
             expr_code.push("ret".to_owned());
             expr_code
@@ -30,48 +30,45 @@ fn gen_statement(st: &Statement) -> Vec<String> {
     }
 }
 
-fn gen_expr(expr: &Expression) -> Vec<String> {
-    match expr {
-        Expression::Term(term) => gen_term(term),
-        Expression::BinOp(left_term, op, right_term) => {
-            let mut fact = gen_term(left_term);
-            fact.push("push %rax".to_owned());
-            fact.extend(gen_term(right_term));
-            fact.push("pop %rcx".to_owned());
-
-            match op {
-                BinOp::Plus => {
-                    fact.push("add %rcx, %rax".to_owned());
-                }
-                BinOp::Minus => {
-                    fact.push("sub %rax, %rcx".to_owned());
-                    fact.push("mov %rcx, %rax".to_owned());
-                }
+fn gen_expr(expr: &parser::Expression) -> Vec<String> {
+    let expr = &(((expr.0).0).0).0;
+    let mut code = gen_term(&expr.0);
+    if let Some((op, right_term)) = &expr.1 {
+        code.push("push %rax".to_owned());
+        code.extend(gen_term(right_term));
+        code.push("pop %rcx".to_owned());
+        match op {
+            parser::BinOp::Plus => {
+                code.push("add %rcx, %rax".to_owned());
             }
-
-            fact
+            parser::BinOp::Minus => {
+                code.push("sub %rax, %rcx".to_owned());
+                code.push("mov %rcx, %rax".to_owned());
+            }
         }
-    }
+    };
+
+    code
 }
 
-fn gen_term(term: &Term) -> Vec<String> {
+fn gen_term(term: &parser::Term) -> Vec<String> {
     match term {
-        Term::Fact(fact) => gen_fact(fact),
-        Term::FactorOp(left_fact, op, right_fact) => {
+        parser::Term::Fact(fact) => gen_fact(fact),
+        parser::Term::FactorOp(left_fact, op, right_fact) => {
             let mut fact = gen_fact(left_fact);
             fact.push("push %rax".to_owned());
             fact.extend(gen_fact(right_fact));
             fact.push("pop %rcx".to_owned());
 
             match op {
-                FactOp::Division => {
+                parser::FactOp::Division => {
                     fact.push("mov %rax, %rbx".to_owned());
                     fact.push("mov %rcx, %rax".to_owned());
                     fact.push("mov %rbx, %rcx".to_owned());
                     fact.push("cqo".to_owned());
                     fact.push("idiv %rcx".to_owned());
                 }
-                FactOp::Multiplication => fact.push("imul %rcx, %rax".to_owned()),
+                parser::FactOp::Multiplication => fact.push("imul %rcx, %rax".to_owned()),
             }
 
             fact
@@ -79,20 +76,20 @@ fn gen_term(term: &Term) -> Vec<String> {
     }
 }
 
-fn gen_fact(fact: &Factor) -> Vec<String> {
+fn gen_fact(fact: &parser::Factor) -> Vec<String> {
     match fact {
-        Factor::Const(val) => vec![format!("mov    ${}, %rax", val)],
-        Factor::Expr(expr) => gen_expr(expr),
-        Factor::UnOp(op, factor) => {
+        parser::Factor::Const(val) => vec![format!("mov    ${}, %rax", val)],
+        parser::Factor::Expr(expr) => gen_expr(expr),
+        parser::Factor::UnOp(op, factor) => {
             let mut fact_code = gen_fact(factor);
             match op {
-                UnaryOp::BitwiseComplement => {
+                parser::UnaryOp::BitwiseComplement => {
                     fact_code.push("not    %eax".to_owned());
                 }
-                UnaryOp::Negation => {
+                parser::UnaryOp::Negation => {
                     fact_code.push("neg    %rax".to_owned());
                 }
-                UnaryOp::LogicalNegation => {
+                parser::UnaryOp::LogicalNegation => {
                     fact_code.push("cmpl    $0, %eax".to_owned());
                     fact_code.push("movl    $0, %eax".to_owned());
                     fact_code.push("sete    %al".to_owned());
