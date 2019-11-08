@@ -217,6 +217,7 @@ pub enum BinOp {
 pub enum FactOp {
     Multiplication,
     Division,
+    Modulo,
 }
 
 pub enum Term {
@@ -259,6 +260,21 @@ impl Term {
                         ))),
                     };
                     term = Term::FactorOp(Box::new(f), FactOp::Division, Box::new(next_fact));
+                }
+                TokenType::Modulo => {
+                    tokens.remove(0);
+                    let next_fact = Factor::parse(&mut tokens)?;
+                    let f = match term {
+                        Term::Fact(fact) => fact,
+                        _ => Factor::Expr(Box::new(Expression(
+                            LogicalAndExpr(
+                                EqualityExpr(RelationalExpr(AdditiveExpr(term, None), None), None),
+                                None,
+                            ),
+                            None,
+                        ))),
+                    };
+                    term = Term::FactorOp(Box::new(f), FactOp::Modulo, Box::new(next_fact));
                 }
                 _ => {
                     break;

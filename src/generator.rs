@@ -156,6 +156,14 @@ fn gen_term(term: &parser::Term) -> Vec<String> {
                     fact.push("cqo".to_owned());
                     fact.push("idiv %rcx".to_owned());
                 }
+                parser::FactOp::Modulo => {
+                    fact.push("mov %rax, %rbx".to_owned());
+                    fact.push("mov %rcx, %rax".to_owned());
+                    fact.push("mov %rbx, %rcx".to_owned());
+                    fact.push("cqo".to_owned());
+                    fact.push("idiv %rcx".to_owned());
+                    fact.push("mov %rdx, %rax".to_owned());
+                }
                 parser::FactOp::Multiplication => fact.push("imul %rcx, %rax".to_owned()),
             }
 
