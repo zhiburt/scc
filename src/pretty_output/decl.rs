@@ -16,11 +16,20 @@ fn pretty_statement(s: &parser::Statement) -> String {
     }
 }
 
-fn pretty_expr(e: &parser::Expression) -> String {
-    let additive_expr = |e: &parser::AdditiveExpr| -> String {
+fn pretty_expr(e: &parser::Expression) -> String {    
+    let bitwise_expr = |e: &parser::BitwiseExpr| -> String {
         let s = pretty_term(&e.0);
         if let Some((op, term)) = &e.1 {
             format!("{} Op<{:?}> {}", s, op, pretty_term(term))
+        } else {
+            s
+        }
+    };
+
+    let additive_expr = |e: &parser::AdditiveExpr| -> String {
+        let s = bitwise_expr(&e.0);
+        if let Some((op, term)) = &e.1 {
+            format!("{} Op<{:?}> {}", s, op, bitwise_expr(term))
         } else {
             s
         }

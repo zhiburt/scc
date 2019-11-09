@@ -119,11 +119,31 @@ fn gen_relational_expr(expr: &parser::RelationalExpr) -> Vec<String> {
     code
 }
 
-fn gen_addictive_expr(expr: &parser::AdditiveExpr) -> Vec<String> {
+
+fn gen_bitwise_expr(expr: &parser::BitwiseExpr) -> Vec<String> {
     let mut code = gen_term(&expr.0);
+    if let Some((op, rhs_expr)) = &expr.1 {
+        code.push("push %rax".to_owned());
+        code.extend(gen_term(rhs_expr));
+        code.push("pop %rcx".to_owned());
+        match op {
+            parser::BitwiseOp::LeftShift => {
+                code.push("sal %rcx, %rax".to_owned());
+            }
+            parser::BitwiseOp::RightShift => {
+                code.push("sar %rcx, %rax".to_owned());
+            }
+        }
+    }
+
+    code
+}
+
+fn gen_addictive_expr(expr: &parser::AdditiveExpr) -> Vec<String> {
+    let mut code = gen_bitwise_expr(&expr.0);
     if let Some((op, right_term)) = &expr.1 {
         code.push("push %rax".to_owned());
-        code.extend(gen_term(right_term));
+        code.extend(gen_bitwise_expr(right_term));
         code.push("pop %rcx".to_owned());
         match op {
             parser::BinOp::Plus => {

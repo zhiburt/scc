@@ -27,6 +27,8 @@ pub enum TokenType {
     LessThanOrEqual,
     GreaterThan,
     GreaterThanOrEqual,
+    BitwiseLeftShift,
+    BitwiseRightShift,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -103,6 +105,8 @@ impl Lexer {
                 TokenDefinition::new(TokenType::Multiplication, r"^\*"),
                 TokenDefinition::new(TokenType::Modulo, r"^%"),
                 TokenDefinition::new(TokenType::Division, r"^/"),
+                TokenDefinition::new(TokenType::BitwiseLeftShift, r"^<<"),
+                TokenDefinition::new(TokenType::BitwiseRightShift, r"^>>"),
                 TokenDefinition::new(TokenType::And, r"^&&"),
                 TokenDefinition::new(TokenType::Or, r"^\|\|"),
                 TokenDefinition::new(TokenType::Equal, r"^=="),

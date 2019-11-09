@@ -61,7 +61,10 @@ impl LogicalAndExpr {
                         EqualityExpr(
                             RelationalExpr(
                                 AdditiveExpr(
-                                    Term::Fact(Factor::Expr(Box::new(Expression(expr, None)))),
+                                    BitwiseExpr(
+                                        Term::Fact(Factor::Expr(Box::new(Expression(expr, None)))),
+                                        None,
+                                    ),
                                     None,
                                 ),
                                 None,
@@ -107,10 +110,13 @@ impl EqualityExpr {
                     expr = EqualityExpr(
                         RelationalExpr(
                             AdditiveExpr(
-                                Term::Fact(Factor::Expr(Box::new(Expression(
-                                    LogicalAndExpr(expr, None),
+                                BitwiseExpr(
+                                    Term::Fact(Factor::Expr(Box::new(Expression(
+                                        LogicalAndExpr(expr, None),
+                                        None,
+                                    )))),
                                     None,
-                                )))),
+                                ),
                                 None,
                             ),
                             None,
@@ -156,11 +162,11 @@ impl RelationalExpr {
             match expr.1 {
                 Some(_) => {
                     expr = RelationalExpr(
-                        AdditiveExpr(
+                        AdditiveExpr(BitwiseExpr(
                             Term::Fact(Factor::Expr(Box::new(Expression(
                                 LogicalAndExpr(EqualityExpr(expr, None), None),
                                 None,
-                            )))),
+                            )))), None),
                             None,
                         ),
                         Some((op, next)),
@@ -174,11 +180,11 @@ impl RelationalExpr {
     }
 }
 
-pub struct AdditiveExpr(pub Term, pub Option<(BinOp, Term)>);
+pub struct AdditiveExpr(pub BitwiseExpr, pub Option<(BinOp, BitwiseExpr)>);
 
 impl AdditiveExpr {
     pub fn parse(mut tokens: &mut Vec<Token>) -> Result<Self> {
-        let term = Term::parse(&mut tokens)?;
+        let term = BitwiseExpr::parse(&mut tokens)?;
         let mut expr = AdditiveExpr(term, None);
         while let Some(token) = tokens.iter().peekable().peek() {
             let op = match token.token_type {
@@ -188,12 +194,45 @@ impl AdditiveExpr {
             };
 
             tokens.remove(0);
-            let next = Term::parse(&mut tokens)?;
+            let next = BitwiseExpr::parse(&mut tokens)?;
             match expr.1 {
                 Some(_) => {
                     expr = AdditiveExpr(
-                        Term::Fact(Factor::Expr(Box::new(Expression(
+                        BitwiseExpr(Term::Fact(Factor::Expr(Box::new(Expression(
                             LogicalAndExpr(EqualityExpr(RelationalExpr(expr, None), None), None),
+                            None,
+                        )))), None),
+                        Some((op, next)),
+                    )
+                }
+                None => expr.1 = Some((op, next)),
+            }
+        }
+
+        Ok(expr)
+    }
+}
+
+pub struct BitwiseExpr(pub Term, pub Option<(BitwiseOp, Term)>);
+
+impl BitwiseExpr {
+    pub fn parse(mut tokens: &mut Vec<Token>) -> Result<Self> {
+        let term = Term::parse(&mut tokens)?;
+        let mut expr = BitwiseExpr(term, None);
+        while let Some(token) = tokens.iter().peekable().peek() {
+            let op = match token.token_type {
+                TokenType::BitwiseLeftShift => BitwiseOp::LeftShift,
+                TokenType::BitwiseRightShift => BitwiseOp::RightShift,
+                _ => break,
+            };
+
+            tokens.remove(0);
+            let next = Term::parse(&mut tokens)?;
+            match expr.1 {
+                Some(_) => {
+                    expr = BitwiseExpr(
+                        Term::Fact(Factor::Expr(Box::new(Expression(
+                            LogicalAndExpr(EqualityExpr(RelationalExpr(AdditiveExpr(expr, None), None), None), None),
                             None,
                         )))),
                         Some((op, next)),
@@ -205,6 +244,12 @@ impl AdditiveExpr {
 
         Ok(expr)
     }
+}
+
+#[derive(Debug)]
+pub enum BitwiseOp {
+    LeftShift,
+    RightShift,
 }
 
 #[derive(Debug)]
@@ -238,7 +283,7 @@ impl Term {
                         Term::Fact(fact) => fact,
                         _ => Factor::Expr(Box::new(Expression(
                             LogicalAndExpr(
-                                EqualityExpr(RelationalExpr(AdditiveExpr(term, None), None), None),
+                                EqualityExpr(RelationalExpr(AdditiveExpr(BitwiseExpr(term, None), None), None), None),
                                 None,
                             ),
                             None,
@@ -253,7 +298,7 @@ impl Term {
                         Term::Fact(fact) => fact,
                         _ => Factor::Expr(Box::new(Expression(
                             LogicalAndExpr(
-                                EqualityExpr(RelationalExpr(AdditiveExpr(term, None), None), None),
+                                EqualityExpr(RelationalExpr(AdditiveExpr(BitwiseExpr(term, None), None), None), None),
                                 None,
                             ),
                             None,
@@ -268,7 +313,7 @@ impl Term {
                         Term::Fact(fact) => fact,
                         _ => Factor::Expr(Box::new(Expression(
                             LogicalAndExpr(
-                                EqualityExpr(RelationalExpr(AdditiveExpr(term, None), None), None),
+                                EqualityExpr(RelationalExpr(AdditiveExpr(BitwiseExpr(term, None), None), None), None),
                                 None,
                             ),
                             None,
@@ -343,7 +388,7 @@ impl Expression {
             LogicalAndExpr(
                 EqualityExpr(
                     RelationalExpr(
-                        AdditiveExpr(Term::Fact(Factor::Expr(Box::new(expr))), None),
+                        AdditiveExpr(BitwiseExpr(Term::Fact(Factor::Expr(Box::new(expr))), None), None),
                         None,
                     ),
                     None,
