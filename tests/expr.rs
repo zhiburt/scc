@@ -3,11 +3,25 @@ mod compare_gcc {
 
     #[test]
     fn binary_operations() {
-        compare_expr("return (10 / 2) +  2 * 2;");
-        compare_expr("return 2 * 2 + 1;");
-        compare_expr("return 1 + 2 * 2;");
-        compare_expr("return 1 + 2 / 2;");
-        compare_expr("return 2 * (1 * 2);");
+        compare_expr("return 2 + 2 + 1;");
+        compare_expr("return (4 + 2) + 2;");
+        compare_expr("return 4 + (2 + 2);");
+
+        compare_expr("return 2 - 2 - 1;");
+        compare_expr("return (4 - 2) - 2;");
+        compare_expr("return 4 - (2 - 2);");
+
+        compare_expr("return 2 * 2 * 1;");
+        compare_expr("return (4 * 2) * 2;");
+        compare_expr("return 4 * (2 * 2);");
+
+        compare_expr("return 2 / 2 / 1;");
+        compare_expr("return (4 / 2) / 2;");
+        compare_expr("return 4 / (2 / 2);");
+    
+        compare_expr("return 2 % 2 % 1;");
+        compare_expr("return (4 % 2) % 2;");
+        compare_expr("return 4 % (2 % 2);");
     }
 
     #[test]
