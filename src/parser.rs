@@ -66,6 +66,15 @@ fn map_token_to_ast(t: TokenType) -> Option<ast::BinOp> {
     }
 }
 
+fn map_token_to_unop(t: TokenType) -> Option<ast::UnOp> {
+    match t {
+        TokenType::BitwiseComplement => Some(ast::UnOp::BitwiseComplement),
+        TokenType::LogicalNegation => Some(ast::UnOp::LogicalNegation),
+        TokenType::Negation => Some(ast::UnOp::Negation),
+        _ => None,
+    }
+}
+
 pub fn parse_or_expr(tokens: Vec<Token>) -> Result<(ast::Exp, Vec<Token>)> {
     parse_expr(parse_and_expr, &[TokenType::Or], tokens)
 }
@@ -114,7 +123,7 @@ pub fn parse_factor(mut tokens: Vec<Token>) -> Result<(ast::Exp, Vec<Token>)> {
         }
         TokenType::Negation | TokenType::LogicalNegation | TokenType::BitwiseComplement => {
             let (expr, tokens) = parse_expr(parse_or_expr, &[TokenType::Or], tokens).unwrap();
-            Ok((ast::Exp::UnOp(ast::UnOp::LogicalNegation, Box::new(expr)), tokens))
+            Ok((ast::Exp::UnOp(map_token_to_unop(token.token_type).unwrap(), Box::new(expr)), tokens))
         }
         _ => Err(CompilerError::ParsingError),
     }
