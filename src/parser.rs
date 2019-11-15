@@ -26,20 +26,24 @@ fn tokens_to_types(tokens: &Vec<Token>) -> Vec<TokenType> {
     tokens.iter().map(|t| t.token_type).collect()
 }
 
-fn parse_expr<ParsExpFunc>(parse_exp: ParsExpFunc, opt_tokens: &[TokenType], tokens: Vec<Token>)
+fn parse_expr<ParsExpFunc>(parse: ParsExpFunc, opt_tokens: &[TokenType], tokens: Vec<Token>)
     -> Result<(ast::Exp, Vec<Token>)>
     where ParsExpFunc : Fn(Vec<Token>) -> Result<(ast::Exp, Vec<Token>)>
 {
-    let (left, mut tokens) = parse_exp(tokens).unwrap();
-    match tokens.get(0) {
-        Some(tok) if opt_tokens.contains(&tok.token_type) => {
+    let (mut exp, mut tokens) = parse(tokens)?;
+    while let Some(tok) = tokens.get(0)  {
+            if !opt_tokens.contains(&tok.token_type) {
+                break;
+            }
+            
             let tok_type = tokens.remove(0).token_type;
-            let (right, tokens) = parse_expr(parse_exp, opt_tokens, tokens)?;
+            let (right, stashed_tokens) = parse(tokens)?;
             let op = map_token_to_ast(tok_type).unwrap();
-            Ok((ast::Exp::BinOp(op, Box::new(left), Box::new(right)), tokens))
-        }
-        _ => Ok((left, tokens))
+            exp = ast::Exp::BinOp(op, Box::new(exp), Box::new(right));
+            tokens = stashed_tokens;
     }
+
+    Ok((exp, tokens))
 }
 
 fn map_token_to_ast(t: TokenType) -> Option<ast::BinOp> {
@@ -122,7 +126,7 @@ pub fn parse_factor(mut tokens: Vec<Token>) -> Result<(ast::Exp, Vec<Token>)> {
             Ok((ast::Exp::Const(ast::Const::Int(token.val.as_ref().unwrap().parse().unwrap())), tokens))
         }
         TokenType::Negation | TokenType::LogicalNegation | TokenType::BitwiseComplement => {
-            let (expr, tokens) = parse_expr(parse_or_expr, &[TokenType::Or], tokens).unwrap();
+            let (expr, tokens) = parse_expr(parse_factor, &[TokenType::Or], tokens).unwrap();
             Ok((ast::Exp::UnOp(map_token_to_unop(token.token_type).unwrap(), Box::new(expr)), tokens))
         }
         _ => Err(CompilerError::ParsingError),
