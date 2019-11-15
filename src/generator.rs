@@ -67,106 +67,116 @@ fn gen_unop(op: &ast::UnOp, exp: &ast::Exp) -> Vec<String> {
 }
 
 fn gen_binop(op: &ast::BinOp, exp1: &ast::Exp, exp2: &ast::Exp) -> Vec<String> {
-    let mut code = gen_expr(exp1);
-    let exp2_code = gen_expr(exp2);
-    code.push("push %rax".to_owned());
-    code.extend(exp2_code);
-    code.push("pop %rcx".to_owned());
+    let exp1 = gen_expr(exp1);
+    let exp2 = gen_expr(exp2);
+
+    let code_with = |exp1: Vec<String>, exp2: Vec<String>, exp: &[String]| {
+        let mut code = Vec::with_capacity(exp1.len() + exp2.len());
+        code.extend(exp1);
+        code.push("push %rax".to_owned());
+        code.extend(exp2);
+        code.push("pop %rcx".to_owned());
+        code.extend_from_slice(exp);
+        code
+    };
+
     match op {
         ast::BinOp::BitwiseXor => {
-            vec!["xor %rcx, %rax".to_owned()]
+            code_with(exp1, exp2, &["xor %rcx, %rax".to_owned()])
         },
         ast::BinOp::BitwiseOr => {
-            vec!["or %rcx, %rax".to_owned()]
+            code_with(exp1, exp2, &["or %rcx, %rax".to_owned()])
         },
         ast::BinOp::BitwiseAnd => {
-            vec!["and %rcx, %rax".to_owned()]
+            code_with(exp1, exp2, &["and %rcx, %rax".to_owned()])
         },
         ast::BinOp::Addition => {
-            vec!["add %rcx, %rax".to_owned()]
+            code_with(exp1, exp2, &["add %rcx, %rax".to_owned()])
         },
         ast::BinOp::Sub => {
-            vec![
+            code_with(exp1, exp2, &[
                 "sub %rax, %rcx".to_owned(),
                 "mov %rcx, %rax".to_owned()
-            ]
+            ])
         },
         ast::BinOp::Multiplication => {
-            vec!["imul %rcx, %rax".to_owned()]
+            code_with(exp1, exp2, &["imul %rcx, %rax".to_owned()])
         },
         ast::BinOp::Division => {
-            vec![
+            code_with(exp1, exp2, &[
                 "mov %rax, %rbx".to_owned(),
                 "mov %rcx, %rax".to_owned(),
                 "mov %rbx, %rcx".to_owned(),
                 "cqo".to_owned(),
                 "idiv %rcx".to_owned()
-            ]
+            ])
         },
         ast::BinOp::Modulo => {
-            vec![
+            code_with(exp1, exp2, &[
                 "mov %rax, %rbx".to_owned(),
                 "mov %rcx, %rax".to_owned(),
                 "mov %rbx, %rcx".to_owned(),
                 "cqo".to_owned(),
                 "idiv %rcx".to_owned(),
                 "mov %rdx, %rax".to_owned()
-            ]
+            ])
         },
         ast::BinOp::And => {
             let label = unique_label("");
             let end_label = unique_label("end");
-            vec![
-                "cmp    $0, %rax".to_owned(),
-                format!("jne    {}", label),
-                format!("jmp    {}", end_label),
-                format!("{}:", label),
-            // code.extend(gen_eq_expr(rhs_expr));
-                "cmp    $0, %rax".to_owned(),
-                "mov    $0, %rax".to_owned(),
-                "setne    %al".to_owned(),
-                format!("{}:", end_label)
-            ]
+            let mut code = Vec::new();
+            code.extend(exp1);
+            code.push("cmp    $0, %rax".to_owned());
+            code.push(format!("jne    {}", label));
+            code.push(format!("jmp    {}", end_label));
+            code.push(format!("{}:", label));
+            code.extend(exp2);
+            code.push("cmp    $0, %rax".to_owned());
+            code.push("mov    $0, %rax".to_owned());
+            code.push("setne    %al".to_owned());
+            code.push(format!("{}:", end_label));
+            code
         },
         ast::BinOp::Or => {
             let label = unique_label("");
             let end_label = unique_label("end");
-            vec![
-                "cmp    $0, %rax".to_owned(),
-                format!("je    {}", label),
-                "mov    $1, %rax".to_owned(),
-                format!("jmp    {}", end_label),
-                format!("{}:", label),
-                // code.extend(gen_logical_expr(rhs_expr));
-                "cmp    $0, %rax".to_owned(),
-                "mov    $0, %rax".to_owned(),
-                "setne    %al".to_owned(),
-                format!("{}:", end_label)
-            ]
+            let mut code = Vec::new();
+            code.extend(exp1);
+            code.push("cmp    $0, %rax".to_owned());
+            code.push(format!("je    {}", label));
+            code.push("mov    $1, %rax".to_owned());
+            code.push(format!("jmp    {}", end_label));
+            code.push(format!("{}:", label));
+            code.extend(exp2);
+            code.push("cmp    $0, %rax".to_owned());
+            code.push("mov    $0, %rax".to_owned());
+            code.push("setne    %al".to_owned());
+            code.push(format!("{}:", end_label));
+            code
         },
         ast::BinOp::Equal => {
-            vec!["sete    %al".to_owned()]
+            code_with(exp1, exp2, &["sete    %al".to_owned()])
         },
         ast::BinOp::NotEqual => {
-            vec!["setne    %al".to_owned()]
+            code_with(exp1, exp2, &["setne    %al".to_owned()])
         },
         ast::BinOp::LessThan => {
-            vec!["setl    %al".to_owned()]
+            code_with(exp1, exp2, &["setl    %al".to_owned()])
         },
         ast::BinOp::LessThanOrEqual => {
-            vec!["setle    %al".to_owned()]
+            code_with(exp1, exp2, &["setle    %al".to_owned()])
         },
         ast::BinOp::GreaterThan => {
-            vec!["setg    %al".to_owned()]
+            code_with(exp1, exp2, &["setg    %al".to_owned()])
         },
         ast::BinOp::GreaterThanOrEqual => {
-            vec!["setge    %al".to_owned()]
+            code_with(exp1, exp2, &["setge    %al".to_owned()])
         },
         ast::BinOp::BitwiseLeftShift => {
-            vec!["sal %rcx, %rax".to_owned()]
+            code_with(exp1, exp2, &["sal %rcx, %rax".to_owned()])
         },
         ast::BinOp::BitwiseRightShift => {
-            vec!["sar %rcx, %rax".to_owned()]
+            code_with(exp1, exp2, &["sar %rcx, %rax".to_owned()])
         },
     }
 }
