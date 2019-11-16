@@ -155,22 +155,46 @@ fn gen_binop(op: &ast::BinOp, exp1: &ast::Exp, exp2: &ast::Exp) -> Vec<String> {
             code
         },
         ast::BinOp::Equal => {
-            code_with(exp1, exp2, &["sete    %al".to_owned()])
+            code_with(exp1, exp2, &[
+                "cmp    %rax, %rcx".to_owned(),
+                "mov    $0, %eax".to_owned(),
+                "sete    %al".to_owned()
+            ])
         },
         ast::BinOp::NotEqual => {
-            code_with(exp1, exp2, &["setne    %al".to_owned()])
+            code_with(exp1, exp2, &[
+                "cmp    %rax, %rcx".to_owned(),
+                "mov    $0, %eax".to_owned(),
+                "setne    %al".to_owned()
+            ])
         },
         ast::BinOp::LessThan => {
-            code_with(exp1, exp2, &["setl    %al".to_owned()])
+            code_with(exp1, exp2, &[
+                "cmp    %rax, %rcx".to_owned(),
+                "mov    $0, %eax".to_owned(),
+                "setl    %al".to_owned()
+            ])
         },
         ast::BinOp::LessThanOrEqual => {
-            code_with(exp1, exp2, &["setle    %al".to_owned()])
+            code_with(exp1, exp2, &[
+                "cmp    %rax, %rcx".to_owned(),
+                "mov    $0, %eax".to_owned(),
+                "setle    %al".to_owned()
+            ])
         },
         ast::BinOp::GreaterThan => {
-            code_with(exp1, exp2, &["setg    %al".to_owned()])
+            code_with(exp1, exp2, &[
+                "cmp    %rax, %rcx".to_owned(),
+                "mov    $0, %eax".to_owned(),
+                "setg    %al".to_owned()
+            ])
         },
         ast::BinOp::GreaterThanOrEqual => {
-            code_with(exp1, exp2, &["setge    %al".to_owned()])
+            code_with(exp1, exp2, &[
+                "cmp    %rax, %rcx".to_owned(),
+                "mov    $0, %eax".to_owned(),
+                "setge    %al".to_owned()
+            ])
         },
         ast::BinOp::BitwiseLeftShift => {
             code_with(exp1, exp2, &["sal %rcx, %rax".to_owned()])
