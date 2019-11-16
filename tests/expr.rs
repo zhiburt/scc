@@ -21,7 +21,7 @@ mod compare_gcc {
     
         compare_expr("return 2 % 2 % 1;");
         compare_expr("return (4 % 2) % 2;");
-        compare_expr("return 4 % (2 % 2);");
+        compare_expr("return 4 % (2 % 4);");
     }
 
     #[test]
