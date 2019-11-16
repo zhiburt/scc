@@ -5,4 +5,4 @@ if [[ $status -ne 0 ]]; then
 fi
 
 name_exec=${1%.*}
-gcc -m64 assembly.s -o $name_exec
+gcc -m64 asm.s -o $name_exec
