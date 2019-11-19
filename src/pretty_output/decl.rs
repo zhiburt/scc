@@ -13,8 +13,14 @@ pub fn pretty_decl(d: &ast::Declaration) -> String {
 
 fn pretty_stat(st: &ast::Statement) -> String {
     match st {
-        ast::Statement::Return{exp} => pretty_expr(exp),
-        _ => unimplemented!(),
+        ast::Statement::Return{exp} => format!("Return<{}>", pretty_expr(exp)),
+        ast::Statement::Exp{exp} => format!("Exp<{}>", pretty_expr(exp)),
+        ast::Statement::Declare{name, exp} => {
+            match exp {
+                Some(exp) => format!("Declare<{}, {}>", name, pretty_expr(exp)),
+                None => format!("Declare<{}>", name),
+            }
+        }
     }
 }
 
