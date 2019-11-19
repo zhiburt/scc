@@ -1,20 +1,40 @@
 use crate::{ast};
 
-pub fn gen(p: ast::Program, start_point: &str) -> String {
+pub type Result<T> = std::result::Result<T, GenError>;
+
+#[derive(Debug)]
+pub enum GenError {
+    InvalidVariableUsage(String),
+}
+
+impl std::fmt::Display for GenError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            GenError::InvalidVariableUsage(var) => write!(f, "gen error {}", var),
+        }
+    }
+}
+
+impl std::error::Error for GenError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        None
+    }
+}
+
+pub fn gen(p: ast::Program, start_point: &str) -> Result<String> {
     let header = format!("\t.globl {}", start_point);
     let mut asm_func = AsmFunc::new();
-    format!("{}\n{}", header, asm_func.gen(&p.0))
+    Ok(format!("{}\n{}", header, asm_func.gen(&p.0)?))
 }
 
 struct AsmFunc {}
-
 
 impl AsmFunc {
     fn new() -> Self {
         AsmFunc {}
     }
 
-    fn gen(&self, st: &ast::Declaration) -> String {
+    fn gen(&self, st: &ast::Declaration) -> Result<String> {
         match st {
             ast::Declaration::Func{name, statements} => {
                 let prologue = vec![
@@ -28,7 +48,7 @@ impl AsmFunc {
                     "ret".to_owned(),
                 ];
                 
-                let statements_code = self.gen_statement(&statements[0]);
+                let statements_code = self.gen_statement(&statements[0])?;
                 let mut code = Vec::new();
                 code.extend(prologue);
                 code.extend(statements_code);
@@ -40,12 +60,12 @@ impl AsmFunc {
                     .collect::<Vec<String>>();
                 let func_name = format!("{}:", name);
                 pretty_code.insert(0, func_name);
-                pretty_code.join("\n")
+                Ok(pretty_code.join("\n"))
             }
         }
     }
 
-    fn gen_statement(&self, st: &ast::Statement) -> Vec<String> {
+    fn gen_statement(&self, st: &ast::Statement) -> Result<Vec<String>> {
         match st {
             ast::Statement::Return{exp} => {
                 self.gen_expr(&exp)
@@ -54,9 +74,9 @@ impl AsmFunc {
         }
     }
 
-    fn gen_expr(&self, expr: &ast::Exp) -> Vec<String> {
+    fn gen_expr(&self, expr: &ast::Exp) -> Result<Vec<String>> {
         match expr {
-            ast::Exp::Const(c) => self.gen_const(c),
+            ast::Exp::Const(c) => Ok(self.gen_const(c)),
             ast::Exp::UnOp(op, exp) => self.gen_unop(op, exp),
             ast::Exp::BinOp(op, exp1, exp2) => self.gen_binop(op, exp1, exp2),
             _ => unimplemented!(),
@@ -69,8 +89,8 @@ impl AsmFunc {
         }
     }
 
-    fn gen_unop(&self, op: &ast::UnOp, exp: &ast::Exp) -> Vec<String> {
-        let mut code = self.gen_expr(exp);
+    fn gen_unop(&self, op: &ast::UnOp, exp: &ast::Exp) -> Result<Vec<String>> {
+        let mut code = self.gen_expr(exp)?;
         code.extend(
             match op {
                 ast::UnOp::Negation => {
@@ -88,12 +108,12 @@ impl AsmFunc {
                 }
             }
         );
-        code
+        Ok(code)
     }
 
-    fn gen_binop(&self, op: &ast::BinOp, exp1: &ast::Exp, exp2: &ast::Exp) -> Vec<String> {
-        let exp1 = self.gen_expr(exp1);
-        let exp2 = self.gen_expr(exp2);
+    fn gen_binop(&self, op: &ast::BinOp, exp1: &ast::Exp, exp2: &ast::Exp) -> Result<Vec<String>> {
+        let exp1 = self.gen_expr(exp1)?;
+        let exp2 = self.gen_expr(exp2)?;
 
         let code_with = |exp1: Vec<String>, exp2: Vec<String>, exp: &[String]| {
             let mut code = Vec::with_capacity(exp1.len() + exp2.len());
@@ -107,44 +127,44 @@ impl AsmFunc {
 
         match op {
             ast::BinOp::BitwiseXor => {
-                code_with(exp1, exp2, &["xor %rcx, %rax".to_owned()])
+                Ok(code_with(exp1, exp2, &["xor %rcx, %rax".to_owned()]))
             },
             ast::BinOp::BitwiseOr => {
-                code_with(exp1, exp2, &["or %rcx, %rax".to_owned()])
+                Ok(code_with(exp1, exp2, &["or %rcx, %rax".to_owned()]))
             },
             ast::BinOp::BitwiseAnd => {
-                code_with(exp1, exp2, &["and %rcx, %rax".to_owned()])
+                Ok(code_with(exp1, exp2, &["and %rcx, %rax".to_owned()]))
             },
             ast::BinOp::Addition => {
-                code_with(exp1, exp2, &["add %rcx, %rax".to_owned()])
+                Ok(code_with(exp1, exp2, &["add %rcx, %rax".to_owned()]))
             },
             ast::BinOp::Sub => {
-                code_with(exp1, exp2, &[
+                Ok(code_with(exp1, exp2, &[
                     "sub %rax, %rcx".to_owned(),
                     "mov %rcx, %rax".to_owned()
-                ])
+                ]))
             },
             ast::BinOp::Multiplication => {
-                code_with(exp1, exp2, &["imul %rcx, %rax".to_owned()])
+                Ok(code_with(exp1, exp2, &["imul %rcx, %rax".to_owned()]))
             },
             ast::BinOp::Division => {
-                code_with(exp1, exp2, &[
+                Ok(code_with(exp1, exp2, &[
                     "mov %rax, %rbx".to_owned(),
                     "mov %rcx, %rax".to_owned(),
                     "mov %rbx, %rcx".to_owned(),
                     "cqo".to_owned(),
                     "idiv %rcx".to_owned()
-                ])
+                ]))
             },
             ast::BinOp::Modulo => {
-                code_with(exp1, exp2, &[
+                Ok(code_with(exp1, exp2, &[
                     "mov %rax, %rbx".to_owned(),
                     "mov %rcx, %rax".to_owned(),
                     "mov %rbx, %rcx".to_owned(),
                     "cqo".to_owned(),
                     "idiv %rcx".to_owned(),
                     "mov %rdx, %rax".to_owned()
-                ])
+                ]))
             },
             ast::BinOp::And => {
                 let label = AsmFunc::unique_label("");
@@ -160,7 +180,7 @@ impl AsmFunc {
                 code.push("mov    $0, %rax".to_owned());
                 code.push("setne    %al".to_owned());
                 code.push(format!("{}:", end_label));
-                code
+                Ok(code)
             },
             ast::BinOp::Or => {
                 let label = AsmFunc::unique_label("");
@@ -177,55 +197,55 @@ impl AsmFunc {
                 code.push("mov    $0, %rax".to_owned());
                 code.push("setne    %al".to_owned());
                 code.push(format!("{}:", end_label));
-                code
+                Ok(code)
             },
             ast::BinOp::Equal => {
-                code_with(exp1, exp2, &[
+                Ok(code_with(exp1, exp2, &[
                     "cmp    %rax, %rcx".to_owned(),
                     "mov    $0, %eax".to_owned(),
                     "sete    %al".to_owned()
-                ])
+                ]))
             },
             ast::BinOp::NotEqual => {
-                code_with(exp1, exp2, &[
+                Ok(code_with(exp1, exp2, &[
                     "cmp    %rax, %rcx".to_owned(),
                     "mov    $0, %eax".to_owned(),
                     "setne    %al".to_owned()
-                ])
+                ]))
             },
             ast::BinOp::LessThan => {
-                code_with(exp1, exp2, &[
+                Ok(code_with(exp1, exp2, &[
                     "cmp    %rax, %rcx".to_owned(),
                     "mov    $0, %eax".to_owned(),
                     "setl    %al".to_owned()
-                ])
+                ]))
             },
             ast::BinOp::LessThanOrEqual => {
-                code_with(exp1, exp2, &[
+                Ok(code_with(exp1, exp2, &[
                     "cmp    %rax, %rcx".to_owned(),
                     "mov    $0, %eax".to_owned(),
                     "setle    %al".to_owned()
-                ])
+                ]))
             },
             ast::BinOp::GreaterThan => {
-                code_with(exp1, exp2, &[
+                Ok(code_with(exp1, exp2, &[
                     "cmp    %rax, %rcx".to_owned(),
                     "mov    $0, %eax".to_owned(),
                     "setg    %al".to_owned()
-                ])
+                ]))
             },
             ast::BinOp::GreaterThanOrEqual => {
-                code_with(exp1, exp2, &[
+                Ok(code_with(exp1, exp2, &[
                     "cmp    %rax, %rcx".to_owned(),
                     "mov    $0, %eax".to_owned(),
                     "setge    %al".to_owned()
-                ])
+                ]))
             },
             ast::BinOp::BitwiseLeftShift => {
-                code_with(exp1, exp2, &["sal %rcx, %rax".to_owned()])
+                Ok(code_with(exp1, exp2, &["sal %rcx, %rax".to_owned()]))
             },
             ast::BinOp::BitwiseRightShift => {
-                code_with(exp1, exp2, &["sar %rcx, %rax".to_owned()])
+                Ok(code_with(exp1, exp2, &["sar %rcx, %rax".to_owned()]))
             },
         }
     }
