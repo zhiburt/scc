@@ -1,6 +1,12 @@
 use crate::{ast};
 use std::collections::HashMap;
 
+pub fn gen(p: ast::Program, start_point: &str) -> Result<String> {
+    let header = format!("\t.globl {}", start_point);
+    let mut asm_func = AsmFunc::new();
+    Ok(format!("{}\n{}", header, asm_func.gen(&p.0)?))
+}
+
 pub type Result<T> = std::result::Result<T, GenError>;
 
 #[derive(Debug)]
@@ -20,12 +26,6 @@ impl std::error::Error for GenError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         None
     }
-}
-
-pub fn gen(p: ast::Program, start_point: &str) -> Result<String> {
-    let header = format!("\t.globl {}", start_point);
-    let mut asm_func = AsmFunc::new();
-    Ok(format!("{}\n{}", header, asm_func.gen(&p.0)?))
 }
 
 const PLATFORM_WORD_SIZE: i64 = 8;
@@ -173,46 +173,46 @@ impl AsmFunc {
             code
         };
 
-        match op {
+        Ok(match op {
             ast::BinOp::BitwiseXor => {
-                Ok(code_with(exp1, exp2, &["xor %rcx, %rax".to_owned()]))
+                code_with(exp1, exp2, &["xor %rcx, %rax".to_owned()])
             },
             ast::BinOp::BitwiseOr => {
-                Ok(code_with(exp1, exp2, &["or %rcx, %rax".to_owned()]))
+                code_with(exp1, exp2, &["or %rcx, %rax".to_owned()])
             },
             ast::BinOp::BitwiseAnd => {
-                Ok(code_with(exp1, exp2, &["and %rcx, %rax".to_owned()]))
+                code_with(exp1, exp2, &["and %rcx, %rax".to_owned()])
             },
             ast::BinOp::Addition => {
-                Ok(code_with(exp1, exp2, &["add %rcx, %rax".to_owned()]))
+                code_with(exp1, exp2, &["add %rcx, %rax".to_owned()])
             },
             ast::BinOp::Sub => {
-                Ok(code_with(exp1, exp2, &[
+                code_with(exp1, exp2, &[
                     "sub %rax, %rcx".to_owned(),
                     "mov %rcx, %rax".to_owned()
-                ]))
+                ])
             },
             ast::BinOp::Multiplication => {
-                Ok(code_with(exp1, exp2, &["imul %rcx, %rax".to_owned()]))
+                code_with(exp1, exp2, &["imul %rcx, %rax".to_owned()])
             },
             ast::BinOp::Division => {
-                Ok(code_with(exp1, exp2, &[
+                code_with(exp1, exp2, &[
                     "mov %rax, %rbx".to_owned(),
                     "mov %rcx, %rax".to_owned(),
                     "mov %rbx, %rcx".to_owned(),
                     "cqo".to_owned(),
                     "idiv %rcx".to_owned()
-                ]))
+                ])
             },
             ast::BinOp::Modulo => {
-                Ok(code_with(exp1, exp2, &[
+                code_with(exp1, exp2, &[
                     "mov %rax, %rbx".to_owned(),
                     "mov %rcx, %rax".to_owned(),
                     "mov %rbx, %rcx".to_owned(),
                     "cqo".to_owned(),
                     "idiv %rcx".to_owned(),
                     "mov %rdx, %rax".to_owned()
-                ]))
+                ])
             },
             ast::BinOp::And => {
                 let label = AsmFunc::unique_label("");
@@ -228,7 +228,7 @@ impl AsmFunc {
                 code.push("mov    $0, %rax".to_owned());
                 code.push("setne    %al".to_owned());
                 code.push(format!("{}:", end_label));
-                Ok(code)
+                code
             },
             ast::BinOp::Or => {
                 let label = AsmFunc::unique_label("");
@@ -245,57 +245,57 @@ impl AsmFunc {
                 code.push("mov    $0, %rax".to_owned());
                 code.push("setne    %al".to_owned());
                 code.push(format!("{}:", end_label));
-                Ok(code)
+                code
             },
             ast::BinOp::Equal => {
-                Ok(code_with(exp1, exp2, &[
+                code_with(exp1, exp2, &[
                     "cmp    %rax, %rcx".to_owned(),
                     "mov    $0, %eax".to_owned(),
                     "sete    %al".to_owned()
-                ]))
+                ])
             },
             ast::BinOp::NotEqual => {
-                Ok(code_with(exp1, exp2, &[
+                code_with(exp1, exp2, &[
                     "cmp    %rax, %rcx".to_owned(),
                     "mov    $0, %eax".to_owned(),
                     "setne    %al".to_owned()
-                ]))
+                ])
             },
             ast::BinOp::LessThan => {
-                Ok(code_with(exp1, exp2, &[
+                code_with(exp1, exp2, &[
                     "cmp    %rax, %rcx".to_owned(),
                     "mov    $0, %eax".to_owned(),
                     "setl    %al".to_owned()
-                ]))
+                ])
             },
             ast::BinOp::LessThanOrEqual => {
-                Ok(code_with(exp1, exp2, &[
+                code_with(exp1, exp2, &[
                     "cmp    %rax, %rcx".to_owned(),
                     "mov    $0, %eax".to_owned(),
                     "setle    %al".to_owned()
-                ]))
+                ])
             },
             ast::BinOp::GreaterThan => {
-                Ok(code_with(exp1, exp2, &[
+                code_with(exp1, exp2, &[
                     "cmp    %rax, %rcx".to_owned(),
                     "mov    $0, %eax".to_owned(),
                     "setg    %al".to_owned()
-                ]))
+                ])
             },
             ast::BinOp::GreaterThanOrEqual => {
-                Ok(code_with(exp1, exp2, &[
+                code_with(exp1, exp2, &[
                     "cmp    %rax, %rcx".to_owned(),
                     "mov    $0, %eax".to_owned(),
                     "setge    %al".to_owned()
-                ]))
+                ])
             },
             ast::BinOp::BitwiseLeftShift => {
-                Ok(code_with(exp1, exp2, &["sal %rcx, %rax".to_owned()]))
+                code_with(exp1, exp2, &["sal %rcx, %rax".to_owned()])
             },
             ast::BinOp::BitwiseRightShift => {
-                Ok(code_with(exp1, exp2, &["sar %rcx, %rax".to_owned()]))
+                code_with(exp1, exp2, &["sar %rcx, %rax".to_owned()])
             },
-        }
+        })
     }
 
     fn unique_label(prefix: &str) -> String {
