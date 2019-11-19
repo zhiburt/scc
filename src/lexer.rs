@@ -32,6 +32,7 @@ pub enum TokenType {
     GreaterThanOrEqual,
     BitwiseLeftShift,
     BitwiseRightShift,
+    Assignment,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -39,6 +40,12 @@ pub struct Token {
     pub token_type: TokenType,
     pub pos: Pos,
     pub val: Option<String>,
+}
+
+impl Token {
+    pub fn is_type(&self, t: TokenType) -> bool {
+        self.token_type == t
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -120,6 +127,7 @@ impl Lexer {
                 TokenDefinition::new(TokenType::LessThan, r"^<"),
                 TokenDefinition::new(TokenType::GreaterThanOrEqual, r"^>="),
                 TokenDefinition::new(TokenType::GreaterThan, r"^>"),
+                TokenDefinition::new(TokenType::Assignment, r"^="),
             ],
         }
     }
