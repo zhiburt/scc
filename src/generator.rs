@@ -1,4 +1,5 @@
 use crate::{ast};
+use std::collections::HashMap;
 
 pub type Result<T> = std::result::Result<T, GenError>;
 
@@ -27,33 +28,53 @@ pub fn gen(p: ast::Program, start_point: &str) -> Result<String> {
     Ok(format!("{}\n{}", header, asm_func.gen(&p.0)?))
 }
 
-struct AsmFunc {}
+const PLATFORM_WORD_SIZE: i64 = 8;
+
+struct AsmFunc {
+    variable_map: HashMap<String, i64>,
+    stack_index: i64,
+}
 
 impl AsmFunc {
     fn new() -> Self {
-        AsmFunc {}
+        AsmFunc {
+            variable_map: HashMap::new(),
+            stack_index: -PLATFORM_WORD_SIZE,
+        }
     }
 
-    fn gen(&self, st: &ast::Declaration) -> Result<String> {
+    fn gen(&mut self, st: &ast::Declaration) -> Result<String> {
         match st {
             ast::Declaration::Func{name, statements} => {
                 let prologue = vec![
                     "push %rbp".to_owned(),
                     "mov %rsp, %rbp".to_owned(),
                 ];
-
                 let epilogue = vec![
                     "mov %rbp, %rsp".to_owned(),
                     "pop %rbp".to_owned(),
                     "ret".to_owned(),
                 ];
-                
-                let statements_code = self.gen_statement(&statements[0])?;
+
                 let mut code = Vec::new();
                 code.extend(prologue);
-                code.extend(statements_code);
-                code.extend(epilogue);
+
                 
+                let return_exists = statements.iter().any(|stat| match stat {
+                    ast::Statement::Return{..} => true,
+                    _ => false,
+                });
+
+                for statement in statements {
+                    code.extend(self.gen_statement(statement)?);
+                }
+
+                if !return_exists {
+                    code.push("ret $0".to_owned());
+                }
+
+                code.extend(epilogue);
+
                 let mut pretty_code = code
                     .iter()
                     .map(|c| format!("\t{}", c))
@@ -65,12 +86,28 @@ impl AsmFunc {
         }
     }
 
-    fn gen_statement(&self, st: &ast::Statement) -> Result<Vec<String>> {
+    fn gen_statement(&mut self, st: &ast::Statement) -> Result<Vec<String>> {
         match st {
-            ast::Statement::Return{exp} => {
-                self.gen_expr(&exp)
+            ast::Statement::Return{exp} | ast::Statement::Exp{exp} => self.gen_expr(&exp),
+            ast::Statement::Declare{name, exp} => {
+                if self.variable_map.contains_key(name) {
+                    return Err(GenError::InvalidVariableUsage(name.clone()));
+                }
+
+                self.variable_map.insert(name.clone(), self.stack_index);
+                self.stack_index -= PLATFORM_WORD_SIZE;
+
+                let code = match exp {
+                    Some(exp) => {
+                        let mut code = self.gen_expr(&exp)?;
+                        code.push("push %rax".to_owned());
+                        code
+                    }
+                    _ => vec!["push $0".to_owned()]
+                };
+
+                Ok(code)
             }
-            _ => unimplemented!(),
         }
     }
 
@@ -79,7 +116,18 @@ impl AsmFunc {
             ast::Exp::Const(c) => Ok(self.gen_const(c)),
             ast::Exp::UnOp(op, exp) => self.gen_unop(op, exp),
             ast::Exp::BinOp(op, exp1, exp2) => self.gen_binop(op, exp1, exp2),
-            _ => unimplemented!(),
+            ast::Exp::Assign(name, exp) => {
+                let mut code = self.gen_expr(exp)?;
+                
+                let offset = self.variable_map.get(name).ok_or(GenError::InvalidVariableUsage(name.clone()))?;
+                code.push(format!("mov %rax, {}(%rbp)", offset));
+
+                Ok(code)
+            }
+            ast::Exp::Var(name) => {
+                let offset = self.variable_map.get(name).ok_or(GenError::InvalidVariableUsage(name.clone()))?;
+                Ok(vec![format!("mov {}(%rbp), %rax", offset)])
+            }
         }
     }
 
