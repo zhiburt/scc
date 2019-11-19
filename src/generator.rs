@@ -7,9 +7,25 @@ pub fn gen(p: ast::Program, start_point: &str) -> String {
 
 fn gen_decl(st: &ast::Declaration) -> String {
     match st {
-        ast::Declaration::Func{name, state} => {
-            let statements_code = gen_statement(state);
-            let mut pretty_code = statements_code
+        ast::Declaration::Func{name, statements} => {
+            let prologue = vec![
+                "push %rbp".to_owned(),
+                "mov %rsp, %rbp".to_owned(),
+            ];
+
+            let epilogue = vec![
+                "mov %rbp, %rsp".to_owned(),
+                "pop %rbp".to_owned(),
+                "ret".to_owned(),
+            ];
+            
+            let statements_code = gen_statement(&statements[0]);
+            let mut code = Vec::new();
+            code.extend(prologue);
+            code.extend(statements_code);
+            code.extend(epilogue);
+            
+            let mut pretty_code = code
                 .iter()
                 .map(|c| format!("\t{}", c))
                 .collect::<Vec<String>>();
@@ -23,10 +39,9 @@ fn gen_decl(st: &ast::Declaration) -> String {
 fn gen_statement(st: &ast::Statement) -> Vec<String> {
     match st {
         ast::Statement::Return{exp} => {
-            let mut expr_code = gen_expr(&exp);
-            expr_code.push("ret".to_owned());
-            expr_code
+            gen_expr(&exp)
         }
+        _ => unimplemented!(),
     }
 }
 
@@ -35,6 +50,7 @@ fn gen_expr(expr: &ast::Exp) -> Vec<String> {
         ast::Exp::Const(c) => gen_const(c),
         ast::Exp::UnOp(op, exp) => gen_unop(op, exp),
         ast::Exp::BinOp(op, exp1, exp2) => gen_binop(op, exp1, exp2),
+        _ => unimplemented!(),
     }
 }
 
