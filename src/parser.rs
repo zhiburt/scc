@@ -19,7 +19,7 @@ pub enum CompilerError {
 
 impl fmt::Display for CompilerError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "invalid first item to double")
+        write!(f, "syntax_err")
     }
 }
 
@@ -157,15 +157,18 @@ pub fn parse_factor(mut tokens: Vec<Token>) -> Result<(ast::Exp, Vec<Token>)> {
 }
 
 pub fn parse_statement(mut tokens: Vec<Token>) -> Result<(ast::Statement, Vec<Token>)> {
-    let (stat, mut tokens) = match tokens.remove(0).token_type {
+    let (stat, mut tokens) = match tokens.get(0).unwrap().token_type {
         TokenType::Return => {
+            tokens.remove(0);
             let (exp, mut tokens) = parse_exp(tokens).unwrap();
             (ast::Statement::Return{exp: exp}, tokens)
         },
-        TokenType::IntegerLiteral => {
+        TokenType::Int => {
+            tokens.remove(0);
             let var = compare_token(tokens.remove(0), TokenType::Identifier)?;
             let exp = match tokens.get(0) {
                 Some(tok) if tok.is_type(TokenType::Assignment) => {
+                    tokens.remove(0);
                     let (exp, toks) = parse_exp(tokens)?;
                     tokens = toks;
                     Some(exp)
@@ -175,9 +178,11 @@ pub fn parse_statement(mut tokens: Vec<Token>) -> Result<(ast::Statement, Vec<To
 
             (ast::Statement::Declare{name: var.val.unwrap().to_owned(), exp: exp}, tokens)
         },
-        _ => unimplemented!()
+        _ => {
+            let (exp, tokens) = parse_exp(tokens)?;
+            (ast::Statement::Exp{exp: exp}, tokens)
+        }
     };
-
     compare_token(tokens.remove(0), TokenType::Semicolon).unwrap();
 
     Ok((stat, tokens))
