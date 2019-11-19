@@ -3,10 +3,10 @@ use simple_c_compiler::{ast};
 
 pub fn pretty_decl(d: &ast::Declaration) -> String {
     match d {
-        ast::Declaration::Func{name, state} => format!(
-            "FUN {}:\n   body:\n      {}",
+        ast::Declaration::Func{name, statements} => format!(
+            "FUN {}:\n   body:\n{}",
             name,
-            pretty_stat(state)
+            statements.iter().map(|stat| format!("      {}", pretty_stat(stat))).collect::<Vec<_>>().join("\n")
         ),
     }
 }
@@ -14,6 +14,7 @@ pub fn pretty_decl(d: &ast::Declaration) -> String {
 fn pretty_stat(st: &ast::Statement) -> String {
     match st {
         ast::Statement::Return{exp} => pretty_expr(exp),
+        _ => unimplemented!(),
     }
 }
 
@@ -22,6 +23,8 @@ fn pretty_expr(exp: &ast::Exp) -> String {
         ast::Exp::BinOp(op, exp1, exp2) => format!("{} BinOp<{:?}> {}", pretty_expr(exp1), op, pretty_expr(exp2)),
         ast::Exp::Const(c) => format!("Const<{:?}>", c),
         ast::Exp::UnOp(op, exp) => format!("UnOp<{:?}> {}", op, pretty_expr(exp)),
+        ast::Exp::Assign(name, exp) => format!("Var<{}> assign Exp<{}>", name, pretty_expr(exp)),
+        ast::Exp::Var(name) => format!("Var<{}>", name),
     }
 }
 
