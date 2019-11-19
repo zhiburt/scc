@@ -1,3 +1,10 @@
+/// Parse package does all stuff to create AST
+/// 
+/// TODO: should we have rejected logic when we remove(0) from tokens
+/// might be better to check it and if something wrong fail?
+/// but not effect original vector, but it's not very crucial now, until we return tokens even in error,
+/// or take &tokens not move them
+
 use crate::{Token, TokenType, ast};
 
 use std::error;
@@ -79,6 +86,19 @@ fn map_token_to_unop(t: TokenType) -> Option<ast::UnOp> {
     }
 }
 
+pub fn parse_exp(mut tokens: Vec<Token>) -> Result<(ast::Exp, Vec<Token>)> {
+    if tokens[0].is_type(TokenType::Identifier)
+        && tokens[1].is_type(TokenType::Assignment) {
+        let var = tokens.remove(0);
+        tokens.remove(0);
+        let (exp, tokens) = parse_exp(tokens)?;
+
+        Ok((ast::Exp::Assign(var.val.unwrap().to_owned(), Box::new(exp)), tokens))
+    } else {
+        parse_expr(parse_or_expr, &[TokenType::Or], tokens)
+    }
+}
+
 pub fn parse_or_expr(tokens: Vec<Token>) -> Result<(ast::Exp, Vec<Token>)> {
     parse_expr(parse_and_expr, &[TokenType::Or], tokens)
 }
@@ -115,12 +135,15 @@ pub fn parse_factor(mut tokens: Vec<Token>) -> Result<(ast::Exp, Vec<Token>)> {
     let mut token = tokens.remove(0);
     match token.token_type {
         TokenType::OpenParenthesis => {
-            let (expr, mut tokens) = parse_expr(parse_or_expr, &[TokenType::Or], tokens).unwrap();
+            let (expr, mut tokens) = parse_exp(tokens).unwrap();
             token = tokens.remove(0);
             if token.token_type != TokenType::CloseParenthesis {
                 return Err(CompilerError::ParsingError);
             }
             Ok((expr, tokens))
+        }
+        TokenType::Identifier => {
+            Ok((ast::Exp::Var(token.val.unwrap().to_owned()), tokens))
         }
         TokenType::IntegerLiteral => {
             Ok((ast::Exp::Const(ast::Const::Int(token.val.as_ref().unwrap().parse().unwrap())), tokens))
@@ -134,10 +157,30 @@ pub fn parse_factor(mut tokens: Vec<Token>) -> Result<(ast::Exp, Vec<Token>)> {
 }
 
 pub fn parse_statement(mut tokens: Vec<Token>) -> Result<(ast::Statement, Vec<Token>)> {
-    compare_token(tokens.remove(0), TokenType::Return).unwrap();
-    let (exp, mut tokens) = parse_or_expr(tokens).unwrap();
+    let (stat, mut tokens) = match tokens.remove(0).token_type {
+        TokenType::Return => {
+            let (exp, mut tokens) = parse_exp(tokens).unwrap();
+            (ast::Statement::Return{exp: exp}, tokens)
+        },
+        TokenType::IntegerLiteral => {
+            let var = compare_token(tokens.remove(0), TokenType::Identifier)?;
+            let exp = match tokens.get(0) {
+                Some(tok) if tok.is_type(TokenType::Assignment) => {
+                    let (exp, toks) = parse_exp(tokens)?;
+                    tokens = toks;
+                    Some(exp)
+                } ,
+                _ => None,
+            };
+
+            (ast::Statement::Declare{name: var.val.unwrap().to_owned(), exp: exp}, tokens)
+        },
+        _ => unimplemented!()
+    };
+
     compare_token(tokens.remove(0), TokenType::Semicolon).unwrap();
-    Ok((ast::Statement::Return{exp}, tokens))
+
+    Ok((stat, tokens))
 }
 
 pub fn parse_decl(mut tokens: Vec<Token>) -> Result<(ast::Declaration, Vec<Token>)> {
@@ -146,10 +189,16 @@ pub fn parse_decl(mut tokens: Vec<Token>) -> Result<(ast::Declaration, Vec<Token
     compare_token(tokens.remove(0), TokenType::OpenParenthesis).unwrap();
     compare_token(tokens.remove(0), TokenType::CloseParenthesis).unwrap();
     compare_token(tokens.remove(0), TokenType::OpenBrace).unwrap();
-    let (body, mut tokens) = parse_statement(tokens).unwrap();
-    compare_token(tokens.remove(0), TokenType::CloseBrace).unwrap();
 
-    Ok((ast::Declaration::Func{name: func_name.val.unwrap().clone(), state: body}, tokens))
+    let mut declarations = Vec::new();
+    while tokens.get(0).unwrap().token_type != TokenType::CloseBrace {
+        let (decl, toks) = parse_statement(tokens).unwrap();
+        declarations.push(decl);
+        tokens = toks;
+    } 
+    tokens.remove(0);
+
+    Ok((ast::Declaration::Func{name: func_name.val.unwrap().clone(), statements: declarations}, tokens))
 }
 
 pub fn parse(tokens: Vec<Token>) -> Result<ast::Program> {
