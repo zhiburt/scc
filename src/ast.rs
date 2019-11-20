@@ -34,6 +34,8 @@ pub enum UnOp {
 
 #[derive(Debug)]
 pub enum Exp {
+    Assign(String, Box<Exp>),
+    Var(String),
     Const(Const),
     UnOp(UnOp, Box<Exp>),
     BinOp(BinOp, Box<Exp>, Box<Exp>),
@@ -41,10 +43,12 @@ pub enum Exp {
 
 pub enum Statement {
     Return{exp: Exp},
+    Declare{name: String, exp: Option<Exp>},
+    Exp{exp: Exp},
 }
 
 pub enum Declaration {
-    Func{name: String, state: Statement},
+    Func{name: String, statements: Vec<Statement>},
 }
 
 // Add block node which is decl
