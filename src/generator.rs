@@ -159,22 +159,62 @@ impl AsmFunc {
                 code
             }
             ast::UnOp::IncrementPrefix => {
-                let mut c = vec!["inc    %rax".to_owned()];
-                c.extend(code);
-                c
+                let offset = match exp {
+                    ast::Exp::Var(name) => {
+                        self.variable_map.get(name).ok_or(GenError::InvalidVariableUsage(name.clone()))?
+                    }
+                    _ => unreachable!(),
+                };
+
+                vec![
+                    format!("mov {}(%rbp), %rax", offset),
+                    "inc %rax".to_owned(),
+                    format!("mov    %rax, {}(%rbp)", offset),
+                ]
             }
             ast::UnOp::IncrementPostfix => {
-                code.push("inc    %rax".to_owned());
-                code
+                let offset = match exp {
+                    ast::Exp::Var(name) => {
+                        self.variable_map.get(name).ok_or(GenError::InvalidVariableUsage(name.clone()))?
+                    }
+                    _ => unreachable!(),
+                };
+
+                vec![
+                    format!("mov {}(%rbp), %rax", offset),
+                    "inc %rax".to_owned(),
+                    format!("mov    %rax, {}(%rbp)", offset),
+                    "dec %rax".to_owned(),
+                ]
             }
             ast::UnOp::DecrementPrefix => {
-                let mut c = vec!["dec    %rax".to_owned()];
-                c.extend(code);
-                c
+                let offset = match exp {
+                    ast::Exp::Var(name) => {
+                        self.variable_map.get(name).ok_or(GenError::InvalidVariableUsage(name.clone()))?
+                    }
+                    _ => unreachable!(),
+                };
+
+                vec![
+                    format!("mov {}(%rbp), %rax", offset),
+                    "dec %rax".to_owned(),
+                    format!("mov    %rax, {}(%rbp)", offset),
+                ]
             }
             ast::UnOp::DecrementPostfix => {
-                code.push("dec    %rax".to_owned());
-                code
+                let offset = match exp {
+                    ast::Exp::Var(name) => {
+                        self.variable_map.get(name).ok_or(GenError::InvalidVariableUsage(name.clone()))?
+                    }
+                    _ => unreachable!(),
+                };
+
+                vec![
+                    format!("mov {}(%rbp), %rax", offset),
+                    "dec %rax".to_owned(),
+                    format!("mov    %rax, {}(%rbp)", offset),
+                    "inc %rax".to_owned(),
+                ]
             }
         };
 
