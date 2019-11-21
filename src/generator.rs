@@ -139,29 +139,45 @@ impl AsmFunc {
 
     fn gen_unop(&self, op: &ast::UnOp, exp: &ast::Exp) -> Result<Vec<String>> {
         let mut code = self.gen_expr(exp)?;
-        code.extend(
-            match op {
-                ast::UnOp::Negation => {
-                    vec!["neg    %rax".to_owned()]
-                }
-                ast::UnOp::LogicalNegation => {
+        code = match op {
+            ast::UnOp::Negation => {
+                code.push("neg    %rax".to_owned());
+                code
+            }
+            ast::UnOp::LogicalNegation => {
+                code.extend(
                     vec![
                         "cmpl    $0, %eax".to_owned(),
                         "movl    $0, %eax".to_owned(),
                         "sete    %al".to_owned()
                     ]
-                }
-                ast::UnOp::BitwiseComplement => {
-                    vec!["not    %eax".to_owned()]
-                }
-                ast::UnOp::Increment => {
-                    vec!["inc    %eax".to_owned()]
-                }
-                ast::UnOp::Decrement => {
-                    vec!["dec    %eax".to_owned()]
-                }
+                );
+                code
             }
-        );
+            ast::UnOp::BitwiseComplement => {
+                code.push("not    %eax".to_owned());
+                code
+            }
+            ast::UnOp::IncrementPrefix => {
+                let mut c = vec!["inc    %rax".to_owned()];
+                c.extend(code);
+                c
+            }
+            ast::UnOp::IncrementPostfix => {
+                code.push("inc    %rax".to_owned());
+                code
+            }
+            ast::UnOp::DecrementPrefix => {
+                let mut c = vec!["dec    %rax".to_owned()];
+                c.extend(code);
+                c
+            }
+            ast::UnOp::DecrementPostfix => {
+                code.push("dec    %rax".to_owned());
+                code
+            }
+        };
+
         Ok(code)
     }
 
