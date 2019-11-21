@@ -85,12 +85,16 @@ mod compare_gcc {
     fn increment_operations() {
         compare_expr("int a = 1; return ++a;");
         compare_expr("int a = 1; return a++;");
+        compare_expr("int a = 1; a++; return a;");
+        compare_expr("int a = 1; ++a; return a;");
     }
 
     #[test]
     fn decrement_operations() {
         compare_expr("int a = 1; return --a;");
         compare_expr("int a = 1; return a--;");
+        compare_expr("int a = 1; a--; return a;");
+        compare_expr("int a = 1; --a; return a;");
     }
 }
 
