@@ -154,6 +154,12 @@ impl AsmFunc {
                 ast::UnOp::BitwiseComplement => {
                     vec!["not    %eax".to_owned()]
                 }
+                ast::UnOp::Increment => {
+                    vec!["inc    %eax".to_owned()]
+                }
+                ast::UnOp::Decrement => {
+                    vec!["dec    %eax".to_owned()]
+                }
             }
         );
         Ok(code)

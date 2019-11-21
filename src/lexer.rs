@@ -33,6 +33,8 @@ pub enum TokenType {
     BitwiseLeftShift,
     BitwiseRightShift,
     Assignment,
+    Increment,
+    Decrement,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -107,10 +109,12 @@ impl Lexer {
                 TokenDefinition::new(TokenType::OpenBrace, r"^\{"),
                 TokenDefinition::new(TokenType::CloseBrace, r"^}"),
                 TokenDefinition::new(TokenType::Semicolon, r"^;"),
+                TokenDefinition::new(TokenType::Decrement, r"^--"),
                 TokenDefinition::new(TokenType::Negation, r"^-"),
                 TokenDefinition::new(TokenType::BitwiseComplement, r"^~"),
                 TokenDefinition::new(TokenType::NotEqual, r"^!="),
                 TokenDefinition::new(TokenType::LogicalNegation, r"^!"),
+                TokenDefinition::new(TokenType::Increment, r"^\+\+"),
                 TokenDefinition::new(TokenType::Addition, r"^\+"),
                 TokenDefinition::new(TokenType::Multiplication, r"^\*"),
                 TokenDefinition::new(TokenType::Modulo, r"^%"),
