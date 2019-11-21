@@ -80,6 +80,18 @@ mod compare_gcc {
         compare_expr("return 1 >= 2;");
         compare_expr("return 2 >= 1;");
     }
+
+    #[test]
+    fn increment_operations() {
+        compare_expr("return 1++;");
+        compare_expr("int a = 1; return ++a;");
+    }
+
+    #[test]
+    fn decrement_operations() {
+        compare_expr("return 1--;");
+        compare_expr("int a = 1; return --a;");
+    }
 }
 
 fn compare_expr(expr: &str) {
