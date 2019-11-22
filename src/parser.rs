@@ -87,15 +87,16 @@ fn map_token_to_unop(t: TokenType) -> Option<ast::UnOp> {
 }
 
 pub fn parse_exp(mut tokens: Vec<Token>) -> Result<(ast::Exp, Vec<Token>)> {
-    if tokens[0].is_type(TokenType::Identifier)
-        && tokens[1].is_type(TokenType::Assignment) {
-        let var = tokens.remove(0);
-        tokens.remove(0);
-        let (exp, tokens) = parse_exp(tokens)?;
-
-        Ok((ast::Exp::Assign(var.val.unwrap().to_owned(), Box::new(exp)), tokens))
-    } else {
-        parse_expr(parse_or_expr, &[TokenType::Or], tokens)
+    match tokens[0].token_type {
+        TokenType::Identifier if tokens[1].is_type(TokenType::Assignment) => {
+            let var = tokens.remove(0);
+            tokens.remove(0);
+            let (exp, tokens) = parse_exp(tokens)?;
+            Ok((ast::Exp::Assign(var.val.unwrap().to_owned(), Box::new(exp)), tokens))
+        }
+        _ => {
+            parse_expr(parse_or_expr, &[TokenType::Or], tokens)
+        }
     }
 }
 
