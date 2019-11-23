@@ -307,7 +307,7 @@ impl AsmFunc {
         match op {
             ast::AssignmentOp::Plus => code.push(format!("add {}(%rbp), %rax", offset)),
             ast::AssignmentOp::Sub => code.push(format!("sub {}(%rbp), %rax", offset)),
-            ast::AssignmentOp::Mul => code.push(format!("mul {}(%rbp), %rax", offset)),
+            ast::AssignmentOp::Mul => code.push(format!("imul {}(%rbp), %rax", offset)),
             ast::AssignmentOp::Div => {
                 // is it correct?
                 code.push(format!("mov {}(%rbp), %rcx", offset));
@@ -333,9 +333,9 @@ impl AsmFunc {
             },
             ast::AssignmentOp::BitLeftShift => code.push("sal %rcx, %rax".to_owned()),
             ast::AssignmentOp::BitRightShift => code.push("sar %rcx, %rax".to_owned()),
-            ast::AssignmentOp::BitAnd => code.push("and %rcx, %rax".to_owned()),
-            ast::AssignmentOp::BitOr => code.push("or %rcx, %rax".to_owned()),
-            ast::AssignmentOp::BitXor => code.push("xor %rcx, %rax".to_owned()),
+            ast::AssignmentOp::BitAnd => code.push(format!("and {}(%rbp), %rax", offset)),
+            ast::AssignmentOp::BitOr => code.push(format!("or {}(%rbp), %rax", offset)),
+            ast::AssignmentOp::BitXor => code.push(format!("xor {}(%rbp), %rax", offset)),
         };
 
         code.push(format!("mov %rax, {}(%rbp)", offset));
