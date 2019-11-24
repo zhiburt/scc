@@ -89,6 +89,37 @@ impl AsmFunc {
     fn gen_statement(&mut self, st: &ast::Statement) -> Result<Vec<String>> {
         match st {
             ast::Statement::Return{exp} | ast::Statement::Exp{exp} => self.gen_expr(&exp),
+            ast::Statement::Conditional{cond_expr, if_block, else_block} => {
+                let cond = self.gen_expr(cond_expr)?;
+                let if_block = self.gen_statement(if_block)?;
+                let else_block = else_block.as_ref().map_or(None, |block| Some(self.gen_statement(block).unwrap()));
+
+                let if_label = AsmFunc::unique_label("");
+                let end_label = AsmFunc::unique_label("end");
+                let else_label = if else_block.is_some() {
+                    AsmFunc::unique_label("")
+                } else {
+                    end_label.clone()
+                };
+
+                let mut code = Vec::new();
+                code.extend(cond);
+                
+                code.push("cmp $0, %rax".to_owned());
+                code.push(format!("jne {}", if_label));
+                code.push(format!("jmp {}", else_label));
+                code.push(format!("{}:", if_label));
+                code.extend(if_block);
+                code.push(format!("jmp {}", end_label));
+                if let Some(else_block) = else_block {
+                    code.push(format!("{}:", else_label));
+                    code.extend(else_block);
+                    code.push(format!("jmp {}", end_label));
+                }
+                code.push(format!("{}:", end_label));
+
+                Ok(code)
+            }
         }
     }
 

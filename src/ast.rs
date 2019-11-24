@@ -64,6 +64,7 @@ pub enum Exp {
 pub enum Statement {
     Return{exp: Exp},
     Exp{exp: Exp},
+    Conditional{cond_expr: Exp, if_block: Box<Statement>, else_block: Option<Box<Statement>>},
 }
 
 pub enum Declaration {

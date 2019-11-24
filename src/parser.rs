@@ -283,18 +283,43 @@ pub fn parse_inc_dec_expr(mut tokens: Vec<Token>) -> Result<(ast::Exp, Vec<Token
 }
 
 pub fn parse_statement(mut tokens: Vec<Token>) -> Result<(ast::Statement, Vec<Token>)> {
-    let (stat, mut tokens) = match tokens.get(0).unwrap().token_type {
+    let (stat, tokens) = match tokens.get(0).unwrap().token_type {
         TokenType::Return => {
             tokens.remove(0);
+
             let (exp, mut tokens) = parse_exp(tokens).unwrap();
+            compare_token(tokens.remove(0), TokenType::Semicolon).unwrap();
+            
             (ast::Statement::Return{exp: exp}, tokens)
         },
+        TokenType::If => {
+            tokens.remove(0);
+            compare_token(tokens.remove(0), TokenType::OpenParenthesis).unwrap();
+            let (exp, mut tokens) = parse_exp(tokens)?;
+            compare_token(tokens.remove(0), TokenType::CloseParenthesis).unwrap();
+            
+            let (if_block, mut tokens) = parse_statement(tokens)?;            
+            
+            let else_block= match tokens.get(0) {
+                Some(tok) if tok.token_type == TokenType::Else => {
+                    tokens.remove(0);
+                    
+                    let (else_block, toks) = parse_statement(tokens)?;            
+                    tokens = toks;
+                    Some(Box::new(else_block))
+                },
+                _ => None,
+            };
+            
+            (ast::Statement::Conditional{cond_expr: exp, if_block: Box::new(if_block), else_block}, tokens)
+        }
         _ => {
-            let (exp, tokens) = parse_exp(tokens)?;
+            let (exp, mut tokens) = parse_exp(tokens)?;
+            compare_token(tokens.remove(0), TokenType::Semicolon).unwrap();
+
             (ast::Statement::Exp{exp: exp}, tokens)
         }
     };
-    compare_token(tokens.remove(0), TokenType::Semicolon).unwrap();
 
     Ok((stat, tokens))
 }

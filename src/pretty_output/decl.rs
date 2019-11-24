@@ -20,6 +20,15 @@ fn pretty_stat(st: &ast::Statement) -> String {
     match st {
         ast::Statement::Return{exp} => format!("Return<{}>", pretty_expr(exp)),
         ast::Statement::Exp{exp} => format!("Exp<{}>", pretty_expr(exp)),
+        ast::Statement::Conditional{cond_expr, if_block, else_block} => {
+            let else_block = if let Some(else_block) = else_block {
+                pretty_stat(else_block)
+            } else {
+                "".to_owned()
+            };
+
+            format!("If<{}, {}, {}>", pretty_expr(cond_expr), pretty_stat(if_block), else_block )
+        }
     }
 }
 
