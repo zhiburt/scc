@@ -86,6 +86,22 @@ fn map_token_to_unop(t: TokenType) -> Option<ast::UnOp> {
     }
 }
 
+fn map_inc_dec_token_to_unop(t: TokenType, postfix: bool) -> Option<ast::UnOp> {
+    if postfix {
+        match t {
+            TokenType::Increment => Some(ast::UnOp::IncrementPostfix),
+            TokenType::Decrement => Some(ast::UnOp::DecrementPostfix),
+            _ => None,
+        }
+    } else {
+        match t {
+            TokenType::Increment => Some(ast::UnOp::IncrementPrefix),
+            TokenType::Decrement => Some(ast::UnOp::DecrementPrefix),
+            _ => None,
+        }
+    }
+}
+
 pub fn is_operators(t: &[Token], operators: &[TokenType]) -> bool {
     for (i, op) in operators.iter().enumerate() {
         match t.get(i) {
@@ -214,9 +230,10 @@ pub fn parse_term(tokens: Vec<Token>) -> Result<(ast::Exp, Vec<Token>)> {
 }
 
 pub fn parse_factor(mut tokens: Vec<Token>) -> Result<(ast::Exp, Vec<Token>)> {
-    let mut token = tokens.remove(0);
-    match token.token_type {
+    let picked_token = tokens.get(0).unwrap();
+    match picked_token.token_type {
         TokenType::OpenParenthesis => {
+            let mut token = tokens.remove(0);
             let (expr, mut tokens) = parse_exp(tokens).unwrap();
             token = tokens.remove(0);
             if token.token_type != TokenType::CloseParenthesis {
@@ -225,14 +242,41 @@ pub fn parse_factor(mut tokens: Vec<Token>) -> Result<(ast::Exp, Vec<Token>)> {
             Ok((expr, tokens))
         }
         TokenType::Identifier => {
-            Ok((ast::Exp::Var(token.val.unwrap().to_owned()), tokens))
+            let token = tokens.remove(0);
+            let var = ast::Exp::Var(token.val.unwrap().to_owned());
+            match tokens.get(0) {
+                Some(tok) if tok.is_type(TokenType::Decrement) || tok.is_type(TokenType::Increment) => {
+                    let tok_type = tok.token_type;
+                    tokens.remove(0);
+                    Ok((ast::Exp::UnOp(map_inc_dec_token_to_unop(tok_type, true).unwrap(), Box::new(var)), tokens))
+                }
+                _ => Ok((var, tokens)),
+            }
         }
         TokenType::IntegerLiteral => {
+            let token = tokens.remove(0);
             Ok((ast::Exp::Const(ast::Const::Int(token.val.as_ref().unwrap().parse().unwrap())), tokens))
         }
         TokenType::Negation | TokenType::LogicalNegation | TokenType::BitwiseComplement => {
+            let token = tokens.remove(0);
             let (expr, tokens) = parse_expr(parse_factor, &[TokenType::Or], tokens).unwrap();
             Ok((ast::Exp::UnOp(map_token_to_unop(token.token_type).unwrap(), Box::new(expr)), tokens))
+        }
+        _ => parse_inc_dec_expr(tokens),
+    }
+}
+
+
+pub fn parse_inc_dec_expr(mut tokens: Vec<Token>) -> Result<(ast::Exp, Vec<Token>)> {
+    let mut token = tokens.remove(0);
+    match token.token_type {
+        TokenType::Increment => {
+            let (expr, tokens) = parse_expr(parse_factor, &[TokenType::Or], tokens).unwrap();
+            Ok((ast::Exp::UnOp(map_inc_dec_token_to_unop(token.token_type, false).unwrap(), Box::new(expr)), tokens))
+        }
+        TokenType::Decrement => {
+            let (expr, tokens) = parse_expr(parse_factor, &[TokenType::Or], tokens).unwrap();
+            Ok((ast::Exp::UnOp(map_inc_dec_token_to_unop(token.token_type, false).unwrap(), Box::new(expr)), tokens))
         }
         _ => Err(CompilerError::ParsingError),
     }

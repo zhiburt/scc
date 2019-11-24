@@ -31,6 +31,10 @@ pub enum UnOp {
     Negation,
     BitwiseComplement,
     LogicalNegation,
+    IncrementPrefix,
+    IncrementPostfix,
+    DecrementPrefix,
+    DecrementPostfix,
 }
 
 #[derive(Debug)]
