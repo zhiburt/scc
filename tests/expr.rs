@@ -80,6 +80,33 @@ mod compare_gcc {
         compare_expr("return 1 >= 2;");
         compare_expr("return 2 >= 1;");
     }
+
+    #[test]
+    fn assign_operations() {
+        compare_expr("int a = 1; return a += 1;");
+        compare_expr("int a = 1; a += 1; return a;");
+
+        compare_expr("int a = 1; return a -= 1;");
+        compare_expr("int a = 1; a -= 1; return a;");
+
+        compare_expr("int a = 1; return a *= 2;");
+        compare_expr("int a = 1; a *= 2; return a;");
+
+        compare_expr("int a = 10; return a /= 2;");
+        compare_expr("int a = 10; a /= 2; return a;");
+
+        compare_expr("int a = 7; return a %= 2;");
+        compare_expr("int a = 7; a %= 2; return a;");
+
+        compare_expr("int a = 2; return a |= 1;");
+        compare_expr("int a = 2; a |= 1; return a;");
+
+        compare_expr("int a = 2; return a &= 1;");
+        compare_expr("int a = 2; a &= 1; return a;");
+    
+        compare_expr("int a = 2; return a ^= 1;");
+        compare_expr("int a = 2; a ^= 1; return a;");
+    }
 }
 
 fn compare_expr(expr: &str) {

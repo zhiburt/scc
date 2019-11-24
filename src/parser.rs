@@ -86,6 +86,18 @@ fn map_token_to_unop(t: TokenType) -> Option<ast::UnOp> {
     }
 }
 
+pub fn is_operators(t: &[Token], operators: &[TokenType]) -> bool {
+    for (i, op) in operators.iter().enumerate() {
+        match t.get(i) {
+            Some(tok) if tok.token_type != *op => return false,
+            None => return false,
+            _ => (),
+        };
+    }
+
+    true
+}
+
 pub fn parse_exp(mut tokens: Vec<Token>) -> Result<(ast::Exp, Vec<Token>)> {
     if tokens[0].is_type(TokenType::Identifier)
         && tokens[1].is_type(TokenType::Assignment) {
@@ -94,6 +106,76 @@ pub fn parse_exp(mut tokens: Vec<Token>) -> Result<(ast::Exp, Vec<Token>)> {
         let (exp, tokens) = parse_exp(tokens)?;
 
         Ok((ast::Exp::Assign(var.val.unwrap().to_owned(), Box::new(exp)), tokens))
+    } else if tokens[0].is_type(TokenType::Identifier)
+        && tokens[1].is_type(TokenType::AssignmentPlus) {
+        let var = tokens.remove(0);
+        tokens.remove(0);
+        let (exp, tokens) = parse_exp(tokens)?;
+
+        Ok((ast::Exp::AssignOp(var.val.unwrap().to_owned(), ast::AssignmentOp::Plus, Box::new(exp)), tokens))
+    } else if tokens[0].is_type(TokenType::Identifier)
+        && tokens[1].is_type(TokenType::AssignmentSub) {
+        let var = tokens.remove(0);
+        tokens.remove(0);
+        let (exp, tokens) = parse_exp(tokens)?;
+
+        Ok((ast::Exp::AssignOp(var.val.unwrap().to_owned(), ast::AssignmentOp::Sub, Box::new(exp)), tokens))
+    } else if tokens[0].is_type(TokenType::Identifier)
+        && tokens[1].is_type(TokenType::AssignmentMul) {
+        let var = tokens.remove(0);
+        tokens.remove(0);
+        let (exp, tokens) = parse_exp(tokens)?;
+
+        Ok((ast::Exp::AssignOp(var.val.unwrap().to_owned(), ast::AssignmentOp::Mul, Box::new(exp)), tokens))
+    } else if tokens[0].is_type(TokenType::Identifier)
+        && tokens[1].is_type(TokenType::AssignmentDiv) {
+        let var = tokens.remove(0);
+        tokens.remove(0);
+        let (exp, tokens) = parse_exp(tokens)?;
+
+        Ok((ast::Exp::AssignOp(var.val.unwrap().to_owned(), ast::AssignmentOp::Div, Box::new(exp)), tokens))
+    } else if tokens[0].is_type(TokenType::Identifier)
+        && tokens[1].is_type(TokenType::AssignmentMod) {
+        let var = tokens.remove(0);
+        tokens.remove(0);
+        let (exp, tokens) = parse_exp(tokens)?;
+
+        Ok((ast::Exp::AssignOp(var.val.unwrap().to_owned(), ast::AssignmentOp::Mod, Box::new(exp)), tokens))
+    } else if tokens[0].is_type(TokenType::Identifier)
+        && tokens[1].is_type(TokenType::AssignmentBitLeftShift) {
+        let var = tokens.remove(0);
+        tokens.remove(0);
+        let (exp, tokens) = parse_exp(tokens)?;
+
+        Ok((ast::Exp::AssignOp(var.val.unwrap().to_owned(), ast::AssignmentOp::BitLeftShift, Box::new(exp)), tokens))
+    } else if tokens[0].is_type(TokenType::Identifier)
+        && tokens[1].is_type(TokenType::AssignmentBitRightShift) {
+        let var = tokens.remove(0);
+        tokens.remove(0);
+        let (exp, tokens) = parse_exp(tokens)?;
+
+        Ok((ast::Exp::AssignOp(var.val.unwrap().to_owned(), ast::AssignmentOp::BitRightShift, Box::new(exp)), tokens))
+    } else if tokens[0].is_type(TokenType::Identifier)
+        && tokens[1].is_type(TokenType::AssignmentBitAnd) {
+        let var = tokens.remove(0);
+        tokens.remove(0);
+        let (exp, tokens) = parse_exp(tokens)?;
+
+        Ok((ast::Exp::AssignOp(var.val.unwrap().to_owned(), ast::AssignmentOp::BitAnd, Box::new(exp)), tokens))
+    } else if tokens[0].is_type(TokenType::Identifier)
+        && tokens[1].is_type(TokenType::AssignmentBitOr) {
+        let var = tokens.remove(0);
+        tokens.remove(0);
+        let (exp, tokens) = parse_exp(tokens)?;
+
+        Ok((ast::Exp::AssignOp(var.val.unwrap().to_owned(), ast::AssignmentOp::BitOr, Box::new(exp)), tokens))
+    } else if tokens[0].is_type(TokenType::Identifier)
+        && tokens[1].is_type(TokenType::AssignmentBitXor) {
+        let var = tokens.remove(0);
+        tokens.remove(0);
+        let (exp, tokens) = parse_exp(tokens)?;
+
+        Ok((ast::Exp::AssignOp(var.val.unwrap().to_owned(), ast::AssignmentOp::BitXor, Box::new(exp)), tokens))
     } else {
         parse_expr(parse_or_expr, &[TokenType::Or], tokens)
     }
@@ -175,7 +257,6 @@ pub fn parse_statement(mut tokens: Vec<Token>) -> Result<(ast::Statement, Vec<To
                 } ,
                 _ => None,
             };
-
             (ast::Statement::Declare{name: var.val.unwrap().to_owned(), exp: exp}, tokens)
         },
         _ => {

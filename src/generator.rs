@@ -116,9 +116,10 @@ impl AsmFunc {
             ast::Exp::Const(c) => Ok(self.gen_const(c)),
             ast::Exp::UnOp(op, exp) => self.gen_unop(op, exp),
             ast::Exp::BinOp(op, exp1, exp2) => self.gen_binop(op, exp1, exp2),
+            ast::Exp::AssignOp(name, op, exp) => self.gen_assign_op(name, op, exp),
             ast::Exp::Assign(name, exp) => {
                 let mut code = self.gen_expr(exp)?;
-                
+
                 let offset = self.variable_map.get(name).ok_or(GenError::InvalidVariableUsage(name.clone()))?;
                 code.push(format!("mov %rax, {}(%rbp)", offset));
 
@@ -296,6 +297,50 @@ impl AsmFunc {
                 code_with(exp1, exp2, &["sar %rcx, %rax".to_owned()])
             },
         })
+    }
+
+    fn gen_assign_op(&self, var_name: &str, op: &ast::AssignmentOp, exp: &ast::Exp) -> Result<Vec<String>> {
+        let mut code = self.gen_expr(exp)?;
+
+        let offset = self.variable_map.get(var_name).ok_or(GenError::InvalidVariableUsage(var_name.to_owned()))?;
+
+        match op {
+            ast::AssignmentOp::Plus => code.push(format!("add {}(%rbp), %rax", offset)),
+            ast::AssignmentOp::Sub => code.push(format!("sub {}(%rbp), %rax", offset)),
+            ast::AssignmentOp::Mul => code.push(format!("imul {}(%rbp), %rax", offset)),
+            ast::AssignmentOp::Div => {
+                // is it correct?
+                code.push(format!("mov {}(%rbp), %rcx", offset));
+                code.extend(vec![
+                    "mov %rax, %rbx".to_owned(),
+                    "mov %rcx, %rax".to_owned(),
+                    "mov %rbx, %rcx".to_owned(),
+                    "cqo".to_owned(),
+                    "idiv %rcx".to_owned()
+                ]);
+            },
+            ast::AssignmentOp::Mod => {
+                // is it correct?
+                code.push(format!("mov {}(%rbp), %rcx", offset));
+                code.extend(vec![
+                    "mov %rax, %rbx".to_owned(),
+                    "mov %rcx, %rax".to_owned(),
+                    "mov %rbx, %rcx".to_owned(),
+                    "cqo".to_owned(),
+                    "idiv %rcx".to_owned(),
+                    "mov %rdx, %rax".to_owned()
+                ]);
+            },
+            ast::AssignmentOp::BitLeftShift => code.push("sal %rcx, %rax".to_owned()),
+            ast::AssignmentOp::BitRightShift => code.push("sar %rcx, %rax".to_owned()),
+            ast::AssignmentOp::BitAnd => code.push(format!("and {}(%rbp), %rax", offset)),
+            ast::AssignmentOp::BitOr => code.push(format!("or {}(%rbp), %rax", offset)),
+            ast::AssignmentOp::BitXor => code.push(format!("xor {}(%rbp), %rax", offset)),
+        };
+
+        code.push(format!("mov %rax, {}(%rbp)", offset));
+
+        Ok(code)
     }
 
     fn unique_label(prefix: &str) -> String {
