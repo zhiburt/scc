@@ -158,6 +158,8 @@ impl Lexer {
                 TokenDefinition::new(TokenType::GreaterThanOrEqual, r"^>="),
                 TokenDefinition::new(TokenType::GreaterThan, r"^>"),
                 TokenDefinition::new(TokenType::Assignment, r"^="),
+                TokenDefinition::new(TokenType::Colon, r"^:"),
+                TokenDefinition::new(TokenType::QuestionSign, r"^\?"),
             ],
         }
     }

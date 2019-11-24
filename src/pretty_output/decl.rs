@@ -51,6 +51,7 @@ fn pretty_expr(exp: &ast::Exp) -> String {
         ast::Exp::Assign(name, exp) => format!("Var<{}> assign Exp<{}>", name, pretty_expr(exp)),
         ast::Exp::Var(name) => format!("Var<{}>", name),
         ast::Exp::AssignOp(name, op, exp) => format!("VarOp<{}, {:?}> {}", name, op, pretty_expr(exp)),
+        ast::Exp::CondExp(cond, exp1, exp2) => format!("TernarOp<{}, {}, {}>", pretty_expr(cond), pretty_expr(exp1), pretty_expr(exp2)),
     }
 }
 

@@ -193,8 +193,27 @@ pub fn parse_exp(mut tokens: Vec<Token>) -> Result<(ast::Exp, Vec<Token>)> {
 
         Ok((ast::Exp::AssignOp(var.val.unwrap().to_owned(), ast::AssignmentOp::BitXor, Box::new(exp)), tokens))
     } else {
-        parse_expr(parse_or_expr, &[TokenType::Or], tokens)
+        parse_conditional_expr(tokens)
     }
+}
+
+pub fn parse_conditional_expr(tokens: Vec<Token>) -> Result<(ast::Exp, Vec<Token>)> {
+    let (mut exp, mut tokens) = parse_or_expr(tokens)?;
+    match tokens.get(0) {
+        Some(tok) if tok.token_type == TokenType::QuestionSign => {
+            tokens.remove(0);
+            
+            let (left_exp, mut toks) = parse_exp(tokens)?;
+            compare_token(toks.remove(0), TokenType::Colon)?;
+            let (right_exp, toks) = parse_conditional_expr(toks)?;
+            
+            tokens = toks;
+            exp = ast::Exp::CondExp(Box::new(exp), Box::new(left_exp), Box::new(right_exp))
+        }
+        _ => (),
+    };
+
+    Ok((exp, tokens))
 }
 
 pub fn parse_or_expr(tokens: Vec<Token>) -> Result<(ast::Exp, Vec<Token>)> {

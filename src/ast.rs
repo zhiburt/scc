@@ -59,6 +59,7 @@ pub enum Exp {
     UnOp(UnOp, Box<Exp>),
     BinOp(BinOp, Box<Exp>, Box<Exp>),
     AssignOp(String, AssignmentOp, Box<Exp>),
+    CondExp(Box<Exp>, Box<Exp>, Box<Exp>),
 }
 
 pub enum Statement {

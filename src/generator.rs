@@ -44,20 +44,9 @@ impl AsmFunc {
     }
 
     fn gen(&mut self, ast::FuncDecl{name, blocks}: &ast::FuncDecl) -> Result<String> {
-        let prologue = vec![
-            "push %rbp".to_owned(),
-            "mov %rsp, %rbp".to_owned(),
-            ];
-            let epilogue = vec![
-                "mov %rbp, %rsp".to_owned(),
-                "pop %rbp".to_owned(),
-                "ret".to_owned(),
-            ];
-
         let mut code = Vec::new();
-        code.extend(prologue);
+        code.extend(AsmFunc::prologue());
 
-                
         let return_exists = blocks.iter().any(|stat| match stat {
             ast::BlockItem::Statement(ast::Statement::Return{..}) => true,
             _ => false,
@@ -75,7 +64,7 @@ impl AsmFunc {
             code.push("ret $0".to_owned());
         }
 
-        code.extend(epilogue);
+        code.extend(AsmFunc::epilogue());
 
         let mut pretty_code = code
             .iter()
@@ -88,7 +77,13 @@ impl AsmFunc {
 
     fn gen_statement(&mut self, st: &ast::Statement) -> Result<Vec<String>> {
         match st {
-            ast::Statement::Return{exp} | ast::Statement::Exp{exp} => self.gen_expr(&exp),
+            ast::Statement::Exp{exp} => self.gen_expr(&exp),
+            ast::Statement::Return{exp} => {
+                let mut code = self.gen_expr(&exp)?;
+                code.extend(AsmFunc::epilogue());
+                
+                Ok(code)
+            },
             ast::Statement::Conditional{cond_expr, if_block, else_block} => {
                 let cond = self.gen_expr(cond_expr)?;
                 let if_block = self.gen_statement(if_block)?;
@@ -160,6 +155,31 @@ impl AsmFunc {
             ast::Exp::Var(name) => {
                 let offset = self.variable_map.get(name).ok_or(GenError::InvalidVariableUsage(name.clone()))?;
                 Ok(vec![format!("mov {}(%rbp), %rax", offset)])
+            }
+
+            ast::Exp::CondExp(cond, exp1,exp2) => {
+                let cond = self.gen_expr(cond)?;
+                let exp1 = self.gen_expr(exp1)?;
+                let exp2 = self.gen_expr(exp2)?;
+
+                let exp1_label = AsmFunc::unique_label("");
+                let exp2_label = AsmFunc::unique_label("");
+                let end_label = AsmFunc::unique_label("end");
+
+                let mut code = Vec::new();
+                code.extend(cond);
+                code.push("cmp $0, %rax".to_owned());
+                code.push(format!("jne {}", exp1_label));
+                code.push(format!("jmp {}", exp2_label));
+                code.push(format!("{}:", exp1_label));
+                code.extend(exp1);
+                code.push(format!("jmp {}", end_label));
+                code.push(format!("{}:", exp2_label));
+                code.extend(exp2);
+                code.push(format!("jmp {}", end_label));
+                code.push(format!("{}:", end_label));
+
+                Ok(code)
             }
         }
     }
@@ -435,6 +455,21 @@ impl AsmFunc {
         code.push(format!("mov %rax, {}(%rbp)", offset));
 
         Ok(code)
+    }
+
+    fn epilogue() -> Vec<String> {
+        vec![
+            "mov %rbp, %rsp".to_owned(),
+            "pop %rbp".to_owned(),
+            "ret".to_owned(),
+        ]
+    }
+
+    fn prologue() -> Vec<String> {
+        vec![
+            "push %rbp".to_owned(),
+            "mov %rsp, %rbp".to_owned(),
+        ]
     }
 
     fn unique_label(prefix: &str) -> String {
