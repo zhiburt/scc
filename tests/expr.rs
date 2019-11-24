@@ -96,7 +96,8 @@ mod compare_gcc {
         compare_expr("int a = 1; a--; return a;");
         compare_expr("int a = 1; --a; return a;");
     }
-  
+ 
+    #[test]
     fn assign_operations() {
         compare_expr("int a = 1; return a += 1;");
         compare_expr("int a = 1; a += 1; return a;");
