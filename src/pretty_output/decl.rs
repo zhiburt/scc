@@ -1,13 +1,18 @@
 use simple_c_compiler::{parser};
 use simple_c_compiler::{ast};
 
-pub fn pretty_decl(d: &ast::Declaration) -> String {
-    match d {
-        ast::Declaration::Func{name, statements} => format!(
-            "FUN {}:\n   body:\n{}",
-            name,
-            statements.iter().map(|stat| format!("      {}", pretty_stat(stat))).collect::<Vec<_>>().join("\n")
-        ),
+pub fn pretty_func(ast::FuncDecl{name, blocks}: &ast::FuncDecl) -> String {
+    format!(
+        "FUN {}:\n   body:\n{}",
+        name,
+        blocks.iter().map(|block| format!("      {}", pretty_block(block))).collect::<Vec<_>>().join("\n")
+    )
+}
+
+fn pretty_block(block: &ast::BlockItem) -> String {
+    match block {
+        ast::BlockItem::Declaration(decl) => pretty_decl(decl),
+        ast::BlockItem::Statement(statement) => pretty_stat(statement),
     }
 }
 
@@ -15,7 +20,12 @@ fn pretty_stat(st: &ast::Statement) -> String {
     match st {
         ast::Statement::Return{exp} => format!("Return<{}>", pretty_expr(exp)),
         ast::Statement::Exp{exp} => format!("Exp<{}>", pretty_expr(exp)),
-        ast::Statement::Declare{name, exp} => {
+    }
+}
+
+fn pretty_decl(st: &ast::Declaration) -> String {
+    match st {
+        ast::Declaration::Declare{name, exp} => {
             match exp {
                 Some(exp) => format!("Declare<{}, {}>", name, pretty_expr(exp)),
                 None => format!("Declare<{}>", name),
