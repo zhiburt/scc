@@ -18,6 +18,7 @@ pub enum BinOp {
     GreaterThanOrEqual,
     BitwiseLeftShift,
     BitwiseRightShift,
+    
 }
 
 #[derive(Debug)]
@@ -37,12 +38,27 @@ pub enum UnOp {
 }
 
 #[derive(Debug)]
+pub enum AssignmentOp {
+    Plus,
+    Sub,
+    Mul,
+    Div,
+    Mod,
+    BitLeftShift,
+    BitRightShift,
+    BitAnd,
+    BitOr,
+    BitXor,
+}
+
+#[derive(Debug)]
 pub enum Exp {
     Assign(String, Box<Exp>),
     Var(String),
     Const(Const),
     UnOp(UnOp, Box<Exp>),
     BinOp(BinOp, Box<Exp>, Box<Exp>),
+    AssignOp(String, AssignmentOp, Box<Exp>),
 }
 
 pub enum Statement {
