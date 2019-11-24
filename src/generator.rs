@@ -43,72 +43,73 @@ impl AsmFunc {
         }
     }
 
-    fn gen(&mut self, st: &ast::Declaration) -> Result<String> {
-        match st {
-            ast::Declaration::Func{name, statements} => {
-                let prologue = vec![
-                    "push %rbp".to_owned(),
-                    "mov %rsp, %rbp".to_owned(),
-                ];
-                let epilogue = vec![
-                    "mov %rbp, %rsp".to_owned(),
-                    "pop %rbp".to_owned(),
-                    "ret".to_owned(),
-                ];
+    fn gen(&mut self, ast::FuncDecl{name, blocks}: &ast::FuncDecl) -> Result<String> {
+        let prologue = vec![
+            "push %rbp".to_owned(),
+            "mov %rsp, %rbp".to_owned(),
+            ];
+            let epilogue = vec![
+                "mov %rbp, %rsp".to_owned(),
+                "pop %rbp".to_owned(),
+                "ret".to_owned(),
+            ];
 
-                let mut code = Vec::new();
-                code.extend(prologue);
+        let mut code = Vec::new();
+        code.extend(prologue);
 
                 
-                let return_exists = statements.iter().any(|stat| match stat {
-                    ast::Statement::Return{..} => true,
-                    _ => false,
-                });
+        let return_exists = blocks.iter().any(|stat| match stat {
+            ast::BlockItem::Statement(ast::Statement::Return{..}) => true,
+            _ => false,
+        });
 
-                for statement in statements {
-                    code.extend(self.gen_statement(statement)?);
-                }
-
-                if !return_exists {
-                    code.push("ret $0".to_owned());
-                }
-
-                code.extend(epilogue);
-
-                let mut pretty_code = code
-                    .iter()
-                    .map(|c| format!("\t{}", c))
-                    .collect::<Vec<String>>();
-                let func_name = format!("{}:", name);
-                pretty_code.insert(0, func_name);
-                Ok(pretty_code.join("\n"))
-            }
+        for block in blocks {
+            let c = match block {
+                ast::BlockItem::Declaration(decl) => self.gen_decl(decl)?,
+                ast::BlockItem::Statement(statement) => self.gen_statement(statement)?,
+            };
+            code.extend(c);
         }
+
+        if !return_exists {
+            code.push("ret $0".to_owned());
+        }
+
+        code.extend(epilogue);
+
+        let mut pretty_code = code
+            .iter()
+            .map(|c| format!("\t{}", c))
+            .collect::<Vec<String>>();
+        let func_name = format!("{}:", name);
+        pretty_code.insert(0, func_name);
+        Ok(pretty_code.join("\n"))
     }
 
     fn gen_statement(&mut self, st: &ast::Statement) -> Result<Vec<String>> {
         match st {
             ast::Statement::Return{exp} | ast::Statement::Exp{exp} => self.gen_expr(&exp),
-            ast::Statement::Declare{name, exp} => {
-                if self.variable_map.contains_key(name) {
-                    return Err(GenError::InvalidVariableUsage(name.clone()));
-                }
-
-                self.variable_map.insert(name.clone(), self.stack_index);
-                self.stack_index -= PLATFORM_WORD_SIZE;
-
-                let code = match exp {
-                    Some(exp) => {
-                        let mut code = self.gen_expr(&exp)?;
-                        code.push("push %rax".to_owned());
-                        code
-                    }
-                    _ => vec!["push $0".to_owned()]
-                };
-
-                Ok(code)
-            }
         }
+    }
+
+    fn gen_decl(&mut self, ast::Declaration::Declare{name, exp}: &ast::Declaration) -> Result<Vec<String>> {
+            if self.variable_map.contains_key(name) {
+                return Err(GenError::InvalidVariableUsage(name.clone()));
+            }
+
+            self.variable_map.insert(name.clone(), self.stack_index);
+            self.stack_index -= PLATFORM_WORD_SIZE;
+            
+            let code = match exp {
+                Some(exp) => {
+                    let mut code = self.gen_expr(&exp)?;
+                    code.push("push %rax".to_owned());
+                    code
+                }
+                _ => vec!["push $0".to_owned()]
+            };
+            
+            Ok(code)
     }
 
     fn gen_expr(&self, expr: &ast::Exp) -> Result<Vec<String>> {

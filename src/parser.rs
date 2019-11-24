@@ -289,7 +289,22 @@ pub fn parse_statement(mut tokens: Vec<Token>) -> Result<(ast::Statement, Vec<To
             let (exp, mut tokens) = parse_exp(tokens).unwrap();
             (ast::Statement::Return{exp: exp}, tokens)
         },
-        TokenType::Int => {
+        _ => {
+            let (exp, tokens) = parse_exp(tokens)?;
+            (ast::Statement::Exp{exp: exp}, tokens)
+        }
+    };
+    compare_token(tokens.remove(0), TokenType::Semicolon).unwrap();
+
+    Ok((stat, tokens))
+}
+
+/// TODO: should we take off the parte with parse_decl?
+/// currently we check is it decl if it's we parse it.
+/// New function is not created since it dublication of code some kinda
+pub fn parse_block_item(mut tokens: Vec<Token>) -> Result<(ast::BlockItem, Vec<Token>)> {
+    match tokens.get(0) {
+        Some(tok) if tok.token_type == TokenType::Int => {
             tokens.remove(0);
             let var = compare_token(tokens.remove(0), TokenType::Identifier)?;
             let exp = match tokens.get(0) {
@@ -301,38 +316,37 @@ pub fn parse_statement(mut tokens: Vec<Token>) -> Result<(ast::Statement, Vec<To
                 } ,
                 _ => None,
             };
-            (ast::Statement::Declare{name: var.val.unwrap().to_owned(), exp: exp}, tokens)
-        },
-        _ => {
-            let (exp, tokens) = parse_exp(tokens)?;
-            (ast::Statement::Exp{exp: exp}, tokens)
-        }
-    };
-    compare_token(tokens.remove(0), TokenType::Semicolon).unwrap();
+            compare_token(tokens.remove(0), TokenType::Semicolon).unwrap();
 
-    Ok((stat, tokens))
+            Ok((ast::BlockItem::Declaration(ast::Declaration::Declare{name: var.val.unwrap().to_owned(), exp: exp}), tokens))
+        },
+        _ =>  {
+            let (state, tokens) = parse_statement(tokens)?;
+            Ok((ast::BlockItem::Statement(state), tokens))
+        },
+    }
 }
 
-pub fn parse_decl(mut tokens: Vec<Token>) -> Result<(ast::Declaration, Vec<Token>)> {
+pub fn parse_func(mut tokens: Vec<Token>) -> Result<(ast::FuncDecl, Vec<Token>)> {
     compare_token(tokens.remove(0), TokenType::Int).unwrap();
     let func_name = compare_token(tokens.remove(0), TokenType::Identifier).unwrap();
     compare_token(tokens.remove(0), TokenType::OpenParenthesis).unwrap();
     compare_token(tokens.remove(0), TokenType::CloseParenthesis).unwrap();
     compare_token(tokens.remove(0), TokenType::OpenBrace).unwrap();
 
-    let mut declarations = Vec::new();
+    let mut blocks = Vec::new();
     while tokens.get(0).unwrap().token_type != TokenType::CloseBrace {
-        let (decl, toks) = parse_statement(tokens).unwrap();
-        declarations.push(decl);
+        let (block, toks) = parse_block_item(tokens).unwrap();
+        blocks.push(block);
         tokens = toks;
     } 
     tokens.remove(0);
 
-    Ok((ast::Declaration::Func{name: func_name.val.unwrap().clone(), statements: declarations}, tokens))
+    Ok((ast::FuncDecl{name: func_name.val.unwrap().clone(), blocks: blocks}, tokens))
 }
 
 pub fn parse(tokens: Vec<Token>) -> Result<ast::Program> {
-    let (decl, _) = parse_decl(tokens)?;
+    let (decl, _) = parse_func(tokens)?;
     Ok(ast::Program(decl))
 }
 

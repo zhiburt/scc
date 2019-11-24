@@ -63,13 +63,22 @@ pub enum Exp {
 
 pub enum Statement {
     Return{exp: Exp},
-    Declare{name: String, exp: Option<Exp>},
     Exp{exp: Exp},
 }
 
 pub enum Declaration {
-    Func{name: String, statements: Vec<Statement>},
+    Declare{name: String, exp: Option<Exp>},
+}
+
+pub enum BlockItem {
+    Statement(Statement),
+    Declaration(Declaration),
+}
+
+pub struct FuncDecl{
+    pub name: String,
+    pub blocks: Vec<BlockItem>
 }
 
 // Add block node which is decl
-pub struct Program(pub Declaration);
+pub struct Program(pub FuncDecl);
