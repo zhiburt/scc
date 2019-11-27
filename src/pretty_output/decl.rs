@@ -1,13 +1,18 @@
 use simple_c_compiler::{parser};
 use simple_c_compiler::{ast};
 
-pub fn pretty_decl(d: &ast::Declaration) -> String {
-    match d {
-        ast::Declaration::Func{name, statements} => format!(
-            "FUN {}:\n   body:\n{}",
-            name,
-            statements.iter().map(|stat| format!("      {}", pretty_stat(stat))).collect::<Vec<_>>().join("\n")
-        ),
+pub fn pretty_func(ast::FuncDecl{name, blocks}: &ast::FuncDecl) -> String {
+    format!(
+        "FUN {}:\n   body:\n{}",
+        name,
+        blocks.iter().map(|block| format!("      {}", pretty_block(block))).collect::<Vec<_>>().join("\n")
+    )
+}
+
+fn pretty_block(block: &ast::BlockItem) -> String {
+    match block {
+        ast::BlockItem::Declaration(decl) => pretty_decl(decl),
+        ast::BlockItem::Statement(statement) => pretty_stat(statement),
     }
 }
 
@@ -15,7 +20,21 @@ fn pretty_stat(st: &ast::Statement) -> String {
     match st {
         ast::Statement::Return{exp} => format!("Return<{}>", pretty_expr(exp)),
         ast::Statement::Exp{exp} => format!("Exp<{}>", pretty_expr(exp)),
-        ast::Statement::Declare{name, exp} => {
+        ast::Statement::Conditional{cond_expr, if_block, else_block} => {
+            let else_block = if let Some(else_block) = else_block {
+                pretty_stat(else_block)
+            } else {
+                "".to_owned()
+            };
+
+            format!("If<{}, {}, {}>", pretty_expr(cond_expr), pretty_stat(if_block), else_block )
+        }
+    }
+}
+
+fn pretty_decl(st: &ast::Declaration) -> String {
+    match st {
+        ast::Declaration::Declare{name, exp} => {
             match exp {
                 Some(exp) => format!("Declare<{}, {}>", name, pretty_expr(exp)),
                 None => format!("Declare<{}>", name),
@@ -32,6 +51,7 @@ fn pretty_expr(exp: &ast::Exp) -> String {
         ast::Exp::Assign(name, exp) => format!("Var<{}> assign Exp<{}>", name, pretty_expr(exp)),
         ast::Exp::Var(name) => format!("Var<{}>", name),
         ast::Exp::AssignOp(name, op, exp) => format!("VarOp<{}, {:?}> {}", name, op, pretty_expr(exp)),
+        ast::Exp::CondExp(cond, exp1, exp2) => format!("TernarOp<{}, {}, {}>", pretty_expr(cond), pretty_expr(exp1), pretty_expr(exp2)),
     }
 }
 

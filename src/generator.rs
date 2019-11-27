@@ -43,72 +43,99 @@ impl AsmFunc {
         }
     }
 
-    fn gen(&mut self, st: &ast::Declaration) -> Result<String> {
-        match st {
-            ast::Declaration::Func{name, statements} => {
-                let prologue = vec![
-                    "push %rbp".to_owned(),
-                    "mov %rsp, %rbp".to_owned(),
-                ];
-                let epilogue = vec![
-                    "mov %rbp, %rsp".to_owned(),
-                    "pop %rbp".to_owned(),
-                    "ret".to_owned(),
-                ];
+    fn gen(&mut self, ast::FuncDecl{name, blocks}: &ast::FuncDecl) -> Result<String> {
+        let mut code = Vec::new();
+        code.extend(AsmFunc::prologue());
 
-                let mut code = Vec::new();
-                code.extend(prologue);
+        let return_exists = blocks.iter().any(|stat| match stat {
+            ast::BlockItem::Statement(ast::Statement::Return{..}) => true,
+            _ => false,
+        });
 
-                
-                let return_exists = statements.iter().any(|stat| match stat {
-                    ast::Statement::Return{..} => true,
-                    _ => false,
-                });
-
-                for statement in statements {
-                    code.extend(self.gen_statement(statement)?);
-                }
-
-                if !return_exists {
-                    code.push("ret $0".to_owned());
-                }
-
-                code.extend(epilogue);
-
-                let mut pretty_code = code
-                    .iter()
-                    .map(|c| format!("\t{}", c))
-                    .collect::<Vec<String>>();
-                let func_name = format!("{}:", name);
-                pretty_code.insert(0, func_name);
-                Ok(pretty_code.join("\n"))
-            }
+        for block in blocks {
+            let c = match block {
+                ast::BlockItem::Declaration(decl) => self.gen_decl(decl)?,
+                ast::BlockItem::Statement(statement) => self.gen_statement(statement)?,
+            };
+            code.extend(c);
         }
+
+        if !return_exists {
+            code.push("ret $0".to_owned());
+        }
+
+        code.extend(AsmFunc::epilogue());
+
+        let mut pretty_code = code
+            .iter()
+            .map(|c| format!("\t{}", c))
+            .collect::<Vec<String>>();
+        let func_name = format!("{}:", name);
+        pretty_code.insert(0, func_name);
+        Ok(pretty_code.join("\n"))
     }
 
     fn gen_statement(&mut self, st: &ast::Statement) -> Result<Vec<String>> {
         match st {
-            ast::Statement::Return{exp} | ast::Statement::Exp{exp} => self.gen_expr(&exp),
-            ast::Statement::Declare{name, exp} => {
-                if self.variable_map.contains_key(name) {
-                    return Err(GenError::InvalidVariableUsage(name.clone()));
-                }
+            ast::Statement::Exp{exp} => self.gen_expr(&exp),
+            ast::Statement::Return{exp} => {
+                let mut code = self.gen_expr(&exp)?;
+                code.extend(AsmFunc::epilogue());
+                
+                Ok(code)
+            },
+            ast::Statement::Conditional{cond_expr, if_block, else_block} => {
+                let cond = self.gen_expr(cond_expr)?;
+                let if_block = self.gen_statement(if_block)?;
+                let else_block = else_block.as_ref().map_or(None, |block| Some(self.gen_statement(block).unwrap()));
 
-                self.variable_map.insert(name.clone(), self.stack_index);
-                self.stack_index -= PLATFORM_WORD_SIZE;
-
-                let code = match exp {
-                    Some(exp) => {
-                        let mut code = self.gen_expr(&exp)?;
-                        code.push("push %rax".to_owned());
-                        code
-                    }
-                    _ => vec!["push $0".to_owned()]
+                let if_label = AsmFunc::unique_label("");
+                let end_label = AsmFunc::unique_label("end");
+                let else_label = if else_block.is_some() {
+                    AsmFunc::unique_label("")
+                } else {
+                    end_label.clone()
                 };
+
+                let mut code = Vec::new();
+                code.extend(cond);
+                
+                code.push("cmp $0, %rax".to_owned());
+                code.push(format!("jne {}", if_label));
+                code.push(format!("jmp {}", else_label));
+                code.push(format!("{}:", if_label));
+                code.extend(if_block);
+                code.push(format!("jmp {}", end_label));
+                if let Some(else_block) = else_block {
+                    code.push(format!("{}:", else_label));
+                    code.extend(else_block);
+                    code.push(format!("jmp {}", end_label));
+                }
+                code.push(format!("{}:", end_label));
 
                 Ok(code)
             }
         }
+    }
+
+    fn gen_decl(&mut self, ast::Declaration::Declare{name, exp}: &ast::Declaration) -> Result<Vec<String>> {
+            if self.variable_map.contains_key(name) {
+                return Err(GenError::InvalidVariableUsage(name.clone()));
+            }
+
+            self.variable_map.insert(name.clone(), self.stack_index);
+            self.stack_index -= PLATFORM_WORD_SIZE;
+            
+            let code = match exp {
+                Some(exp) => {
+                    let mut code = self.gen_expr(&exp)?;
+                    code.push("push %rax".to_owned());
+                    code
+                }
+                _ => vec!["push $0".to_owned()]
+            };
+            
+            Ok(code)
     }
 
     fn gen_expr(&self, expr: &ast::Exp) -> Result<Vec<String>> {
@@ -128,6 +155,31 @@ impl AsmFunc {
             ast::Exp::Var(name) => {
                 let offset = self.variable_map.get(name).ok_or(GenError::InvalidVariableUsage(name.clone()))?;
                 Ok(vec![format!("mov {}(%rbp), %rax", offset)])
+            }
+
+            ast::Exp::CondExp(cond, exp1,exp2) => {
+                let cond = self.gen_expr(cond)?;
+                let exp1 = self.gen_expr(exp1)?;
+                let exp2 = self.gen_expr(exp2)?;
+
+                let exp1_label = AsmFunc::unique_label("");
+                let exp2_label = AsmFunc::unique_label("");
+                let end_label = AsmFunc::unique_label("end");
+
+                let mut code = Vec::new();
+                code.extend(cond);
+                code.push("cmp $0, %rax".to_owned());
+                code.push(format!("jne {}", exp1_label));
+                code.push(format!("jmp {}", exp2_label));
+                code.push(format!("{}:", exp1_label));
+                code.extend(exp1);
+                code.push(format!("jmp {}", end_label));
+                code.push(format!("{}:", exp2_label));
+                code.extend(exp2);
+                code.push(format!("jmp {}", end_label));
+                code.push(format!("{}:", end_label));
+
+                Ok(code)
             }
         }
     }
@@ -403,6 +455,21 @@ impl AsmFunc {
         code.push(format!("mov %rax, {}(%rbp)", offset));
 
         Ok(code)
+    }
+
+    fn epilogue() -> Vec<String> {
+        vec![
+            "mov %rbp, %rsp".to_owned(),
+            "pop %rbp".to_owned(),
+            "ret".to_owned(),
+        ]
+    }
+
+    fn prologue() -> Vec<String> {
+        vec![
+            "push %rbp".to_owned(),
+            "mov %rsp, %rbp".to_owned(),
+        ]
     }
 
     fn unique_label(prefix: &str) -> String {

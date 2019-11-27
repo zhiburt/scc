@@ -114,6 +114,22 @@ pub fn is_operators(t: &[Token], operators: &[TokenType]) -> bool {
     true
 }
 
+fn map_assign_op(t: &Token) -> Option<ast::AssignmentOp> {
+    match t.token_type {
+        TokenType::AssignmentPlus => Some(ast::AssignmentOp::Plus),
+        TokenType::AssignmentMul => Some(ast::AssignmentOp::Mul),
+        TokenType::AssignmentSub => Some(ast::AssignmentOp::Sub),
+        TokenType::AssignmentDiv => Some(ast::AssignmentOp::Div),
+        TokenType::AssignmentMod => Some(ast::AssignmentOp::Mod),
+        TokenType::AssignmentBitAnd => Some(ast::AssignmentOp::BitAnd),
+        TokenType::AssignmentBitOr => Some(ast::AssignmentOp::BitOr),
+        TokenType::AssignmentBitXor => Some(ast::AssignmentOp::BitXor),
+        TokenType::AssignmentBitLeftShift => Some(ast::AssignmentOp::BitLeftShift),
+        TokenType::AssignmentBitRightShift => Some(ast::AssignmentOp::BitRightShift),
+        _ => None,
+    }
+}
+
 pub fn parse_exp(mut tokens: Vec<Token>) -> Result<(ast::Exp, Vec<Token>)> {
     if tokens[0].is_type(TokenType::Identifier)
         && tokens[1].is_type(TokenType::Assignment) {
@@ -123,78 +139,35 @@ pub fn parse_exp(mut tokens: Vec<Token>) -> Result<(ast::Exp, Vec<Token>)> {
 
         Ok((ast::Exp::Assign(var.val.unwrap().to_owned(), Box::new(exp)), tokens))
     } else if tokens[0].is_type(TokenType::Identifier)
-        && tokens[1].is_type(TokenType::AssignmentPlus) {
+        && map_assign_op(&tokens[1]).is_some() {
         let var = tokens.remove(0);
-        tokens.remove(0);
-        let (exp, tokens) = parse_exp(tokens)?;
-
-        Ok((ast::Exp::AssignOp(var.val.unwrap().to_owned(), ast::AssignmentOp::Plus, Box::new(exp)), tokens))
-    } else if tokens[0].is_type(TokenType::Identifier)
-        && tokens[1].is_type(TokenType::AssignmentSub) {
-        let var = tokens.remove(0);
-        tokens.remove(0);
-        let (exp, tokens) = parse_exp(tokens)?;
-
-        Ok((ast::Exp::AssignOp(var.val.unwrap().to_owned(), ast::AssignmentOp::Sub, Box::new(exp)), tokens))
-    } else if tokens[0].is_type(TokenType::Identifier)
-        && tokens[1].is_type(TokenType::AssignmentMul) {
-        let var = tokens.remove(0);
-        tokens.remove(0);
-        let (exp, tokens) = parse_exp(tokens)?;
-
-        Ok((ast::Exp::AssignOp(var.val.unwrap().to_owned(), ast::AssignmentOp::Mul, Box::new(exp)), tokens))
-    } else if tokens[0].is_type(TokenType::Identifier)
-        && tokens[1].is_type(TokenType::AssignmentDiv) {
-        let var = tokens.remove(0);
-        tokens.remove(0);
-        let (exp, tokens) = parse_exp(tokens)?;
-
-        Ok((ast::Exp::AssignOp(var.val.unwrap().to_owned(), ast::AssignmentOp::Div, Box::new(exp)), tokens))
-    } else if tokens[0].is_type(TokenType::Identifier)
-        && tokens[1].is_type(TokenType::AssignmentMod) {
-        let var = tokens.remove(0);
-        tokens.remove(0);
-        let (exp, tokens) = parse_exp(tokens)?;
-
-        Ok((ast::Exp::AssignOp(var.val.unwrap().to_owned(), ast::AssignmentOp::Mod, Box::new(exp)), tokens))
-    } else if tokens[0].is_type(TokenType::Identifier)
-        && tokens[1].is_type(TokenType::AssignmentBitLeftShift) {
-        let var = tokens.remove(0);
-        tokens.remove(0);
-        let (exp, tokens) = parse_exp(tokens)?;
-
-        Ok((ast::Exp::AssignOp(var.val.unwrap().to_owned(), ast::AssignmentOp::BitLeftShift, Box::new(exp)), tokens))
-    } else if tokens[0].is_type(TokenType::Identifier)
-        && tokens[1].is_type(TokenType::AssignmentBitRightShift) {
-        let var = tokens.remove(0);
-        tokens.remove(0);
-        let (exp, tokens) = parse_exp(tokens)?;
-
-        Ok((ast::Exp::AssignOp(var.val.unwrap().to_owned(), ast::AssignmentOp::BitRightShift, Box::new(exp)), tokens))
-    } else if tokens[0].is_type(TokenType::Identifier)
-        && tokens[1].is_type(TokenType::AssignmentBitAnd) {
-        let var = tokens.remove(0);
-        tokens.remove(0);
-        let (exp, tokens) = parse_exp(tokens)?;
-
-        Ok((ast::Exp::AssignOp(var.val.unwrap().to_owned(), ast::AssignmentOp::BitAnd, Box::new(exp)), tokens))
-    } else if tokens[0].is_type(TokenType::Identifier)
-        && tokens[1].is_type(TokenType::AssignmentBitOr) {
-        let var = tokens.remove(0);
-        tokens.remove(0);
-        let (exp, tokens) = parse_exp(tokens)?;
-
-        Ok((ast::Exp::AssignOp(var.val.unwrap().to_owned(), ast::AssignmentOp::BitOr, Box::new(exp)), tokens))
-    } else if tokens[0].is_type(TokenType::Identifier)
-        && tokens[1].is_type(TokenType::AssignmentBitXor) {
-        let var = tokens.remove(0);
+        let op = map_assign_op(&tokens[1]);
         tokens.remove(0);
         let (exp, tokens) = parse_exp(tokens)?;
 
         Ok((ast::Exp::AssignOp(var.val.unwrap().to_owned(), ast::AssignmentOp::BitXor, Box::new(exp)), tokens))
     } else {
-        parse_expr(parse_or_expr, &[TokenType::Or], tokens)
+        parse_conditional_expr(tokens)
     }
+}
+
+pub fn parse_conditional_expr(tokens: Vec<Token>) -> Result<(ast::Exp, Vec<Token>)> {
+    let (mut exp, mut tokens) = parse_or_expr(tokens)?;
+    match tokens.get(0) {
+        Some(tok) if tok.token_type == TokenType::QuestionSign => {
+            tokens.remove(0);
+            
+            let (left_exp, mut toks) = parse_exp(tokens)?;
+            compare_token(toks.remove(0), TokenType::Colon)?;
+            let (right_exp, toks) = parse_conditional_expr(toks)?;
+            
+            tokens = toks;
+            exp = ast::Exp::CondExp(Box::new(exp), Box::new(left_exp), Box::new(right_exp))
+        }
+        _ => (),
+    };
+
+    Ok((exp, tokens))
 }
 
 pub fn parse_or_expr(tokens: Vec<Token>) -> Result<(ast::Exp, Vec<Token>)> {
@@ -283,13 +256,53 @@ pub fn parse_inc_dec_expr(mut tokens: Vec<Token>) -> Result<(ast::Exp, Vec<Token
 }
 
 pub fn parse_statement(mut tokens: Vec<Token>) -> Result<(ast::Statement, Vec<Token>)> {
-    let (stat, mut tokens) = match tokens.get(0).unwrap().token_type {
+    let (stat, tokens) = match tokens.get(0).unwrap().token_type {
         TokenType::Return => {
             tokens.remove(0);
+
             let (exp, mut tokens) = parse_exp(tokens).unwrap();
+            compare_token(tokens.remove(0), TokenType::Semicolon).unwrap();
+            
             (ast::Statement::Return{exp: exp}, tokens)
         },
-        TokenType::Int => {
+        TokenType::If => {
+            tokens.remove(0);
+            compare_token(tokens.remove(0), TokenType::OpenParenthesis).unwrap();
+            let (exp, mut tokens) = parse_exp(tokens)?;
+            compare_token(tokens.remove(0), TokenType::CloseParenthesis).unwrap();
+            
+            let (if_block, mut tokens) = parse_statement(tokens)?;            
+            
+            let else_block= match tokens.get(0) {
+                Some(tok) if tok.token_type == TokenType::Else => {
+                    tokens.remove(0);
+                    
+                    let (else_block, toks) = parse_statement(tokens)?;            
+                    tokens = toks;
+                    Some(Box::new(else_block))
+                },
+                _ => None,
+            };
+            
+            (ast::Statement::Conditional{cond_expr: exp, if_block: Box::new(if_block), else_block}, tokens)
+        }
+        _ => {
+            let (exp, mut tokens) = parse_exp(tokens)?;
+            compare_token(tokens.remove(0), TokenType::Semicolon).unwrap();
+
+            (ast::Statement::Exp{exp: exp}, tokens)
+        }
+    };
+
+    Ok((stat, tokens))
+}
+
+/// TODO: should we take off the parte with parse_decl?
+/// currently we check is it decl if it's we parse it.
+/// New function is not created since it dublication of code some kinda
+pub fn parse_block_item(mut tokens: Vec<Token>) -> Result<(ast::BlockItem, Vec<Token>)> {
+    match tokens.get(0) {
+        Some(tok) if tok.token_type == TokenType::Int => {
             tokens.remove(0);
             let var = compare_token(tokens.remove(0), TokenType::Identifier)?;
             let exp = match tokens.get(0) {
@@ -301,38 +314,37 @@ pub fn parse_statement(mut tokens: Vec<Token>) -> Result<(ast::Statement, Vec<To
                 } ,
                 _ => None,
             };
-            (ast::Statement::Declare{name: var.val.unwrap().to_owned(), exp: exp}, tokens)
-        },
-        _ => {
-            let (exp, tokens) = parse_exp(tokens)?;
-            (ast::Statement::Exp{exp: exp}, tokens)
-        }
-    };
-    compare_token(tokens.remove(0), TokenType::Semicolon).unwrap();
+            compare_token(tokens.remove(0), TokenType::Semicolon).unwrap();
 
-    Ok((stat, tokens))
+            Ok((ast::BlockItem::Declaration(ast::Declaration::Declare{name: var.val.unwrap().to_owned(), exp: exp}), tokens))
+        },
+        _ =>  {
+            let (state, tokens) = parse_statement(tokens)?;
+            Ok((ast::BlockItem::Statement(state), tokens))
+        },
+    }
 }
 
-pub fn parse_decl(mut tokens: Vec<Token>) -> Result<(ast::Declaration, Vec<Token>)> {
+pub fn parse_func(mut tokens: Vec<Token>) -> Result<(ast::FuncDecl, Vec<Token>)> {
     compare_token(tokens.remove(0), TokenType::Int).unwrap();
     let func_name = compare_token(tokens.remove(0), TokenType::Identifier).unwrap();
     compare_token(tokens.remove(0), TokenType::OpenParenthesis).unwrap();
     compare_token(tokens.remove(0), TokenType::CloseParenthesis).unwrap();
     compare_token(tokens.remove(0), TokenType::OpenBrace).unwrap();
 
-    let mut declarations = Vec::new();
+    let mut blocks = Vec::new();
     while tokens.get(0).unwrap().token_type != TokenType::CloseBrace {
-        let (decl, toks) = parse_statement(tokens).unwrap();
-        declarations.push(decl);
+        let (block, toks) = parse_block_item(tokens).unwrap();
+        blocks.push(block);
         tokens = toks;
     } 
     tokens.remove(0);
 
-    Ok((ast::Declaration::Func{name: func_name.val.unwrap().clone(), statements: declarations}, tokens))
+    Ok((ast::FuncDecl{name: func_name.val.unwrap().clone(), blocks: blocks}, tokens))
 }
 
 pub fn parse(tokens: Vec<Token>) -> Result<ast::Program> {
-    let (decl, _) = parse_decl(tokens)?;
+    let (decl, _) = parse_func(tokens)?;
     Ok(ast::Program(decl))
 }
 

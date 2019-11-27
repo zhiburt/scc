@@ -59,17 +59,28 @@ pub enum Exp {
     UnOp(UnOp, Box<Exp>),
     BinOp(BinOp, Box<Exp>, Box<Exp>),
     AssignOp(String, AssignmentOp, Box<Exp>),
+    CondExp(Box<Exp>, Box<Exp>, Box<Exp>),
 }
 
 pub enum Statement {
     Return{exp: Exp},
-    Declare{name: String, exp: Option<Exp>},
     Exp{exp: Exp},
+    Conditional{cond_expr: Exp, if_block: Box<Statement>, else_block: Option<Box<Statement>>},
 }
 
 pub enum Declaration {
-    Func{name: String, statements: Vec<Statement>},
+    Declare{name: String, exp: Option<Exp>},
+}
+
+pub enum BlockItem {
+    Statement(Statement),
+    Declaration(Declaration),
+}
+
+pub struct FuncDecl{
+    pub name: String,
+    pub blocks: Vec<BlockItem>
 }
 
 // Add block node which is decl
-pub struct Program(pub Declaration);
+pub struct Program(pub FuncDecl);

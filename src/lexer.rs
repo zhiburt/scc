@@ -45,6 +45,10 @@ pub enum TokenType {
     AssignmentBitAnd,
     AssignmentBitOr,
     AssignmentBitXor,
+    If,
+    Else,
+    Colon,
+    QuestionSign,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -112,6 +116,8 @@ impl Lexer {
             definition: vec![
                 TokenDefinition::new(TokenType::Int, r"^int"),
                 TokenDefinition::new(TokenType::Return, r"^\breturn\b"),
+                TokenDefinition::new(TokenType::If, r"^\bif\b"),
+                TokenDefinition::new(TokenType::Else, r"^\belse\b"),
                 TokenDefinition::new(TokenType::Identifier, r"^[a-zA-Z]\w*"),
                 TokenDefinition::new(TokenType::IntegerLiteral, r"^\d+"),
                 TokenDefinition::new(TokenType::OpenParenthesis, r"^\("),
@@ -152,6 +158,8 @@ impl Lexer {
                 TokenDefinition::new(TokenType::GreaterThanOrEqual, r"^>="),
                 TokenDefinition::new(TokenType::GreaterThan, r"^>"),
                 TokenDefinition::new(TokenType::Assignment, r"^="),
+                TokenDefinition::new(TokenType::Colon, r"^:"),
+                TokenDefinition::new(TokenType::QuestionSign, r"^\?"),
             ],
         }
     }
