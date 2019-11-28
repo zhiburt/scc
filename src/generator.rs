@@ -1,5 +1,5 @@
 use crate::{ast};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 pub fn gen(p: ast::Program, start_point: &str) -> Result<String> {
     let header = format!("\t.globl {}", start_point);
@@ -29,13 +29,15 @@ impl std::error::Error for GenError {
 
 const PLATFORM_WORD_SIZE: i64 = 8;
 
+#[derive(Clone)]
 struct AsmScope {
     variable_map: HashMap<String, i64>,
+    current_scope: HashSet<String>,
     stack_index: i64,
 }
 
 fn gen_func(ast::FuncDecl{name, blocks}: &ast::FuncDecl) -> Result<String> {
-    let mut scope = AsmScope{variable_map: HashMap::new(), stack_index: -PLATFORM_WORD_SIZE};
+    let scope = AsmScope{variable_map: HashMap::new(), stack_index: -PLATFORM_WORD_SIZE, current_scope: HashSet::new()};
 
     let mut code = Vec::new();
     code.extend(prologue());
@@ -45,17 +47,8 @@ fn gen_func(ast::FuncDecl{name, blocks}: &ast::FuncDecl) -> Result<String> {
         _ => false,
     });
 
-    for block in blocks {
-        let c = match block {
-            ast::BlockItem::Declaration(decl) => {
-                let (code, scp) = gen_decl(decl, scope)?;
-                scope = scp;
-                code
-            },
-            ast::BlockItem::Statement(statement) => gen_statement(statement, &scope)?,
-        };
-        code.extend(c);
-    }
+    let c = gen_block(&blocks, &scope)?;
+    code.extend(c);
 
     if !return_exists {
         code.push("ret $0".to_owned());
@@ -113,19 +106,49 @@ fn gen_statement(st: &ast::Statement, scope: &AsmScope) -> Result<Vec<String>> {
             Ok(code)
         }
         ast::Statement::Compound{list} => {
-            unimplemented!()
+            if list.is_none() {
+                return Ok(Vec::new());
+            }
+
+            gen_block(list.as_ref().unwrap(), scope)
         }
     }
 }
 
+fn gen_block(items: &[ast::BlockItem], scope: &AsmScope) -> Result<Vec<String>> {
+    let mut scope = scope.clone();
+    scope.current_scope = HashSet::new();
+
+    let mut code = Vec::new();
+    for item in items.iter() {
+        let c = match item {
+            ast::BlockItem::Declaration(decl) => {
+                let (c, scp) = gen_decl(decl, scope)?;
+                scope = scp;
+                c
+            }
+            ast::BlockItem::Statement(stat) => {
+                gen_statement(stat, &scope)?
+            }
+        };
+        code.extend(c);
+    }
+
+    let bytes_to_deallocate = scope.current_scope.len() as i64 * PLATFORM_WORD_SIZE;
+    code.push(format!("add ${}, %rsp", bytes_to_deallocate));
+
+    Ok(code)
+}
+
 fn gen_decl(ast::Declaration::Declare{name, exp}: &ast::Declaration, mut scope: AsmScope) -> Result<(Vec<String>, AsmScope)> {
-        if scope.variable_map.contains_key(name) {
+        if scope.current_scope.contains(name) {
             return Err(GenError::InvalidVariableUsage(name.clone()));
         }
 
         scope.variable_map.insert(name.clone(), scope.stack_index);
         scope.stack_index -= PLATFORM_WORD_SIZE;
-        
+        scope.current_scope.insert(name.clone());
+
         let code = match exp {
             Some(exp) => {
                 let mut code = gen_expr(&exp, &scope)?;
