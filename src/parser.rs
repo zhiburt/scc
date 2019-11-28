@@ -141,11 +141,11 @@ pub fn parse_exp(mut tokens: Vec<Token>) -> Result<(ast::Exp, Vec<Token>)> {
     } else if tokens[0].is_type(TokenType::Identifier)
         && map_assign_op(&tokens[1]).is_some() {
         let var = tokens.remove(0);
-        let op = map_assign_op(&tokens[1]);
+        let op = map_assign_op(&tokens[1]).unwrap();
         tokens.remove(0);
         let (exp, tokens) = parse_exp(tokens)?;
 
-        Ok((ast::Exp::AssignOp(var.val.unwrap().to_owned(), ast::AssignmentOp::BitXor, Box::new(exp)), tokens))
+        Ok((ast::Exp::AssignOp(var.val.unwrap().to_owned(), op, Box::new(exp)), tokens))
     } else {
         parse_conditional_expr(tokens)
     }
