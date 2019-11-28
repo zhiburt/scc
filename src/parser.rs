@@ -297,7 +297,7 @@ pub fn parse_statement(mut tokens: Vec<Token>) -> Result<(ast::Statement, Vec<To
             }
             tokens.remove(0);
 
-            let list = if list.is_empty() {
+            let list = if !list.is_empty() {
                 Some(list)
             } else {
                 None
@@ -363,7 +363,11 @@ pub fn parse_func(mut tokens: Vec<Token>) -> Result<(ast::FuncDecl, Vec<Token>)>
 }
 
 pub fn parse(tokens: Vec<Token>) -> Result<ast::Program> {
-    let (decl, _) = parse_func(tokens)?;
+    let (decl, tokens) = parse_func(tokens)?;
+    if !tokens.is_empty() {
+        return Err(CompilerError::ParsingError);
+    }
+    
     Ok(ast::Program(decl))
 }
 
