@@ -66,6 +66,7 @@ pub enum Statement {
     Return{exp: Exp},
     Exp{exp: Exp},
     Conditional{cond_expr: Exp, if_block: Box<Statement>, else_block: Option<Box<Statement>>},
+    Compound{list: Option<Vec<BlockItem>>},
 }
 
 pub enum Declaration {
