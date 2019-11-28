@@ -29,6 +29,17 @@ fn pretty_stat(st: &ast::Statement) -> String {
 
             format!("If<{}, {}, {}>", pretty_expr(cond_expr), pretty_stat(if_block), else_block )
         }
+        ast::Statement::Compound{list} => {
+            match list {
+                Some(list) => {
+                    format!("Compound<{}>", list.iter().map(|state_or_def| match state_or_def {
+                        ast::BlockItem::Declaration(decl) => pretty_decl(decl),
+                        ast::BlockItem::Statement(stat) => pretty_stat(stat),
+                    }).collect::<Vec<_>>().join(" "))
+                }
+                None => format!("Compound<>"),
+            }
+        }
     }
 }
 
