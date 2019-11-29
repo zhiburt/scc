@@ -24,11 +24,32 @@ mod compare_gcc {
                 if (a > 0) return 10;
             ");
 
-            
             compare_expr(r"
                 int a = 10;
-                else a = 1;
+                if (a > 0) { a = 20; }
+                return 20;
+            ");
+
+            compare_expr(r"
+                int a = -1;
+                if (a > 0) {
+                    a = 20;
+                } else if (a < 0) {
+                    a = -10;
+                } else {
+                    a = 0;
+                }
+
                 return a;
+            ");
+
+            compare_expr(r"
+                if (1) {
+                    return 201;
+                } else if (0) {
+                    return 10;
+                } else {
+                }
             ");
         }
     }
