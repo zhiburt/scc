@@ -34,10 +34,17 @@ struct AsmScope {
     variable_map: HashMap<String, i64>,
     current_scope: HashSet<String>,
     stack_index: i64,
+    end_func_label: String,
 }
 
 fn gen_func(ast::FuncDecl{name, blocks}: &ast::FuncDecl) -> Result<String> {
-    let scope = AsmScope{variable_map: HashMap::new(), stack_index: -PLATFORM_WORD_SIZE, current_scope: HashSet::new()};
+    let scope = AsmScope{
+        variable_map: HashMap::new(),
+        stack_index: -PLATFORM_WORD_SIZE,
+        current_scope: HashSet::new(),
+        end_func_label: unique_label("_end_func_")
+    };
+
 
     let mut code = Vec::new();
     code.extend(prologue());
@@ -54,6 +61,7 @@ fn gen_func(ast::FuncDecl{name, blocks}: &ast::FuncDecl) -> Result<String> {
         code.push("ret $0".to_owned());
     }
 
+    code.push(format!("{}:", scope.end_func_label));
     code.extend(epilogue());
 
     let mut pretty_code = code
@@ -70,8 +78,8 @@ fn gen_statement(st: &ast::Statement, scope: &AsmScope) -> Result<Vec<String>> {
         ast::Statement::Exp{exp} => gen_expr(&exp, scope),
         ast::Statement::Return{exp} => {
             let mut code = gen_expr(&exp, scope)?;
-            code.extend(epilogue());
-            
+            code.push(format!("jmp {}", scope.end_func_label));
+
             Ok(code)
         },
         ast::Statement::Conditional{cond_expr, if_block, else_block} => {
