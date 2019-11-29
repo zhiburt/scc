@@ -286,6 +286,25 @@ pub fn parse_statement(mut tokens: Vec<Token>) -> Result<(ast::Statement, Vec<To
             
             (ast::Statement::Conditional{cond_expr: exp, if_block: Box::new(if_block), else_block}, tokens)
         }
+        TokenType::OpenBrace => {
+            tokens.remove(0);
+
+            let mut list = Vec::new();
+            while tokens[0].token_type != TokenType::CloseBrace {
+                let (exp, toks) = parse_block_item(tokens)?;
+                tokens = toks;
+                list.push(exp);
+            }
+            tokens.remove(0);
+
+            let list = if !list.is_empty() {
+                Some(list)
+            } else {
+                None
+            };
+
+            (ast::Statement::Compound{list: list}, tokens)
+        }
         _ => {
             let (exp, mut tokens) = parse_exp(tokens)?;
             compare_token(tokens.remove(0), TokenType::Semicolon).unwrap();
@@ -344,7 +363,11 @@ pub fn parse_func(mut tokens: Vec<Token>) -> Result<(ast::FuncDecl, Vec<Token>)>
 }
 
 pub fn parse(tokens: Vec<Token>) -> Result<ast::Program> {
-    let (decl, _) = parse_func(tokens)?;
+    let (decl, tokens) = parse_func(tokens)?;
+    if !tokens.is_empty() {
+        return Err(CompilerError::ParsingError);
+    }
+    
     Ok(ast::Program(decl))
 }
 
