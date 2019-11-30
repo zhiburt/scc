@@ -19,7 +19,7 @@ fn pretty_block(block: &ast::BlockItem) -> String {
 fn pretty_stat(st: &ast::Statement) -> String {
     match st {
         ast::Statement::Return{exp} => format!("Return<{}>", pretty_expr(exp)),
-        ast::Statement::Exp{exp} => format!("Exp<{}>", pretty_expr(exp)),
+        ast::Statement::Exp{exp} => format!("Exp<{}>", pretty_expr(exp.as_ref().unwrap())),
         ast::Statement::Conditional{cond_expr, if_block, else_block} => {
             let else_block = if let Some(else_block) = else_block {
                 pretty_stat(else_block)
@@ -40,6 +40,10 @@ fn pretty_stat(st: &ast::Statement) -> String {
                 None => format!("Compound<>"),
             }
         }
+        ast::Statement::While{exp, statement} => {
+            format!("While<Exp<{}>, Statement<{}>>", pretty_expr(exp), pretty_stat(statement))
+        }
+        _ => unimplemented!(),
     }
 }
 

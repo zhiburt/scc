@@ -75,7 +75,7 @@ fn gen_func(ast::FuncDecl{name, blocks}: &ast::FuncDecl) -> Result<String> {
 
 fn gen_statement(st: &ast::Statement, scope: &AsmScope) -> Result<Vec<String>> {
     match st {
-        ast::Statement::Exp{exp} => gen_expr(&exp, scope),
+        ast::Statement::Exp{exp} => gen_expr(exp.as_ref().unwrap(), scope),
         ast::Statement::Return{exp} => {
             let mut code = gen_expr(&exp, scope)?;
             code.push(format!("jmp {}", scope.end_func_label));
@@ -120,6 +120,43 @@ fn gen_statement(st: &ast::Statement, scope: &AsmScope) -> Result<Vec<String>> {
 
             gen_block(list.as_ref().unwrap(), scope)
         }
+        ast::Statement::Do{statement, exp} => {
+            let exp_code = gen_expr(exp, scope)?;
+            let statement_code = gen_statement(statement, scope)?;
+
+            let start_loop_label = unique_label("loop_");
+            let end_loop_label = unique_label("loop_");
+
+            let mut code = Vec::new();
+            code.push(format!("{}:", start_loop_label));
+            code.extend(statement_code);
+            code.push("cmp $0, %rax".to_owned());
+            code.push(format!("je {}", end_loop_label));
+            code.push(format!("jmp {}", start_loop_label));
+            code.extend(exp_code);
+            code.push(format!("{}:", end_loop_label));
+            
+            Ok(code)
+        },
+        ast::Statement::While{exp, statement} => {
+            let exp_code = gen_expr(exp, scope)?;
+            let statement_code = gen_statement(statement, scope)?;
+
+            let start_loop_label = unique_label("loop_");
+            let end_loop_label = unique_label("loop_");
+
+            let mut code = Vec::new();
+            code.push(format!("{}:", start_loop_label));
+            code.extend(exp_code);
+            code.push("cmp $0, %rax".to_owned());
+            code.push(format!("je {}", end_loop_label));
+            code.extend(statement_code);
+            code.push(format!("jmp {}", start_loop_label));
+            code.push(format!("{}:", end_loop_label));
+            
+            Ok(code)
+        }
+        _ => unimplemented!(),
     }
 }
 
