@@ -46,6 +46,12 @@ fn pretty_stat(st: &ast::Statement) -> String {
         ast::Statement::ForDecl{decl, exp2, exp3, statement} => {
             format!("For<Decl<{}>, Exp<{}>, Exp<{}>, Statement<{}>>", pretty_decl(decl), pretty_expr(exp2), pretty_expr(exp3.as_ref().unwrap()), pretty_stat(statement))
         }
+        ast::Statement::Break => {
+            "Break".to_owned()
+        }
+        ast::Statement::Continue => {
+            "Continue".to_owned()
+        }
         _ => unimplemented!(),
     }
 }
