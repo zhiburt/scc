@@ -123,7 +123,7 @@ impl Lexer {
                 TokenDefinition::new(TokenType::Return, r"^\breturn\b"),
                 TokenDefinition::new(TokenType::If, r"^\bif\b"),
                 TokenDefinition::new(TokenType::Else, r"^\belse\b"),
-                TokenDefinition::new(TokenType::For, r"^\for\b"),
+                TokenDefinition::new(TokenType::For, r"^\bfor\b"),
                 TokenDefinition::new(TokenType::Do, r"^\bdo\b"),
                 TokenDefinition::new(TokenType::While, r"^\bwhile\b"),
                 TokenDefinition::new(TokenType::Continue, r"^\bcontinue\b"),
