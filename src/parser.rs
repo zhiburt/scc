@@ -141,7 +141,7 @@ pub fn parse_exp(mut tokens: Vec<Token>) -> Result<(ast::Exp, Vec<Token>)> {
     } else if tokens[0].is_type(TokenType::Identifier)
         && map_assign_op(&tokens[1]).is_some() {
         let var = tokens.remove(0);
-        let op = map_assign_op(&tokens[1]).unwrap();
+        let op = map_assign_op(&tokens[0]).unwrap();
         tokens.remove(0);
         let (exp, tokens) = parse_exp(tokens)?;
 
