@@ -43,6 +43,9 @@ fn pretty_stat(st: &ast::Statement) -> String {
         ast::Statement::While{exp, statement} => {
             format!("While<Exp<{}>, Statement<{}>>", pretty_expr(exp), pretty_stat(statement))
         }
+        ast::Statement::ForDecl{decl, exp2, exp3, statement} => {
+            format!("For<Decl<{}>, Exp<{}>, Exp<{}>, Statement<{}>>", pretty_decl(decl), pretty_expr(exp2), pretty_expr(exp3.as_ref().unwrap()), pretty_stat(statement))
+        }
         _ => unimplemented!(),
     }
 }

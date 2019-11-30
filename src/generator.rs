@@ -132,6 +132,41 @@ fn gen_statement(st: &ast::Statement, scope: &mut AsmScope) -> Result<Vec<String
 
             gen_block(list.as_ref().unwrap(), scope)
         }
+        ast::Statement::ForDecl{decl, exp2, exp3, statement} => {
+            let start_loop_label = unique_label("loop_");
+            let end_loop_label = unique_label("loop_");
+            let continue_loop_label = unique_label("loop_");
+
+            let mut header_scope = scope.clone();
+            header_scope.current_scope = HashSet::new();
+
+            let (decl_code, scope) = gen_decl(decl, header_scope)?;
+            let exp_code = gen_expr(exp2, &scope)?;
+            let exp3_code = gen_expr(exp3.as_ref().unwrap(), &scope)?;
+
+            let mut body_scope = scope.clone();
+            body_scope.current_scope = HashSet::new();
+            body_scope.loop_context = Some(LoopContext{
+                begin_label: continue_loop_label.clone(),
+                end_label: end_loop_label.clone(),
+            });
+
+            let statement_code = gen_statement(statement, &mut body_scope)?;
+            
+            let mut code = Vec::new();
+            code.push(format!("{}:", start_loop_label));
+            code.extend(decl_code);
+            code.extend(exp_code);
+            code.push("cmp $0, %rax".to_owned());
+            code.push(format!("je {}", end_loop_label));
+            code.extend(statement_code);
+            code.push(format!("{}:", continue_loop_label));
+            code.extend(exp3_code);
+            code.push(format!("jmp {}", start_loop_label));
+            code.push(format!("{}:", end_loop_label));
+            
+            Ok(code)
+        }
         ast::Statement::Do{statement, exp} => {
             let exp_code = gen_expr(exp, scope)?;
             let statement_code = gen_statement(statement, scope)?;

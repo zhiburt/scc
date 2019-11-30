@@ -265,6 +265,20 @@ pub fn parse_statement(mut tokens: Vec<Token>) -> Result<(ast::Statement, Vec<To
             
             (ast::Statement::Return{exp: exp}, tokens)
         },
+        TokenType::For => {
+
+            tokens.remove(0);
+
+            compare_token(tokens.remove(0), TokenType::OpenParenthesis).unwrap();
+            let (decl, toks) = parse_decl(tokens)?;
+            let (controll_exp, mut toks) = parse_exp(toks)?;
+            compare_token(toks.remove(0), TokenType::Semicolon).unwrap();
+            let (exp, mut toks) = parse_exp(toks)?;
+            compare_token(toks.remove(0), TokenType::CloseParenthesis).unwrap();
+            let (statement, toks) = parse_statement(toks)?;
+
+            (ast::Statement::ForDecl{decl: decl, exp2: controll_exp, exp3: Some(exp), statement: Box::new(statement)}, toks)
+        }
         TokenType::While => {
             tokens.remove(0);
 
