@@ -281,6 +281,18 @@ pub fn parse_statement(mut tokens: Vec<Token>) -> Result<(ast::Statement, Vec<To
 
             (ast::Statement::Do{statement: Box::new(statement), exp: exp}, toks)
         }
+        TokenType::Break => {
+            tokens.remove(0);
+            compare_token(tokens.remove(0), TokenType::Semicolon)?;
+
+            (ast::Statement::Break, tokens)
+        }
+        TokenType::Continue => {
+            tokens.remove(0);
+            compare_token(tokens.remove(0), TokenType::Semicolon)?;
+
+            (ast::Statement::Continue, tokens)
+        }
         TokenType::If => {
             tokens.remove(0);
             compare_token(tokens.remove(0), TokenType::OpenParenthesis).unwrap();

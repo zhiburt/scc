@@ -11,12 +11,16 @@ pub type Result<T> = std::result::Result<T, GenError>;
 #[derive(Debug)]
 pub enum GenError {
     InvalidVariableUsage(String),
+    BreakWrongUsage,
+    ContinueWrongUsage,
 }
 
 impl std::fmt::Display for GenError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             GenError::InvalidVariableUsage(var) => write!(f, "gen error {}", var),
+            GenError::BreakWrongUsage => write!(f, "gen error break used not in loop scope"),
+            GenError::ContinueWrongUsage => write!(f, "gen error continue used not in loop scope"),
         }
     }
 }
@@ -35,6 +39,13 @@ struct AsmScope {
     current_scope: HashSet<String>,
     stack_index: i64,
     end_func_label: String,
+    loop_context: Option<LoopContext>,
+}
+
+#[derive(Clone)]
+struct LoopContext {
+    begin_label: String,
+    end_label: String,
 }
 
 fn gen_func(ast::FuncDecl{name, blocks}: &ast::FuncDecl) -> Result<String> {
@@ -42,7 +53,8 @@ fn gen_func(ast::FuncDecl{name, blocks}: &ast::FuncDecl) -> Result<String> {
         variable_map: HashMap::new(),
         stack_index: -PLATFORM_WORD_SIZE,
         current_scope: HashSet::new(),
-        end_func_label: unique_label("_end_func_")
+        end_func_label: unique_label("_end_func_"),
+        loop_context: None,
     };
 
 
@@ -73,7 +85,7 @@ fn gen_func(ast::FuncDecl{name, blocks}: &ast::FuncDecl) -> Result<String> {
     Ok(pretty_code.join("\n"))
 }
 
-fn gen_statement(st: &ast::Statement, scope: &AsmScope) -> Result<Vec<String>> {
+fn gen_statement(st: &ast::Statement, scope: &mut AsmScope) -> Result<Vec<String>> {
     match st {
         ast::Statement::Exp{exp} => gen_expr(exp.as_ref().unwrap(), scope),
         ast::Statement::Return{exp} => {
@@ -136,6 +148,11 @@ fn gen_statement(st: &ast::Statement, scope: &AsmScope) -> Result<Vec<String>> {
             code.extend(exp_code);
             code.push(format!("{}:", end_loop_label));
             
+            scope.loop_context = Some(LoopContext{
+                begin_label: start_loop_label,
+                end_label: end_loop_label,
+            });
+
             Ok(code)
         },
         ast::Statement::While{exp, statement} => {
@@ -154,7 +171,28 @@ fn gen_statement(st: &ast::Statement, scope: &AsmScope) -> Result<Vec<String>> {
             code.push(format!("jmp {}", start_loop_label));
             code.push(format!("{}:", end_loop_label));
             
+            scope.loop_context = Some(LoopContext{
+                begin_label: start_loop_label,
+                end_label: end_loop_label,
+            });
+
             Ok(code)
+        }
+        ast::Statement::Break => {
+            match &scope.loop_context {
+                Some(loop_ctx) => {
+                    Ok(vec![format!("jmp {}", loop_ctx.end_label)])
+                }
+                None => Err(GenError::BreakWrongUsage)
+            }
+        }
+        ast::Statement::Continue => {
+            match &scope.loop_context {
+                Some(loop_ctx) => {
+                    Ok(vec![format!("jmp {}", loop_ctx.begin_label)])
+                }
+                None => Err(GenError::ContinueWrongUsage)
+            }
         }
         _ => unimplemented!(),
     }
@@ -173,7 +211,7 @@ fn gen_block(items: &[ast::BlockItem], scope: &AsmScope) -> Result<Vec<String>> 
                 c
             }
             ast::BlockItem::Statement(stat) => {
-                gen_statement(stat, &scope)?
+                gen_statement(stat, &mut scope)?
             }
         };
         code.extend(c);
