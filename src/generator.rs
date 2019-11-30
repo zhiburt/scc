@@ -185,10 +185,10 @@ fn gen_statement(st: &ast::Statement, scope: &AsmScope) -> Result<Vec<String>> {
             let mut code = Vec::new();
             code.push(format!("{}:", start_loop_label));
             code.extend(statement_code);
+            code.extend(exp_code);
             code.push("cmp $0, %rax".to_owned());
             code.push(format!("je {}", end_loop_label));
             code.push(format!("jmp {}", start_loop_label));
-            code.extend(exp_code);
             code.push(format!("{}:", end_loop_label));
 
             Ok(code)

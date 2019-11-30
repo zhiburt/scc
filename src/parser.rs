@@ -266,7 +266,6 @@ pub fn parse_statement(mut tokens: Vec<Token>) -> Result<(ast::Statement, Vec<To
             (ast::Statement::Return{exp: exp}, tokens)
         },
         TokenType::For => {
-
             tokens.remove(0);
 
             compare_token(tokens.remove(0), TokenType::OpenParenthesis).unwrap();
@@ -282,7 +281,9 @@ pub fn parse_statement(mut tokens: Vec<Token>) -> Result<(ast::Statement, Vec<To
         TokenType::While => {
             tokens.remove(0);
 
-            let (exp, toks) = parse_exp(tokens)?;
+            compare_token(tokens.remove(0), TokenType::OpenParenthesis).unwrap();
+            let (exp, mut toks) = parse_exp(tokens)?;
+            compare_token(toks.remove(0), TokenType::CloseParenthesis).unwrap();
             let (statement, toks) = parse_statement(toks)?;
 
             (ast::Statement::While{exp: exp, statement: Box::new(statement)}, toks)
@@ -290,8 +291,14 @@ pub fn parse_statement(mut tokens: Vec<Token>) -> Result<(ast::Statement, Vec<To
         TokenType::Do => {
             tokens.remove(0);
 
-            let (statement, toks) = parse_statement(tokens)?;
-            let (exp, toks) = parse_exp(toks)?;
+            compare_token(tokens.remove(0), TokenType::OpenBrace).unwrap();
+            let (statement, mut toks) = parse_statement(tokens)?;
+            compare_token(toks.remove(0), TokenType::CloseBrace).unwrap();
+            compare_token(toks.remove(0), TokenType::While).unwrap();
+            compare_token(toks.remove(0), TokenType::OpenParenthesis).unwrap();
+            let (exp, mut toks) = parse_exp(toks)?;
+            compare_token(toks.remove(0), TokenType::CloseParenthesis).unwrap();
+            compare_token(toks.remove(0), TokenType::Semicolon).unwrap();
 
             (ast::Statement::Do{statement: Box::new(statement), exp: exp}, toks)
         }
