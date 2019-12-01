@@ -255,6 +255,16 @@ pub fn parse_inc_dec_expr(mut tokens: Vec<Token>) -> Result<(ast::Exp, Vec<Token
     }
 }
 
+pub fn parse_opt_exp(tokens: Vec<Token>) -> Result<(Option<ast::Exp>, Vec<Token>)> {
+    match tokens[0].token_type {
+        TokenType::Semicolon | TokenType::CloseParenthesis => Ok((None, tokens)),
+        _ => {
+            let (exp, tokens) = parse_exp(tokens)?;
+            Ok((Some(exp), tokens))
+        }
+    }
+}
+
 pub fn parse_statement(mut tokens: Vec<Token>) -> Result<(ast::Statement, Vec<Token>)> {
     let (stat, tokens) = match tokens.get(0).unwrap().token_type {
         TokenType::Return => {
@@ -355,11 +365,11 @@ pub fn parse_statement(mut tokens: Vec<Token>) -> Result<(ast::Statement, Vec<To
             (ast::Statement::Compound{list: list}, tokens)
         }
         _ => {
-            let (exp, mut tokens) = parse_exp(tokens)?;
+            let (exp, mut tokens) = parse_opt_exp(tokens)?;
             compare_token(tokens.remove(0), TokenType::Semicolon).unwrap();
 
-            (ast::Statement::Exp{exp: Some(exp)}, tokens)
-        }
+            (ast::Statement::Exp{exp: exp}, tokens)
+        },
     };
 
     Ok((stat, tokens))

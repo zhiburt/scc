@@ -87,7 +87,7 @@ fn gen_func(ast::FuncDecl{name, blocks}: &ast::FuncDecl) -> Result<String> {
 
 fn gen_statement(st: &ast::Statement, scope: &AsmScope) -> Result<Vec<String>> {
     match st {
-        ast::Statement::Exp{exp} => gen_expr(exp.as_ref().unwrap(), scope),
+        ast::Statement::Exp{exp} => exp.as_ref().map_or(Ok(Vec::new()), |exp| gen_expr(exp, scope)),
         ast::Statement::Return{exp} => {
             let mut code = gen_expr(&exp, scope)?;
             code.push(format!("jmp {}", scope.end_func_label));
