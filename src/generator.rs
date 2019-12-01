@@ -134,7 +134,7 @@ fn gen_statement(st: &ast::Statement, scope: &AsmScope) -> Result<Vec<String>> {
         }
         ast::Statement::ForDecl{decl, exp2, exp3, statement} => {
             let start_loop_label = unique_label("loop_");
-            let end_loop_label = unique_label("000loop_");
+            let end_loop_label = unique_label("loop_");
             let continue_loop_label = unique_label("loop_");
 
             let mut header_scope = scope.clone();
@@ -146,6 +146,43 @@ fn gen_statement(st: &ast::Statement, scope: &AsmScope) -> Result<Vec<String>> {
             let exp3_code = exp3.as_ref().map_or(Ok(Vec::new()), |exp | gen_expr(exp, &scope))?;
 
             let mut body_scope = scope;
+            body_scope.current_scope = HashSet::new();
+            body_scope.loop_context = Some(LoopContext{
+                begin_label: continue_loop_label.clone(),
+                end_label: end_loop_label.clone(),
+            });
+
+            let statement_code = gen_statement(statement, &mut body_scope)?;
+            
+            let mut code = Vec::new();
+            code.extend(decl_code);
+            code.push(format!("{}:", start_loop_label));
+            code.extend(exp_code);
+            code.push("cmp $0, %rax".to_owned());
+            code.push(format!("je {}", end_loop_label));
+            code.extend(statement_code);
+            code.push(format!("{}:", continue_loop_label));
+            code.extend(exp3_code);
+            code.push(format!("jmp {}", start_loop_label));
+            code.push(format!("{}:", end_loop_label));
+            code.push(dealocation_decl);
+            
+            Ok(code)
+        }
+        ast::Statement::For{exp1, exp2, exp3, statement} => {
+            let start_loop_label = unique_label("loop_");
+            let end_loop_label = unique_label("loop_");
+            let continue_loop_label = unique_label("loop_");
+
+            let mut header_scope = scope.clone();
+            header_scope.current_scope = HashSet::new();
+
+            let decl_code = exp1.as_ref().map_or(Ok(Vec::new()), |exp | gen_expr(exp, &scope))?;
+            let dealocation_decl = format!("add ${}, %rsp", PLATFORM_WORD_SIZE);
+            let exp_code = gen_expr(exp2, &scope)?;
+            let exp3_code = exp3.as_ref().map_or(Ok(Vec::new()), |exp | gen_expr(exp, &scope))?;
+
+            let mut body_scope = header_scope;
             body_scope.current_scope = HashSet::new();
             body_scope.loop_context = Some(LoopContext{
                 begin_label: continue_loop_label.clone(),
