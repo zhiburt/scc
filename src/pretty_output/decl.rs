@@ -19,7 +19,7 @@ fn pretty_block(block: &ast::BlockItem) -> String {
 fn pretty_stat(st: &ast::Statement) -> String {
     match st {
         ast::Statement::Return{exp} => format!("Return<{}>", pretty_expr(exp)),
-        ast::Statement::Exp{exp} => format!("Exp<{}>", exp.as_ref().map_or("None".to_owned(), |exp| pretty_expr(exp))),
+        ast::Statement::Exp{exp} => format!("Exp<{}>", pretty_opt_expr(exp)),
         ast::Statement::Conditional{cond_expr, if_block, else_block} => {
             let else_block = if let Some(else_block) = else_block {
                 pretty_stat(else_block)
@@ -47,7 +47,7 @@ fn pretty_stat(st: &ast::Statement) -> String {
             format!("DoWhile<Statement<{}>, Exp<{}>>", pretty_stat(statement), pretty_expr(exp))
         }
         ast::Statement::ForDecl{decl, exp2, exp3, statement} => {
-            format!("For<Decl<{}>, Exp<{}>, Exp<{}>, Statement<{}>>", pretty_decl(decl), pretty_expr(exp2), pretty_expr(exp3.as_ref().unwrap()), pretty_stat(statement))
+            format!("For<Decl<{}>, Exp<{}>, Exp<{}>, Statement<{}>>", pretty_decl(decl), pretty_expr(exp2), pretty_opt_expr(exp3), pretty_stat(statement))
         }
         ast::Statement::Break => {
             "Break".to_owned()
@@ -68,6 +68,10 @@ fn pretty_decl(st: &ast::Declaration) -> String {
             }
         }
     }
+}
+
+fn pretty_opt_expr(exp: &Option<ast::Exp>) -> String {
+    exp.as_ref().map_or("None".to_owned(), |exp| pretty_expr(exp))
 }
 
 fn pretty_expr(exp: &ast::Exp) -> String {

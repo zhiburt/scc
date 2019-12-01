@@ -143,7 +143,7 @@ fn gen_statement(st: &ast::Statement, scope: &AsmScope) -> Result<Vec<String>> {
             let (decl_code, scope) = gen_decl(decl, header_scope)?;
             let dealocation_decl = format!("add ${}, %rsp", PLATFORM_WORD_SIZE);
             let exp_code = gen_expr(exp2, &scope)?;
-            let exp3_code = gen_expr(exp3.as_ref().unwrap(), &scope)?;
+            let exp3_code = exp3.as_ref().map_or(Ok(Vec::new()), |exp | gen_expr(exp, &scope))?;
 
             let mut body_scope = scope;
             body_scope.current_scope = HashSet::new();
