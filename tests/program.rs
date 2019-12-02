@@ -96,6 +96,64 @@ mod compare_gcc {
                 return i;
             ");
         }
+
+        #[test]
+        fn for_statement() {
+            compare_expr(r"
+                int sum = 0;
+                for(int i = 0; i < 10; i++)
+                    sum++;
+
+                return sum;
+            ");
+
+            compare_expr(r"
+                int sum = 0;
+                for(int i = 0; i < 10; i++){
+                    sum++;
+                }
+
+                return sum;
+            ");
+
+            compare_expr(r"
+                int sum = 0;
+                int i = 2;
+                for(int i = 0; i < 10; i++){
+                    int i = 11;
+                    sum += i;
+                }
+
+                return sum;
+            ");
+
+            compare_expr(r"
+                int i;
+                for(i = 0; i < 10; i++)
+                    ;
+                
+                return i;
+            ");
+
+            compare_expr(r"
+                int i = 0;
+                for(;i < 10;)
+                    i++;
+                
+                return i;
+            ");
+
+            compare_expr(r"
+                int i = 0;
+                for(;;)
+                    if(i < 10)
+                        i++;
+                    else
+                        break;
+                
+                return i;
+            ");
+        }
     }
 }
 
