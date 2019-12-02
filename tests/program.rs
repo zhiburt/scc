@@ -52,6 +52,50 @@ mod compare_gcc {
                 }
             ");
         }
+
+        #[test]
+        fn while_statement() {
+            compare_expr(r"
+                int i = 0;
+                while(i < 10) {
+                    i++;
+                }
+
+                return i;
+            ");
+
+            compare_expr(r"
+                int i = 0;
+                while(i < 10) i++;
+
+                return i;
+            ");
+
+            compare_expr(r"
+                int sum = 0;
+                int i = 0;
+                while(sum < 100) {
+                    int i = 0;
+                    while(i < 10) {
+                        i++;
+                    }
+                    sum += i;
+                }
+
+                return i;
+            ");
+
+
+            compare_expr(r"
+                int sum = 0;
+                int i = 0;
+                while(i++ < 10) {
+                    sum += i;
+                }
+
+                return i;
+            ");
+        }
     }
 }
 
