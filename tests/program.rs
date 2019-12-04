@@ -52,6 +52,181 @@ mod compare_gcc {
                 }
             ");
         }
+
+        #[test]
+        fn while_statement() {
+            compare_expr(r"
+                int i = 0;
+                while(i < 10) {
+                    i++;
+                }
+
+                return i;
+            ");
+
+            compare_expr(r"
+                int i = 0;
+                while(i < 10) i++;
+
+                return i;
+            ");
+
+            compare_expr(r"
+                int sum = 0;
+                int i = 0;
+                while(sum < 100) {
+                    int i = 0;
+                    while(i < 10) {
+                        i++;
+                    }
+                    sum += i;
+                }
+
+                return i;
+            ");
+
+            compare_expr(r"
+                int sum = 0;
+                int i = 0;
+                while(i++ < 10) {
+                    sum += i;
+                }
+
+                return i;
+            ");
+
+            compare_expr(r"
+                int sum = 0;
+                int i = 0;
+                while(1) {
+                    if(i == 10)
+                        break;
+
+                    sum += i++;
+                }
+
+                return i;
+            ");
+        }
+
+        #[test]
+        fn for_statement() {
+            compare_expr(r"
+                int sum = 0;
+                for(int i = 0; i < 10; i++)
+                    sum++;
+
+                return sum;
+            ");
+
+            compare_expr(r"
+                int sum = 0;
+                for(int i = 0; i < 10; i++){
+                    sum++;
+                }
+
+                return sum;
+            ");
+
+            compare_expr(r"
+                int sum = 0;
+                for(int i = 0; i < 10; i++)
+                    for(int i = 0; i < 10; i++)
+                        sum += i;
+
+                return sum;
+            ");
+
+            compare_expr(r"
+                int sum = 0;
+                int i = 2;
+                for(int i = 0; i < 10; i++){
+                    int i = 11;
+                    sum += i;
+                }
+
+                return sum;
+            ");
+
+            compare_expr(r"
+                int i;
+                for(i = 0; i < 10; i++)
+                    ;
+                
+                return i;
+            ");
+
+            compare_expr(r"
+                int i = 0;
+                for(;i < 10;)
+                    i++;
+                
+                return i;
+            ");
+
+            compare_expr(r"
+                int i = 0;
+                for(;;)
+                    if(i < 10)
+                        i++;
+                    else
+                        break;
+                
+                return i;
+            ");
+        }
+
+        #[test]
+        fn continue_statement() {
+            compare_expr(r"
+                int sum = 0;
+                for(int i = 0; i < 10; i++)
+                    if(i % 2 == 0)
+                        sum += i;
+                    else
+                        continue;
+
+                return sum;
+            ");
+
+            compare_expr(r"
+                int sum = 0;
+                for(int i = 1; i < 10; i++)
+                    for(int j = 1; j < 10; j++)
+                        if(j % i == 0)
+                            sum += j + i;
+                        else
+                            continue;
+
+                return sum;
+            ");
+        }
+
+        #[test]
+        fn break_statement() {
+            compare_expr(r"
+                int sum = 0;
+                for(int i = 0; i < 10; i++)
+                    if(i % 2 == 0)
+                        sum += i;
+                    else
+                        break;
+
+                return sum;
+            ");
+
+            compare_expr(r"
+                int sum = 0;
+                for(int i = 1; i < 10; i++)
+                    for(int j = 1; j < 10; j++)
+                        if(j % i == 0)
+                            sum += j + i;
+                        else
+                            break;
+
+                return sum;
+            ");
+        }
     }
 }
 

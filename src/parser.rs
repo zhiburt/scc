@@ -141,7 +141,7 @@ pub fn parse_exp(mut tokens: Vec<Token>) -> Result<(ast::Exp, Vec<Token>)> {
     } else if tokens[0].is_type(TokenType::Identifier)
         && map_assign_op(&tokens[1]).is_some() {
         let var = tokens.remove(0);
-        let op = map_assign_op(&tokens[1]).unwrap();
+        let op = map_assign_op(&tokens[0]).unwrap();
         tokens.remove(0);
         let (exp, tokens) = parse_exp(tokens)?;
 
@@ -255,6 +255,16 @@ pub fn parse_inc_dec_expr(mut tokens: Vec<Token>) -> Result<(ast::Exp, Vec<Token
     }
 }
 
+pub fn parse_opt_exp(tokens: Vec<Token>) -> Result<(Option<ast::Exp>, Vec<Token>)> {
+    match tokens[0].token_type {
+        TokenType::Semicolon | TokenType::CloseParenthesis => Ok((None, tokens)),
+        _ => {
+            let (exp, tokens) = parse_exp(tokens)?;
+            Ok((Some(exp), tokens))
+        }
+    }
+}
+
 pub fn parse_statement(mut tokens: Vec<Token>) -> Result<(ast::Statement, Vec<Token>)> {
     let (stat, tokens) = match tokens.get(0).unwrap().token_type {
         TokenType::Return => {
@@ -265,6 +275,69 @@ pub fn parse_statement(mut tokens: Vec<Token>) -> Result<(ast::Statement, Vec<To
             
             (ast::Statement::Return{exp: exp}, tokens)
         },
+        TokenType::For => {
+            tokens.remove(0);
+
+            compare_token(tokens.remove(0), TokenType::OpenParenthesis).unwrap();
+            if is_seem_decl(&tokens) {
+                let (decl, toks) = parse_decl(tokens)?;
+                let (controll_exp, mut toks) = parse_opt_exp(toks)?;
+                let controll_exp = controll_exp.map_or(ast::Exp::Const(ast::Const::Int(1)), |ce| ce);
+                compare_token(toks.remove(0), TokenType::Semicolon).unwrap();
+                let (exp, mut toks) = parse_opt_exp(toks)?;
+                compare_token(toks.remove(0), TokenType::CloseParenthesis).unwrap();
+                let (statement, toks) = parse_statement(toks)?;
+
+                (ast::Statement::ForDecl{decl: decl, exp2: controll_exp, exp3: exp, statement: Box::new(statement)}, toks)
+            } else {
+                let (exp1, mut toks) = parse_opt_exp(tokens)?;
+                compare_token(toks.remove(0), TokenType::Semicolon).unwrap();
+                let (controll_exp, mut toks) = parse_opt_exp(toks)?;
+                let controll_exp = controll_exp.map_or(ast::Exp::Const(ast::Const::Int(1)), |ce| ce);
+                compare_token(toks.remove(0), TokenType::Semicolon).unwrap();
+                let (exp, mut toks) = parse_opt_exp(toks)?;
+                compare_token(toks.remove(0), TokenType::CloseParenthesis).unwrap();
+                let (statement, toks) = parse_statement(toks)?;
+
+                (ast::Statement::For{exp1: exp1, exp2: controll_exp, exp3: exp, statement: Box::new(statement)}, toks)
+            }
+        }
+        TokenType::While => {
+            tokens.remove(0);
+
+            compare_token(tokens.remove(0), TokenType::OpenParenthesis).unwrap();
+            let (exp, mut toks) = parse_exp(tokens)?;
+            compare_token(toks.remove(0), TokenType::CloseParenthesis).unwrap();
+            let (statement, toks) = parse_statement(toks)?;
+
+            (ast::Statement::While{exp: exp, statement: Box::new(statement)}, toks)
+        }
+        TokenType::Do => {
+            tokens.remove(0);
+
+            compare_token(tokens.remove(0), TokenType::OpenBrace).unwrap();
+            let (statement, mut toks) = parse_statement(tokens)?;
+            compare_token(toks.remove(0), TokenType::CloseBrace).unwrap();
+            compare_token(toks.remove(0), TokenType::While).unwrap();
+            compare_token(toks.remove(0), TokenType::OpenParenthesis).unwrap();
+            let (exp, mut toks) = parse_exp(toks)?;
+            compare_token(toks.remove(0), TokenType::CloseParenthesis).unwrap();
+            compare_token(toks.remove(0), TokenType::Semicolon).unwrap();
+
+            (ast::Statement::Do{statement: Box::new(statement), exp: exp}, toks)
+        }
+        TokenType::Break => {
+            tokens.remove(0);
+            compare_token(tokens.remove(0), TokenType::Semicolon)?;
+
+            (ast::Statement::Break, tokens)
+        }
+        TokenType::Continue => {
+            tokens.remove(0);
+            compare_token(tokens.remove(0), TokenType::Semicolon)?;
+
+            (ast::Statement::Continue, tokens)
+        }
         TokenType::If => {
             tokens.remove(0);
             compare_token(tokens.remove(0), TokenType::OpenParenthesis).unwrap();
@@ -306,20 +379,17 @@ pub fn parse_statement(mut tokens: Vec<Token>) -> Result<(ast::Statement, Vec<To
             (ast::Statement::Compound{list: list}, tokens)
         }
         _ => {
-            let (exp, mut tokens) = parse_exp(tokens)?;
+            let (exp, mut tokens) = parse_opt_exp(tokens)?;
             compare_token(tokens.remove(0), TokenType::Semicolon).unwrap();
 
             (ast::Statement::Exp{exp: exp}, tokens)
-        }
+        },
     };
 
     Ok((stat, tokens))
 }
 
-/// TODO: should we take off the parte with parse_decl?
-/// currently we check is it decl if it's we parse it.
-/// New function is not created since it dublication of code some kinda
-pub fn parse_block_item(mut tokens: Vec<Token>) -> Result<(ast::BlockItem, Vec<Token>)> {
+pub fn parse_decl(mut tokens: Vec<Token>) -> Result<(ast::Declaration, Vec<Token>)> {
     match tokens.get(0) {
         Some(tok) if tok.token_type == TokenType::Int => {
             tokens.remove(0);
@@ -335,7 +405,33 @@ pub fn parse_block_item(mut tokens: Vec<Token>) -> Result<(ast::BlockItem, Vec<T
             };
             compare_token(tokens.remove(0), TokenType::Semicolon).unwrap();
 
-            Ok((ast::BlockItem::Declaration(ast::Declaration::Declare{name: var.val.unwrap().to_owned(), exp: exp}), tokens))
+            Ok((ast::Declaration::Declare{name: var.val.unwrap().to_owned(), exp: exp}, tokens))
+        },
+        _ =>  {
+            Err(CompilerError::ParsingError)
+        },
+    }
+}
+
+pub fn is_seem_decl(tokens: &[Token]) -> bool {
+    match tokens.get(0) {
+        Some(tok) if tok.token_type == TokenType::Int => {
+            true
+        },
+        _ =>  {
+            false
+        },
+    }
+}
+
+/// TODO: should we take off the parte with parse_decl?
+/// currently we check is it decl if it's we parse it.
+/// New function is not created since it dublication of code some kinda
+pub fn parse_block_item(mut tokens: Vec<Token>) -> Result<(ast::BlockItem, Vec<Token>)> {
+    match tokens.get(0) {
+        Some(tok) if is_seem_decl(&tokens) => {
+            let (decl, tokens) = parse_decl(tokens)?;
+            Ok((ast::BlockItem::Declaration(decl), tokens))
         },
         _ =>  {
             let (state, tokens) = parse_statement(tokens)?;

@@ -64,9 +64,15 @@ pub enum Exp {
 
 pub enum Statement {
     Return{exp: Exp},
-    Exp{exp: Exp},
+    Exp{exp: Option<Exp>},
     Conditional{cond_expr: Exp, if_block: Box<Statement>, else_block: Option<Box<Statement>>},
     Compound{list: Option<Vec<BlockItem>>},
+    For{exp1: Option<Exp>, exp2: Exp, exp3: Option<Exp>, statement: Box<Statement>},
+    ForDecl{decl: Declaration, exp2: Exp, exp3: Option<Exp>, statement: Box<Statement>},
+    While{exp: Exp, statement: Box<Statement>},
+    Do{statement: Box<Statement>, exp: Exp},
+    Break,
+    Continue,
 }
 
 pub enum Declaration {
