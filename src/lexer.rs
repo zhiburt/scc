@@ -54,6 +54,7 @@ pub enum TokenType {
     While,
     Break,
     Continue,
+    Comma,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -170,6 +171,7 @@ impl Lexer {
                 TokenDefinition::new(TokenType::Assignment, r"^="),
                 TokenDefinition::new(TokenType::Colon, r"^:"),
                 TokenDefinition::new(TokenType::QuestionSign, r"^\?"),
+                TokenDefinition::new(TokenType::QuestionSign, r"^,"),
             ],
         }
     }
