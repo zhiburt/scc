@@ -171,7 +171,7 @@ impl Lexer {
                 TokenDefinition::new(TokenType::Assignment, r"^="),
                 TokenDefinition::new(TokenType::Colon, r"^:"),
                 TokenDefinition::new(TokenType::QuestionSign, r"^\?"),
-                TokenDefinition::new(TokenType::QuestionSign, r"^,"),
+                TokenDefinition::new(TokenType::Comma, r"^,"),
             ],
         }
     }

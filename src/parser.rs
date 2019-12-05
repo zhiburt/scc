@@ -223,24 +223,23 @@ pub fn parse_factor(mut tokens: Vec<Token>) -> Result<(ast::Exp, Vec<Token>)> {
                     tokens.remove(0);
                     Ok((ast::Exp::UnOp(map_inc_dec_token_to_unop(tok_type, true).unwrap(), Box::new(var)), tokens))
                 }
-                Some(tok) if tok.is_type(TokenType::OpenBrace) => {
+                Some(tok) if tok.is_type(TokenType::OpenParenthesis) => {
                     tokens.remove(0);
                     // can it be simplified?
                     let mut params = Vec::new();
-                    if !tokens[0].is_type(TokenType::CloseBrace) {
+                    if !tokens[0].is_type(TokenType::CloseParenthesis) {
+                        println!("{:?}", tokens[1].token_type);
                         let (exp, toks) = parse_exp(tokens)?;
                         tokens = toks;
                         params.push(exp);
-                        
                         while tokens[0].is_type(TokenType::Comma) {
                             tokens.remove(0);
                             let (exp, toks) = parse_exp(tokens)?;
                             tokens = toks;
                             params.push(exp);
                         }
-                        tokens.remove(0);
                     }
-                    compare_token(tokens.remove(0), TokenType::CloseBrace).unwrap();
+                    compare_token(tokens.remove(0), TokenType::CloseParenthesis).unwrap();
 
                     Ok((ast::Exp::FuncCall(token.val.unwrap(), params), tokens))
                 }
@@ -292,7 +291,7 @@ pub fn parse_statement(mut tokens: Vec<Token>) -> Result<(ast::Statement, Vec<To
 
             let (exp, mut tokens) = parse_exp(tokens).unwrap();
             compare_token(tokens.remove(0), TokenType::Semicolon).unwrap();
-            
+
             (ast::Statement::Return{exp: exp}, tokens)
         },
         TokenType::For => {
