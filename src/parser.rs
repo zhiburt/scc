@@ -216,14 +216,35 @@ pub fn parse_factor(mut tokens: Vec<Token>) -> Result<(ast::Exp, Vec<Token>)> {
         }
         TokenType::Identifier => {
             let token = tokens.remove(0);
-            let var = ast::Exp::Var(token.val.unwrap().to_owned());
             match tokens.get(0) {
                 Some(tok) if tok.is_type(TokenType::Decrement) || tok.is_type(TokenType::Increment) => {
+                    let var = ast::Exp::Var(token.val.unwrap().to_owned());
                     let tok_type = tok.token_type;
                     tokens.remove(0);
                     Ok((ast::Exp::UnOp(map_inc_dec_token_to_unop(tok_type, true).unwrap(), Box::new(var)), tokens))
                 }
-                _ => Ok((var, tokens)),
+                Some(tok) if tok.is_type(TokenType::OpenBrace) => {
+                    tokens.remove(0);
+                    // can it be simplified?
+                    let mut params = Vec::new();
+                    if !tokens[0].is_type(TokenType::CloseBrace) {
+                        let (exp, toks) = parse_exp(tokens)?;
+                        tokens = toks;
+                        params.push(exp);
+                        
+                        while tokens[0].is_type(TokenType::Comma) {
+                            tokens.remove(0);
+                            let (exp, toks) = parse_exp(tokens)?;
+                            tokens = toks;
+                            params.push(exp);
+                        }
+                        tokens.remove(0);
+                    }
+                    compare_token(tokens.remove(0), TokenType::CloseBrace).unwrap();
+
+                    Ok((ast::Exp::FuncCall(token.val.unwrap(), params), tokens))
+                }
+                _ => Ok((ast::Exp::Var(token.val.unwrap().to_owned()), tokens)),
             }
         }
         TokenType::IntegerLiteral => {
@@ -238,7 +259,6 @@ pub fn parse_factor(mut tokens: Vec<Token>) -> Result<(ast::Exp, Vec<Token>)> {
         _ => parse_inc_dec_expr(tokens),
     }
 }
-
 
 pub fn parse_inc_dec_expr(mut tokens: Vec<Token>) -> Result<(ast::Exp, Vec<Token>)> {
     let mut token = tokens.remove(0);
