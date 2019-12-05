@@ -444,18 +444,38 @@ pub fn parse_func(mut tokens: Vec<Token>) -> Result<(ast::FuncDecl, Vec<Token>)>
     compare_token(tokens.remove(0), TokenType::Int).unwrap();
     let func_name = compare_token(tokens.remove(0), TokenType::Identifier).unwrap();
     compare_token(tokens.remove(0), TokenType::OpenParenthesis).unwrap();
+
+    // it can be simplified
+    let mut params = Vec::new();
+    while tokens[0].token_type == TokenType::Int {
+        tokens.remove(0);
+        let param_name = compare_token(tokens.remove(0), TokenType::Identifier).unwrap();
+        params.push(param_name.val.unwrap());
+        if tokens[0].is_type(TokenType::Comma) {
+            tokens.remove(0);
+        } else {
+            break;
+        }
+    }
     compare_token(tokens.remove(0), TokenType::CloseParenthesis).unwrap();
-    compare_token(tokens.remove(0), TokenType::OpenBrace).unwrap();
 
-    let mut blocks = Vec::new();
-    while tokens.get(0).unwrap().token_type != TokenType::CloseBrace {
-        let (block, toks) = parse_block_item(tokens).unwrap();
-        blocks.push(block);
-        tokens = toks;
-    } 
-    tokens.remove(0);
+    let blocks = match tokens.remove(0).token_type {
+        TokenType::OpenBrace => {
+            let mut blocks = Vec::new();
+            while tokens.get(0).unwrap().token_type != TokenType::CloseBrace {
+                let (block, toks) = parse_block_item(tokens).unwrap();
+                blocks.push(block);
+                tokens = toks;
+            } 
+            tokens.remove(0);
 
-    Ok((ast::FuncDecl{name: func_name.val.unwrap().clone(), blocks: blocks}, tokens))
+            Some(blocks)
+        }
+        TokenType::Semicolon => None,
+        _ => return Err(CompilerError::ParsingError),
+    };
+
+    Ok((ast::FuncDecl{name: func_name.val.unwrap().clone(), parameters: params, blocks: blocks}, tokens))
 }
 
 pub fn parse(tokens: Vec<Token>) -> Result<ast::Program> {
