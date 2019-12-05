@@ -86,7 +86,8 @@ pub enum BlockItem {
 
 pub struct FuncDecl{
     pub name: String,
-    pub blocks: Vec<BlockItem>
+    pub parameters: Vec<String>,
+    pub blocks: Option<Vec<BlockItem>>,
 }
 
 // Add block node which is decl
