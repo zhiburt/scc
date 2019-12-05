@@ -1,6 +1,6 @@
 use std::io::Write;
 
-use simple_c_compiler::{Lexer, parser, gen};
+use simple_c_compiler::{Lexer, parser, gen, checks};
 
 mod pretty_output;
 
@@ -13,6 +13,10 @@ fn main() {
     let tokens = lexer.lex(program);
     let program = parser::parse(tokens).expect("Cannot parse program");
     println!("\n{}\n", pretty_output::pretty_prog(&program));
+    if !checks::func_check(&program) {
+        println!("invalid function declaration or definition");
+        std::process::exit(120);
+    }
     let mut asm_file = std::fs::File::create(output_file).expect("Cannot create assembler code");
     asm_file.write_all(gen(program, "main").unwrap().as_ref()).unwrap();
 }
