@@ -1,11 +1,12 @@
 use simple_c_compiler::{parser};
 use simple_c_compiler::{ast};
 
-pub fn pretty_func(ast::FuncDecl{name, blocks}: &ast::FuncDecl) -> String {
+pub fn pretty_func(ast::FuncDecl{name, parameters, blocks}: &ast::FuncDecl) -> String {
     format!(
-        "FUN {}:\n   body:\n{}",
+        "FUN {} with {}:\n   body:\n{}",
         name,
-        blocks.iter().map(|block| format!("      {}", pretty_block(block))).collect::<Vec<_>>().join("\n")
+        parameters.iter().map(|p| format!("int {}", p)).collect::<Vec<String>>().join(","),
+        blocks.as_ref().map_or("empty body".to_owned(), |blocks| blocks.iter().map(|block| format!("      {}", pretty_block(block))).collect::<Vec<_>>().join("\n"))
     )
 }
 
