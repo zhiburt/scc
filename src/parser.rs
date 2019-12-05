@@ -498,7 +498,7 @@ pub fn parse_func(mut tokens: Vec<Token>) -> Result<(ast::FuncDecl, Vec<Token>)>
     Ok((ast::FuncDecl{name: func_name.val.unwrap().clone(), parameters: params, blocks: blocks}, tokens))
 }
 
-pub fn parse(tokens: Vec<Token>) -> Result<ast::Program> {
+pub fn parse(mut tokens: Vec<Token>) -> Result<ast::Program> {
     let mut functions = Vec::new();
     while !tokens.is_empty() {
         let (decl, toks) = parse_func(tokens)?;
