@@ -12,7 +12,7 @@ fn main() {
     let lexer = Lexer::new();
     let tokens = lexer.lex(program);
     let program = parser::parse(tokens).expect("Cannot parse program");
-    println!("\n{}", pretty_output::pretty_func(&program.0));
+    println!("\n{}\n", pretty_output::pretty_prog(&program));
     let mut asm_file = std::fs::File::create(output_file).expect("Cannot create assembler code");
     asm_file.write_all(gen(program, "main").unwrap().as_ref()).unwrap();
 }

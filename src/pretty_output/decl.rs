@@ -1,6 +1,15 @@
 use simple_c_compiler::{parser};
 use simple_c_compiler::{ast};
 
+pub fn pretty_prog(prog: &ast::Program) -> String {
+    let mut out = Vec::new();
+    for func in &prog.0 {
+        out.push(pretty_func(func));
+    }
+
+    out.join("\n\n")
+}
+
 pub fn pretty_func(ast::FuncDecl{name, parameters, blocks}: &ast::FuncDecl) -> String {
     format!(
         "FUN {} with {}:\n   body:\n{}",
