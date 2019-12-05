@@ -60,6 +60,7 @@ pub enum Exp {
     BinOp(BinOp, Box<Exp>, Box<Exp>),
     AssignOp(String, AssignmentOp, Box<Exp>),
     CondExp(Box<Exp>, Box<Exp>, Box<Exp>),
+    FuncCall(String, Vec<Exp>),
 }
 
 pub enum Statement {
