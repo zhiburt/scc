@@ -87,6 +87,8 @@ fn pretty_expr(exp: &ast::Exp) -> String {
         ast::Exp::Var(name) => format!("Var<{}>", name),
         ast::Exp::AssignOp(name, op, exp) => format!("VarOp<{}, {:?}> {}", name, op, pretty_expr(exp)),
         ast::Exp::CondExp(cond, exp1, exp2) => format!("TernarOp<{}, {}, {}>", pretty_expr(cond), pretty_expr(exp1), pretty_expr(exp2)),
+        ast::Exp::FuncCall(name, params) => format!("func call {} with {}", name,
+                                                        params.iter().map(|e| pretty_expr(e)).collect::<Vec<String>>().join(",")),
     }
 }
 
