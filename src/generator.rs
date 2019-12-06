@@ -2,8 +2,18 @@ use crate::{ast};
 use std::collections::{HashMap, HashSet};
 
 pub fn gen(p: ast::Program, start_point: &str) -> Result<String> {
-    let header = format!("\t.globl {}", start_point);
-    Ok(format!("{}\n{}", header, gen_func(&p.0)?))
+    let mut code = Vec::new();
+    for func in &p.0 {
+        if func.blocks.is_none() {
+            // that's a function declaration
+            // so there's no any point in generation it
+            continue;
+        }
+
+        code.push(gen_func(func)?);
+    }
+
+    Ok(code.join("\n"))
 }
 
 pub type Result<T> = std::result::Result<T, GenError>;
@@ -48,8 +58,8 @@ struct LoopContext {
     end_label: String,
 }
 
-fn gen_func(ast::FuncDecl{name, blocks}: &ast::FuncDecl) -> Result<String> {
-    let scope = AsmScope{
+fn gen_func(ast::FuncDecl{name, parameters, blocks}: &ast::FuncDecl) -> Result<String> {
+    let mut scope = AsmScope{
         variable_map: HashMap::new(),
         stack_index: -PLATFORM_WORD_SIZE,
         current_scope: HashSet::new(),
@@ -57,9 +67,17 @@ fn gen_func(ast::FuncDecl{name, blocks}: &ast::FuncDecl) -> Result<String> {
         loop_context: None,
     };
 
+    let mut param_offset = PLATFORM_WORD_SIZE * 2;
+    for param in parameters {
+        scope.variable_map.insert(param.clone(), param_offset);
+        scope.current_scope.insert(param.clone());
+        param_offset += PLATFORM_WORD_SIZE;
+    }
 
     let mut code = Vec::new();
     code.extend(prologue());
+
+    let blocks = blocks.as_ref().unwrap();
 
     let return_exists = blocks.iter().any(|stat| match stat {
         ast::BlockItem::Statement(ast::Statement::Return{..}) => true,
@@ -80,8 +98,9 @@ fn gen_func(ast::FuncDecl{name, blocks}: &ast::FuncDecl) -> Result<String> {
         .iter()
         .map(|c| format!("\t{}", c))
         .collect::<Vec<String>>();
-    let func_name = format!("{}:", name);
-    pretty_code.insert(0, func_name);
+    let func_name = format!("{}", name);
+    pretty_code.insert(0, format!("{}:", func_name));
+    pretty_code.insert(0, format!("\t.globl {}", func_name));
     Ok(pretty_code.join("\n"))
 }
 
@@ -360,6 +379,21 @@ fn gen_expr(expr: &ast::Exp, scope: &AsmScope) -> Result<Vec<String>> {
             code.extend(exp2);
             code.push(format!("jmp {}", end_label));
             code.push(format!("{}:", end_label));
+
+            Ok(code)
+        }
+        ast::Exp::FuncCall(name, params) => {
+            let mut code = Vec::new();
+
+            for p in params.iter().rev() {
+                code.extend(gen_expr(p, scope)?);
+                code.push("push %rax".to_owned());
+            }
+
+            code.push(format!("call {}", name));
+
+            let bytes_to_remove = 4 * params.len();
+            code.push(format!("add ${}, %esp", bytes_to_remove));
 
             Ok(code)
         }
