@@ -228,7 +228,6 @@ pub fn parse_factor(mut tokens: Vec<Token>) -> Result<(ast::Exp, Vec<Token>)> {
                     // can it be simplified?
                     let mut params = Vec::new();
                     if !tokens[0].is_type(TokenType::CloseParenthesis) {
-                        println!("{:?}", tokens[1].token_type);
                         let (exp, toks) = parse_exp(tokens)?;
                         tokens = toks;
                         params.push(exp);
