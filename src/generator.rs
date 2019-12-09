@@ -134,6 +134,20 @@ fn add_params_to_scope(scope: &mut AsmScope, params: &[String]) {
     }
 }
 
+fn funcall_param(index: usize) -> ParamStorage {
+    let registers = ["rdi", "rsi", "rdx", "rcx", "r8", "r9"];
+    if index < registers.len() {
+        ParamStorage::Register(registers[index])
+    } else {
+        ParamStorage::Stack
+    }
+}
+
+enum ParamStorage {
+    Stack,
+    Register(&'static str),
+}
+
 fn gen_statement(st: &ast::Statement, scope: &AsmScope) -> Result<Vec<String>> {
     match st {
         ast::Statement::Exp{exp} => exp.as_ref().map_or(Ok(Vec::new()), |exp| gen_expr(exp, scope)),
@@ -417,16 +431,27 @@ fn gen_expr(expr: &ast::Exp, scope: &AsmScope) -> Result<Vec<String>> {
         ast::Exp::FuncCall(name, params) => {
             let mut code = Vec::new();
 
-            for p in params.iter().rev() {
+            let mut stack_frame_used = 0;
+            for (i, p) in params.iter().enumerate() {
                 code.extend(gen_expr(p, scope)?);
-                code.push("push %rax".to_owned());
+                // typically that is a platform dependent part
+                // TODO: refactoring to move it to itself func somehow
+                match funcall_param(i) {
+                    ParamStorage::Stack => {
+                        code.push("push %rax".to_owned());
+                        stack_frame_used += 1;
+                    },
+                    ParamStorage::Register(reg) => code.push(format!("mov %rax, ${}", reg)),
+                }
             }
 
             code.push(format!("call {}", name));
 
-            let bytes_to_remove = 4 * params.len();
-            code.push(format!("add ${}, %esp", bytes_to_remove));
-
+            if stack_frame_used > 0 {
+                let bytes_to_remove = 8 * stack_frame_used;
+                code.push(format!("add ${}, %esp", bytes_to_remove));
+            }
+            
             Ok(code)
         }
     }
