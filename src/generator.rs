@@ -441,7 +441,7 @@ fn gen_expr(expr: &ast::Exp, scope: &AsmScope) -> Result<Vec<String>> {
                         code.push("push %rax".to_owned());
                         stack_frame_used += 1;
                     },
-                    ParamStorage::Register(reg) => code.push(format!("mov %rax, ${}", reg)),
+                    ParamStorage::Register(reg) => code.push(format!("mov %rax, %{}", reg)),
                 }
             }
 
