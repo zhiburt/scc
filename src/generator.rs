@@ -94,7 +94,7 @@ fn gen_func(ast::FuncDecl{name, parameters, blocks}: &ast::FuncDecl) -> Result<S
         _ => false,
     });
 
-    let c = gen_block(&blocks, &scope)?;
+    let (c, scope) = gen_block(&blocks, scope)?;
     code.extend(c);
 
     if !return_exists {
@@ -193,7 +193,10 @@ fn gen_statement(st: &ast::Statement, scope: &AsmScope) -> Result<Vec<String>> {
                 return Ok(Vec::new());
             }
 
-            gen_block(list.as_ref().unwrap(), scope)
+            let mut scope = scope.clone();
+            scope.current_scope = HashSet::new();
+            let (code, _) = gen_block(list.as_ref().unwrap(), scope)?;
+            Ok(code)
         }
         ast::Statement::ForDecl{decl, exp2, exp3, statement} => {
             let start_loop_label = unique_label("loop_");
@@ -337,10 +340,7 @@ fn gen_statement(st: &ast::Statement, scope: &AsmScope) -> Result<Vec<String>> {
     }
 }
 
-fn gen_block(items: &[ast::BlockItem], scope: &AsmScope) -> Result<Vec<String>> {
-    let mut scope = scope.clone();
-    scope.current_scope = HashSet::new();
-
+fn gen_block(items: &[ast::BlockItem], mut scope: AsmScope) -> Result<(Vec<String>, AsmScope)> {
     let mut code = Vec::new();
     for item in items.iter() {
         let c = match item {
@@ -359,7 +359,7 @@ fn gen_block(items: &[ast::BlockItem], scope: &AsmScope) -> Result<Vec<String>> 
     let bytes_to_deallocate = scope.current_scope.len() as i64 * PLATFORM_WORD_SIZE;
     code.push(format!("add ${}, %rsp", bytes_to_deallocate));
 
-    Ok(code)
+    Ok((code, scope))
 }
 
 fn gen_decl(ast::Declaration::Declare{name, exp}: &ast::Declaration, mut scope: AsmScope) -> Result<(Vec<String>, AsmScope)> {
