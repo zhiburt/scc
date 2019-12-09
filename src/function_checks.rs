@@ -13,9 +13,8 @@ fn global_check(prog: &ast::Program) -> bool {
     let mut functions: HashMap<String, &ast::FuncDecl> = HashMap::new();
     for func in &prog.0 {
         if let Some(f) = functions.get(&func.name) {
-            if f.blocks.is_none() && func.blocks.is_some() &&
-                f.parameters.len() == func.parameters.len() {
-                return true;
+            if f.parameters.len() == func.parameters.len() {
+                break;
             }
 
             return false;
