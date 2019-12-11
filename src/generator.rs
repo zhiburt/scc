@@ -1,8 +1,10 @@
 use crate::{ast};
-use std::collections::{HashMap};
+use std::collections::{HashSet, HashMap};
 
 pub fn gen(p: ast::Program, start_point: &str) -> Result<String> {
     let mut code = Vec::new();
+    let un_def_funcs = un_def_funcs(&p.0);
+
     for func in &p.0 {
         if func.blocks.is_none() {
             // that's a function declaration
@@ -10,10 +12,25 @@ pub fn gen(p: ast::Program, start_point: &str) -> Result<String> {
             continue;
         }
 
-        code.push(gen_func(func)?);
+        code.push(gen_func(func, un_def_funcs.clone())?);
     }
 
     Ok(code.join("\n"))
+}
+
+fn un_def_funcs(funcs: &[ast::FuncDecl]) -> HashSet<String> {
+    use std::iter::FromIterator;
+
+    let mut un_def_funcs = HashSet::new();
+    for func in funcs {
+        if func.blocks.is_none() {
+            un_def_funcs.insert(func.name.clone());
+        } else {
+            un_def_funcs.remove(&func.name);
+        }
+    }
+
+    un_def_funcs
 }
 
 pub type Result<T> = std::result::Result<T, GenError>;
@@ -50,6 +67,7 @@ struct AsmScope {
     stack_index: i64,
     end_func_label: String,
     loop_context: Option<LoopContext>,
+    no_def_functions: HashSet<String>,
 }
 
 #[derive(Clone, PartialEq, Eq)]
@@ -79,13 +97,14 @@ struct LoopContext {
     end_label: String,
 }
 
-fn gen_func(ast::FuncDecl{name, parameters, blocks}: &ast::FuncDecl) -> Result<String> {
+fn gen_func(ast::FuncDecl{name, parameters, blocks}: &ast::FuncDecl, no_def_functions: HashSet<String>) -> Result<String> {
     let mut scope = AsmScope{
         variable_map: HashMap::new(),
         stack_index: -PLATFORM_WORD_SIZE,
         current_scope: HashMap::new(),
         end_func_label: unique_label("_end_func_"),
         loop_context: None,
+        no_def_functions,
     };
 
     add_params_to_scope(&mut scope, parameters);
@@ -454,13 +473,17 @@ fn gen_expr(expr: &ast::Exp, scope: &AsmScope) -> Result<Vec<String>> {
                 }
             }
 
-            code.push(format!("call {}", name));
+            if scope.no_def_functions.contains(name) {
+                code.push(format!("call {}@PLT", name));
+            } else {
+                code.push(format!("call {}", name));
+            }
 
             if stack_frame_used > 0 {
                 let bytes_to_remove = 8 * stack_frame_used;
                 code.push(format!("add ${}, %rsp", bytes_to_remove));
             }
-            
+
             Ok(code)
         }
     }
