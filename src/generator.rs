@@ -460,6 +460,7 @@ fn gen_expr(expr: &ast::Exp, scope: &AsmScope) -> Result<Vec<String>> {
             let mut code = Vec::new();
 
             let mut stack_frame_used = 0;
+            let mut used_registers = Vec::new();
             for (i, p) in params.iter().enumerate() {
                 code.extend(gen_expr(p, scope)?);
                 // typically that is a platform dependent part
@@ -469,7 +470,14 @@ fn gen_expr(expr: &ast::Exp, scope: &AsmScope) -> Result<Vec<String>> {
                         code.push("push %rax".to_owned());
                         stack_frame_used += 1;
                     },
-                    ParamStorage::Register(reg) => code.push(format!("mov %rax, %{}", reg)),
+                    ParamStorage::Register(reg) => {
+                        code.push(format!("push %{}", reg));
+                        used_registers.push(reg);
+
+                        code.push(format!("mov %rax, %{}", reg));
+                        
+                        
+                    },
                 }
             }
 
@@ -477,6 +485,10 @@ fn gen_expr(expr: &ast::Exp, scope: &AsmScope) -> Result<Vec<String>> {
                 code.push(format!("call {}@PLT", name));
             } else {
                 code.push(format!("call {}", name));
+            }
+
+            for reg in used_registers.iter().rev() {
+                code.push(format!("pop %{}", reg));
             }
 
             if stack_frame_used > 0 {
