@@ -1,11 +1,21 @@
 use simple_c_compiler::{parser};
 use simple_c_compiler::{ast};
 
-pub fn pretty_func(ast::FuncDecl{name, blocks}: &ast::FuncDecl) -> String {
+pub fn pretty_prog(prog: &ast::Program) -> String {
+    let mut out = Vec::new();
+    for func in &prog.0 {
+        out.push(pretty_func(func));
+    }
+
+    out.join("\n\n")
+}
+
+pub fn pretty_func(ast::FuncDecl{name, parameters, blocks}: &ast::FuncDecl) -> String {
     format!(
-        "FUN {}:\n   body:\n{}",
+        "FUN {} with {}:\n   body:\n{}",
         name,
-        blocks.iter().map(|block| format!("      {}", pretty_block(block))).collect::<Vec<_>>().join("\n")
+        parameters.iter().map(|p| format!("int {}", p)).collect::<Vec<String>>().join(","),
+        blocks.as_ref().map_or("empty body".to_owned(), |blocks| blocks.iter().map(|block| format!("      {}", pretty_block(block))).collect::<Vec<_>>().join("\n"))
     )
 }
 
@@ -86,6 +96,8 @@ fn pretty_expr(exp: &ast::Exp) -> String {
         ast::Exp::Var(name) => format!("Var<{}>", name),
         ast::Exp::AssignOp(name, op, exp) => format!("VarOp<{}, {:?}> {}", name, op, pretty_expr(exp)),
         ast::Exp::CondExp(cond, exp1, exp2) => format!("TernarOp<{}, {}, {}>", pretty_expr(cond), pretty_expr(exp1), pretty_expr(exp2)),
+        ast::Exp::FuncCall(name, params) => format!("func call {} with {}", name,
+                                                        params.iter().map(|e| pretty_expr(e)).collect::<Vec<String>>().join(",")),
     }
 }
 

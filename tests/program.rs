@@ -228,16 +228,105 @@ mod compare_gcc {
             ");
         }
     }
+
+    mod functions {
+        use super::*;
+
+        #[test]
+        fn simple_fn() {
+            compare_code(r"
+                int add(int a, int b) {
+                    return a + b;
+                }
+
+                int main() {
+                    add(31, 12);
+                }
+            ");
+        }
+
+        #[test]
+        fn decl_fn() {
+            compare_code(r"
+                int add(int a, int b);
+
+                int main() {
+                    add(31, 12);
+                }
+
+                int add(int a, int b) {
+                    return a + b;
+                }
+            ");
+
+            compare_code(r"
+                int add(int a, int b) {
+                    return a + b;
+                }
+
+                int main() {
+                    add(31, 12);
+                }
+
+                int add(int a, int b);
+            ");
+        }
+            
+        #[test]
+        fn recursive() {
+            compare_code(r"
+                int fib(int n) {
+                    if (n == 0 || n == 1) {
+                        return n;
+                    } else {
+                        return fib(n - 1) + fib(n - 2);
+                    }
+                }
+
+                int main() {
+                    int n = 6;
+                    return fib(n);
+                }
+            ");
+        }
+
+        #[test]
+        fn libc_call() {
+            compare_code(r"
+                int putchar(int c);
+
+                int main() {
+                    putchar(72);
+                    putchar(101);
+                    putchar(108);
+                    putchar(108);
+                    putchar(111);
+                    putchar(44);
+                    putchar(32);
+                    putchar(87);
+                    putchar(111);
+                    putchar(114);
+                    putchar(108);
+                    putchar(100);
+                    putchar(33);
+                    putchar(10);
+                }
+            ");
+        }
+    }
+}
+
+fn compare_code(code: &str) {
+    assert_eq!(compile_gcc_expr(&code), compile_expr(&code));
 }
 
 fn compare_expr(expr: &str) {
-    assert_eq!(compile_gcc_expr(expr), compile_expr(expr));
+    let code = format!("int main(){{ {} }}", expr);
+    assert_eq!(compile_gcc_expr(&code), compile_expr(&code));
 }
 
-fn compile_expr(expr: &str) -> usize {
+fn compile_expr(code: &str) -> usize {
     use std::io::Write;
-
-    let code = format!("int main(){{ {} }}", expr);
 
     let code_file = random_name("code_", ".c");
     let mut file = std::fs::File::create(&code_file).unwrap();
@@ -280,10 +369,8 @@ fn compile_expr(expr: &str) -> usize {
     program.code().unwrap() as usize
 }
 
-fn compile_gcc_expr(expr: &str) -> usize {
+fn compile_gcc_expr(code: &str) -> usize {
     use std::io::Write;
-
-    let code = format!("int main(){{ {} }}", expr);
 
     let code_file = random_name("code_", ".c");
     let mut file = std::fs::File::create(&code_file).unwrap();

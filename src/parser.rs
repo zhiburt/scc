@@ -216,14 +216,33 @@ pub fn parse_factor(mut tokens: Vec<Token>) -> Result<(ast::Exp, Vec<Token>)> {
         }
         TokenType::Identifier => {
             let token = tokens.remove(0);
-            let var = ast::Exp::Var(token.val.unwrap().to_owned());
             match tokens.get(0) {
                 Some(tok) if tok.is_type(TokenType::Decrement) || tok.is_type(TokenType::Increment) => {
+                    let var = ast::Exp::Var(token.val.unwrap().to_owned());
                     let tok_type = tok.token_type;
                     tokens.remove(0);
                     Ok((ast::Exp::UnOp(map_inc_dec_token_to_unop(tok_type, true).unwrap(), Box::new(var)), tokens))
                 }
-                _ => Ok((var, tokens)),
+                Some(tok) if tok.is_type(TokenType::OpenParenthesis) => {
+                    tokens.remove(0);
+                    // can it be simplified?
+                    let mut params = Vec::new();
+                    if !tokens[0].is_type(TokenType::CloseParenthesis) {
+                        let (exp, toks) = parse_exp(tokens)?;
+                        tokens = toks;
+                        params.push(exp);
+                        while tokens[0].is_type(TokenType::Comma) {
+                            tokens.remove(0);
+                            let (exp, toks) = parse_exp(tokens)?;
+                            tokens = toks;
+                            params.push(exp);
+                        }
+                    }
+                    compare_token(tokens.remove(0), TokenType::CloseParenthesis).unwrap();
+
+                    Ok((ast::Exp::FuncCall(token.val.unwrap(), params), tokens))
+                }
+                _ => Ok((ast::Exp::Var(token.val.unwrap().to_owned()), tokens)),
             }
         }
         TokenType::IntegerLiteral => {
@@ -238,7 +257,6 @@ pub fn parse_factor(mut tokens: Vec<Token>) -> Result<(ast::Exp, Vec<Token>)> {
         _ => parse_inc_dec_expr(tokens),
     }
 }
-
 
 pub fn parse_inc_dec_expr(mut tokens: Vec<Token>) -> Result<(ast::Exp, Vec<Token>)> {
     let mut token = tokens.remove(0);
@@ -272,7 +290,7 @@ pub fn parse_statement(mut tokens: Vec<Token>) -> Result<(ast::Statement, Vec<To
 
             let (exp, mut tokens) = parse_exp(tokens).unwrap();
             compare_token(tokens.remove(0), TokenType::Semicolon).unwrap();
-            
+
             (ast::Statement::Return{exp: exp}, tokens)
         },
         TokenType::For => {
@@ -444,27 +462,49 @@ pub fn parse_func(mut tokens: Vec<Token>) -> Result<(ast::FuncDecl, Vec<Token>)>
     compare_token(tokens.remove(0), TokenType::Int).unwrap();
     let func_name = compare_token(tokens.remove(0), TokenType::Identifier).unwrap();
     compare_token(tokens.remove(0), TokenType::OpenParenthesis).unwrap();
+
+    // it can be simplified
+    let mut params = Vec::new();
+    while tokens[0].token_type == TokenType::Int {
+        tokens.remove(0);
+        let param_name = compare_token(tokens.remove(0), TokenType::Identifier).unwrap();
+        params.push(param_name.val.unwrap());
+        if tokens[0].is_type(TokenType::Comma) {
+            tokens.remove(0);
+        } else {
+            break;
+        }
+    }
     compare_token(tokens.remove(0), TokenType::CloseParenthesis).unwrap();
-    compare_token(tokens.remove(0), TokenType::OpenBrace).unwrap();
 
-    let mut blocks = Vec::new();
-    while tokens.get(0).unwrap().token_type != TokenType::CloseBrace {
-        let (block, toks) = parse_block_item(tokens).unwrap();
-        blocks.push(block);
-        tokens = toks;
-    } 
-    tokens.remove(0);
+    let blocks = match tokens.remove(0).token_type {
+        TokenType::OpenBrace => {
+            let mut blocks = Vec::new();
+            while tokens.get(0).unwrap().token_type != TokenType::CloseBrace {
+                let (block, toks) = parse_block_item(tokens).unwrap();
+                blocks.push(block);
+                tokens = toks;
+            } 
+            tokens.remove(0);
 
-    Ok((ast::FuncDecl{name: func_name.val.unwrap().clone(), blocks: blocks}, tokens))
+            Some(blocks)
+        }
+        TokenType::Semicolon => None,
+        _ => return Err(CompilerError::ParsingError),
+    };
+
+    Ok((ast::FuncDecl{name: func_name.val.unwrap().clone(), parameters: params, blocks: blocks}, tokens))
 }
 
-pub fn parse(tokens: Vec<Token>) -> Result<ast::Program> {
-    let (decl, tokens) = parse_func(tokens)?;
-    if !tokens.is_empty() {
-        return Err(CompilerError::ParsingError);
+pub fn parse(mut tokens: Vec<Token>) -> Result<ast::Program> {
+    let mut functions = Vec::new();
+    while !tokens.is_empty() {
+        let (decl, toks) = parse_func(tokens)?;
+        tokens = toks;
+        functions.push(decl);
     }
     
-    Ok(ast::Program(decl))
+    Ok(ast::Program(functions))
 }
 
 fn compare_token(tok: Token, tok_type: TokenType) -> Result<Token> {

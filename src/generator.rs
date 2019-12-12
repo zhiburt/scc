@@ -1,9 +1,36 @@
 use crate::{ast};
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashSet, HashMap};
 
 pub fn gen(p: ast::Program, start_point: &str) -> Result<String> {
-    let header = format!("\t.globl {}", start_point);
-    Ok(format!("{}\n{}", header, gen_func(&p.0)?))
+    let mut code = Vec::new();
+    let un_def_funcs = un_def_funcs(&p.0);
+
+    for func in &p.0 {
+        if func.blocks.is_none() {
+            // that's a function declaration
+            // so there's no any point in generation it
+            continue;
+        }
+
+        code.push(gen_func(func, un_def_funcs.clone())?);
+    }
+
+    Ok(code.join("\n"))
+}
+
+fn un_def_funcs(funcs: &[ast::FuncDecl]) -> HashSet<String> {
+    use std::iter::FromIterator;
+
+    let mut un_def_funcs = HashSet::new();
+    for func in funcs {
+        if func.blocks.is_none() {
+            un_def_funcs.insert(func.name.clone());
+        } else {
+            un_def_funcs.remove(&func.name);
+        }
+    }
+
+    un_def_funcs
 }
 
 pub type Result<T> = std::result::Result<T, GenError>;
@@ -35,11 +62,33 @@ const PLATFORM_WORD_SIZE: i64 = 8;
 
 #[derive(Clone)]
 struct AsmScope {
-    variable_map: HashMap<String, i64>,
-    current_scope: HashSet<String>,
+    variable_map: HashMap<String, VarStorage>,
+    current_scope: HashMap<String, AllocatedOn>,
     stack_index: i64,
     end_func_label: String,
     loop_context: Option<LoopContext>,
+    no_def_functions: HashSet<String>,
+}
+
+#[derive(Clone, PartialEq, Eq)]
+enum AllocatedOn {
+    Stack,
+    Register,
+}
+
+#[derive(Clone)]
+enum VarStorage {
+    Stack(i64),
+    Register(&'static str),
+}
+
+impl VarStorage {
+    fn into_stack(&self) -> Option<i64> {
+        match self {
+            VarStorage::Stack(offset) => Some(*offset),
+            _ => None
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -48,25 +97,29 @@ struct LoopContext {
     end_label: String,
 }
 
-fn gen_func(ast::FuncDecl{name, blocks}: &ast::FuncDecl) -> Result<String> {
-    let scope = AsmScope{
+fn gen_func(ast::FuncDecl{name, parameters, blocks}: &ast::FuncDecl, no_def_functions: HashSet<String>) -> Result<String> {
+    let mut scope = AsmScope{
         variable_map: HashMap::new(),
         stack_index: -PLATFORM_WORD_SIZE,
-        current_scope: HashSet::new(),
+        current_scope: HashMap::new(),
         end_func_label: unique_label("_end_func_"),
         loop_context: None,
+        no_def_functions,
     };
 
+    add_params_to_scope(&mut scope, parameters);
 
     let mut code = Vec::new();
     code.extend(prologue());
+
+    let blocks = blocks.as_ref().unwrap();
 
     let return_exists = blocks.iter().any(|stat| match stat {
         ast::BlockItem::Statement(ast::Statement::Return{..}) => true,
         _ => false,
     });
 
-    let c = gen_block(&blocks, &scope)?;
+    let (c, scope) = gen_block(&blocks, scope)?;
     code.extend(c);
 
     if !return_exists {
@@ -80,9 +133,45 @@ fn gen_func(ast::FuncDecl{name, blocks}: &ast::FuncDecl) -> Result<String> {
         .iter()
         .map(|c| format!("\t{}", c))
         .collect::<Vec<String>>();
-    let func_name = format!("{}:", name);
-    pretty_code.insert(0, func_name);
+    let func_name = format!("{}", name);
+    pretty_code.insert(0, format!("{}:", func_name));
+    pretty_code.insert(0, format!("\t.globl {}", func_name));
     Ok(pretty_code.join("\n"))
+}
+
+// platform dependent part
+// on x86 params generally passes through stack
+//
+// on x64 it uses registers for the first chunk of parameters
+//
+// this is a x64 gasm implementation
+fn add_params_to_scope(scope: &mut AsmScope, params: &[String]) {
+    let registers = ["rdi", "rsi", "rdx", "rcx", "r8", "r9"];
+    let mut param_offset = PLATFORM_WORD_SIZE * 2;
+    for (i, param) in params.iter().enumerate() {
+        if i < registers.len() {
+            scope.variable_map.insert(param.clone(), VarStorage::Register(registers[i]));
+            scope.current_scope.insert(param.clone(), AllocatedOn::Register);
+        } else {
+            scope.variable_map.insert(param.clone(), VarStorage::Stack(param_offset));
+            scope.current_scope.insert(param.clone(), AllocatedOn::Stack);
+            param_offset += PLATFORM_WORD_SIZE;
+        }
+    }
+}
+
+fn funcall_param(index: usize) -> ParamStorage {
+    let registers = ["rdi", "rsi", "rdx", "rcx", "r8", "r9"];
+    if index < registers.len() {
+        ParamStorage::Register(registers[index])
+    } else {
+        ParamStorage::Stack
+    }
+}
+
+enum ParamStorage {
+    Stack,
+    Register(&'static str),
 }
 
 fn gen_statement(st: &ast::Statement, scope: &AsmScope) -> Result<Vec<String>> {
@@ -130,7 +219,10 @@ fn gen_statement(st: &ast::Statement, scope: &AsmScope) -> Result<Vec<String>> {
                 return Ok(Vec::new());
             }
 
-            gen_block(list.as_ref().unwrap(), scope)
+            let mut scope = scope.clone();
+            scope.current_scope = HashMap::new();
+            let (code, _) = gen_block(list.as_ref().unwrap(), scope)?;
+            Ok(code)
         }
         ast::Statement::ForDecl{decl, exp2, exp3, statement} => {
             let start_loop_label = unique_label("loop_");
@@ -138,7 +230,7 @@ fn gen_statement(st: &ast::Statement, scope: &AsmScope) -> Result<Vec<String>> {
             let continue_loop_label = unique_label("loop_");
 
             let mut header_scope = scope.clone();
-            header_scope.current_scope = HashSet::new();
+            header_scope.current_scope = HashMap::new();
 
             let (decl_code, scope) = gen_decl(decl, header_scope)?;
             let dealocation_decl = format!("add ${}, %rsp", PLATFORM_WORD_SIZE);
@@ -146,7 +238,7 @@ fn gen_statement(st: &ast::Statement, scope: &AsmScope) -> Result<Vec<String>> {
             let exp3_code = exp3.as_ref().map_or(Ok(Vec::new()), |exp | gen_expr(exp, &scope))?;
 
             let mut body_scope = scope;
-            body_scope.current_scope = HashSet::new();
+            body_scope.current_scope = HashMap::new();
             body_scope.loop_context = Some(LoopContext{
                 begin_label: continue_loop_label.clone(),
                 end_label: end_loop_label.clone(),
@@ -175,7 +267,7 @@ fn gen_statement(st: &ast::Statement, scope: &AsmScope) -> Result<Vec<String>> {
             let continue_loop_label = unique_label("loop_");
 
             let mut header_scope = scope.clone();
-            header_scope.current_scope = HashSet::new();
+            header_scope.current_scope = HashMap::new();
 
             let decl_code = exp1.as_ref().map_or(Ok(Vec::new()), |exp | gen_expr(exp, &scope))?;
             let dealocation_decl = format!("add ${}, %rsp", PLATFORM_WORD_SIZE);
@@ -183,7 +275,7 @@ fn gen_statement(st: &ast::Statement, scope: &AsmScope) -> Result<Vec<String>> {
             let exp3_code = exp3.as_ref().map_or(Ok(Vec::new()), |exp | gen_expr(exp, &scope))?;
 
             let mut body_scope = header_scope;
-            body_scope.current_scope = HashSet::new();
+            body_scope.current_scope = HashMap::new();
             body_scope.loop_context = Some(LoopContext{
                 begin_label: continue_loop_label.clone(),
                 end_label: end_loop_label.clone(),
@@ -274,10 +366,7 @@ fn gen_statement(st: &ast::Statement, scope: &AsmScope) -> Result<Vec<String>> {
     }
 }
 
-fn gen_block(items: &[ast::BlockItem], scope: &AsmScope) -> Result<Vec<String>> {
-    let mut scope = scope.clone();
-    scope.current_scope = HashSet::new();
-
+fn gen_block(items: &[ast::BlockItem], mut scope: AsmScope) -> Result<(Vec<String>, AsmScope)> {
     let mut code = Vec::new();
     for item in items.iter() {
         let c = match item {
@@ -293,20 +382,22 @@ fn gen_block(items: &[ast::BlockItem], scope: &AsmScope) -> Result<Vec<String>> 
         code.extend(c);
     }
 
-    let bytes_to_deallocate = scope.current_scope.len() as i64 * PLATFORM_WORD_SIZE;
-    code.push(format!("add ${}, %rsp", bytes_to_deallocate));
+    let bytes_to_deallocate = scope.current_scope.values().filter(|&t| *t == AllocatedOn::Stack).count() as i64 * PLATFORM_WORD_SIZE;
+    if bytes_to_deallocate > 0 {
+        code.push(format!("add ${}, %rsp", bytes_to_deallocate));
+    }
 
-    Ok(code)
+    Ok((code, scope))
 }
 
 fn gen_decl(ast::Declaration::Declare{name, exp}: &ast::Declaration, mut scope: AsmScope) -> Result<(Vec<String>, AsmScope)> {
-        if scope.current_scope.contains(name) {
+        if scope.current_scope.contains_key(name) {
             return Err(GenError::InvalidVariableUsage(name.clone()));
         }
 
-        scope.variable_map.insert(name.clone(), scope.stack_index);
+        scope.variable_map.insert(name.clone(), VarStorage::Stack(scope.stack_index));
         scope.stack_index -= PLATFORM_WORD_SIZE;
-        scope.current_scope.insert(name.clone());
+        scope.current_scope.insert(name.clone(), AllocatedOn::Stack);
 
         let code = match exp {
             Some(exp) => {
@@ -329,15 +420,17 @@ fn gen_expr(expr: &ast::Exp, scope: &AsmScope) -> Result<Vec<String>> {
         ast::Exp::Assign(name, exp) => {
             let mut code = gen_expr(exp, scope)?;
 
-            let offset = scope.variable_map.get(name).ok_or(GenError::InvalidVariableUsage(name.clone()))?;
-            code.push(format!("mov %rax, {}(%rbp)", offset));
+            let storage = scope.variable_map.get(name).ok_or(GenError::InvalidVariableUsage(name.clone()))?;
+            let place = var_place(storage);
+
+            code.push(format!("mov %rax, {}", place));
 
             Ok(code)
         }
         ast::Exp::Var(name) => {
-            let offset = scope.variable_map.get(name).ok_or(GenError::InvalidVariableUsage(name.clone()))?;
-
-            Ok(vec![format!("mov {}(%rbp), %rax", offset)])
+            let storage = scope.variable_map.get(name).ok_or(GenError::InvalidVariableUsage(name.clone()))?;
+            let place = var_place(storage);
+            Ok(vec![format!("mov {}, %rax", place)])
         }
         ast::Exp::CondExp(cond, exp1,exp2) => {
             let cond = gen_expr(cond, scope)?;
@@ -360,6 +453,48 @@ fn gen_expr(expr: &ast::Exp, scope: &AsmScope) -> Result<Vec<String>> {
             code.extend(exp2);
             code.push(format!("jmp {}", end_label));
             code.push(format!("{}:", end_label));
+
+            Ok(code)
+        }
+        ast::Exp::FuncCall(name, params) => {
+            let mut code = Vec::new();
+
+            let mut stack_frame_used = 0;
+            let mut used_registers = Vec::new();
+            for (i, p) in params.iter().enumerate() {
+                code.extend(gen_expr(p, scope)?);
+                // typically that is a platform dependent part
+                // TODO: refactoring to move it to itself func somehow
+                match funcall_param(i) {
+                    ParamStorage::Stack => {
+                        code.push("push %rax".to_owned());
+                        stack_frame_used += 1;
+                    },
+                    ParamStorage::Register(reg) => {
+                        code.push(format!("push %{}", reg));
+                        used_registers.push(reg);
+
+                        code.push(format!("mov %rax, %{}", reg));
+                        
+                        
+                    },
+                }
+            }
+
+            if scope.no_def_functions.contains(name) {
+                code.push(format!("call {}@PLT", name));
+            } else {
+                code.push(format!("call {}", name));
+            }
+
+            for reg in used_registers.iter().rev() {
+                code.push(format!("pop %{}", reg));
+            }
+
+            if stack_frame_used > 0 {
+                let bytes_to_remove = 8 * stack_frame_used;
+                code.push(format!("add ${}, %rsp", bytes_to_remove));
+            }
 
             Ok(code)
         }
@@ -394,60 +529,64 @@ fn gen_unop(op: &ast::UnOp, exp: &ast::Exp, scope: &AsmScope) -> Result<Vec<Stri
             code
         }
         ast::UnOp::IncrementPrefix => {
-            let offset = match exp {
+            let storage = match exp {
                 ast::Exp::Var(name) => {
                     scope.variable_map.get(name).ok_or(GenError::InvalidVariableUsage(name.clone()))?
                 }
                 _ => unreachable!(),
             };
+            let place = var_place(storage);
 
             vec![
-                format!("mov {}(%rbp), %rax", offset),
+                format!("mov {}, %rax", place),
                 "inc %rax".to_owned(),
-                format!("mov    %rax, {}(%rbp)", offset),
+                format!("mov %rax, {}", place),
             ]
         }
         ast::UnOp::IncrementPostfix => {
-            let offset = match exp {
+            let storage = match exp {
                 ast::Exp::Var(name) => {
                     scope.variable_map.get(name).ok_or(GenError::InvalidVariableUsage(name.clone()))?
                 }
                 _ => unreachable!(),
             };
+            let place = var_place(storage);
 
             vec![
-                format!("mov {}(%rbp), %rax", offset),
+                format!("mov {}, %rax", place),
                 "inc %rax".to_owned(),
-                format!("mov    %rax, {}(%rbp)", offset),
+                format!("mov    %rax, {}", place),
                 "dec %rax".to_owned(),
             ]
         }
         ast::UnOp::DecrementPrefix => {
-            let offset = match exp {
+            let storage = match exp {
                 ast::Exp::Var(name) => {
                     scope.variable_map.get(name).ok_or(GenError::InvalidVariableUsage(name.clone()))?
                 }
                 _ => unreachable!(),
             };
+            let place = var_place(storage);
 
             vec![
-                format!("mov {}(%rbp), %rax", offset),
+                format!("mov {}, %rax", place),
                 "dec %rax".to_owned(),
-                format!("mov    %rax, {}(%rbp)", offset),
+                format!("mov    %rax, {}", place),
             ]
         }
         ast::UnOp::DecrementPostfix => {
-            let offset = match exp {
+            let storage = match exp {
                 ast::Exp::Var(name) => {
                     scope.variable_map.get(name).ok_or(GenError::InvalidVariableUsage(name.clone()))?
                 }
                 _ => unreachable!(),
             };
+            let place = var_place(storage);
 
             vec![
-                format!("mov {}(%rbp), %rax", offset),
+                format!("mov {}, %rax", place),
                 "dec %rax".to_owned(),
-                format!("mov    %rax, {}(%rbp)", offset),
+                format!("mov    %rax, {}", place),
                 "inc %rax".to_owned(),
             ]
         }
@@ -599,15 +738,16 @@ fn gen_binop(op: &ast::BinOp, exp1: &ast::Exp, exp2: &ast::Exp, scope: &AsmScope
 fn gen_assign_op(var_name: &str, op: &ast::AssignmentOp, exp: &ast::Exp, scope: &AsmScope) -> Result<Vec<String>> {
     let mut code = gen_expr(exp, scope)?;
 
-    let offset = scope.variable_map.get(var_name).ok_or(GenError::InvalidVariableUsage(var_name.to_owned()))?;
+    let storage = scope.variable_map.get(var_name).ok_or(GenError::InvalidVariableUsage(var_name.to_owned()))?;
+    let place = var_place(storage);
 
     match op {
-        ast::AssignmentOp::Plus => code.push(format!("add {}(%rbp), %rax", offset)),
-        ast::AssignmentOp::Sub => code.push(format!("sub {}(%rbp), %rax", offset)),
-        ast::AssignmentOp::Mul => code.push(format!("imul {}(%rbp), %rax", offset)),
+        ast::AssignmentOp::Plus => code.push(format!("add {}, %rax", place)),
+        ast::AssignmentOp::Sub => code.push(format!("sub {}, %rax", place)),
+        ast::AssignmentOp::Mul => code.push(format!("imul {}, %rax", place)),
         ast::AssignmentOp::Div => {
             // is it correct?
-            code.push(format!("mov {}(%rbp), %rcx", offset));
+            code.push(format!("mov {}, %rcx", place));
             code.extend(vec![
                 "mov %rax, %rbx".to_owned(),
                 "mov %rcx, %rax".to_owned(),
@@ -618,7 +758,7 @@ fn gen_assign_op(var_name: &str, op: &ast::AssignmentOp, exp: &ast::Exp, scope: 
         },
         ast::AssignmentOp::Mod => {
             // is it correct?
-            code.push(format!("mov {}(%rbp), %rcx", offset));
+            code.push(format!("mov {}, %rcx", place));
             code.extend(vec![
                 "mov %rax, %rbx".to_owned(),
                 "mov %rcx, %rax".to_owned(),
@@ -630,12 +770,12 @@ fn gen_assign_op(var_name: &str, op: &ast::AssignmentOp, exp: &ast::Exp, scope: 
         },
         ast::AssignmentOp::BitLeftShift => code.push("sal %rcx, %rax".to_owned()),
         ast::AssignmentOp::BitRightShift => code.push("sar %rcx, %rax".to_owned()),
-        ast::AssignmentOp::BitAnd => code.push(format!("and {}(%rbp), %rax", offset)),
-        ast::AssignmentOp::BitOr => code.push(format!("or {}(%rbp), %rax", offset)),
-        ast::AssignmentOp::BitXor => code.push(format!("xor {}(%rbp), %rax", offset)),
+        ast::AssignmentOp::BitAnd => code.push(format!("and {}, %rax", place)),
+        ast::AssignmentOp::BitOr => code.push(format!("or {}, %rax", place)),
+        ast::AssignmentOp::BitXor => code.push(format!("xor {}, %rax", place)),
     };
 
-    code.push(format!("mov %rax, {}(%rbp)", offset));
+    code.push(format!("mov %rax, {}", place));
 
     Ok(code)
 }
@@ -664,5 +804,12 @@ fn unique_label(prefix: &str) -> String {
         } else {
             format!("_{}{}", prefix, LABEL_COUNTER)
         }
+    }
+}
+
+fn var_place(s: &VarStorage) -> String {
+    match s {
+        VarStorage::Register(reg) => format!("%{}", reg),
+        VarStorage::Stack(offset) => format!("{}(%rbp)", offset),
     }
 }

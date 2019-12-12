@@ -60,6 +60,7 @@ pub enum Exp {
     BinOp(BinOp, Box<Exp>, Box<Exp>),
     AssignOp(String, AssignmentOp, Box<Exp>),
     CondExp(Box<Exp>, Box<Exp>, Box<Exp>),
+    FuncCall(String, Vec<Exp>),
 }
 
 pub enum Statement {
@@ -86,8 +87,9 @@ pub enum BlockItem {
 
 pub struct FuncDecl{
     pub name: String,
-    pub blocks: Vec<BlockItem>
+    pub parameters: Vec<String>,
+    pub blocks: Option<Vec<BlockItem>>,
 }
 
 // Add block node which is decl
-pub struct Program(pub FuncDecl);
+pub struct  Program(pub Vec<FuncDecl>);
