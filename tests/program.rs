@@ -230,14 +230,17 @@ mod compare_gcc {
     }
 }
 
-fn compare_expr(expr: &str) {
-    assert_eq!(compile_gcc_expr(expr), compile_expr(expr));
+fn compare_code(code: &str) {
+    assert_eq!(compile_gcc_expr(&code), compile_expr(&code));
 }
 
-fn compile_expr(expr: &str) -> usize {
-    use std::io::Write;
-
+fn compare_expr(expr: &str) {
     let code = format!("int main(){{ {} }}", expr);
+    assert_eq!(compile_gcc_expr(&code), compile_expr(&code));
+}
+
+fn compile_expr(code: &str) -> usize {
+    use std::io::Write;
 
     let code_file = random_name("code_", ".c");
     let mut file = std::fs::File::create(&code_file).unwrap();
@@ -280,10 +283,8 @@ fn compile_expr(expr: &str) -> usize {
     program.code().unwrap() as usize
 }
 
-fn compile_gcc_expr(expr: &str) -> usize {
+fn compile_gcc_expr(code: &str) -> usize {
     use std::io::Write;
-
-    let code = format!("int main(){{ {} }}", expr);
 
     let code_file = random_name("code_", ".c");
     let mut file = std::fs::File::create(&code_file).unwrap();
