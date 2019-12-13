@@ -1,22 +1,21 @@
 use crate::ast;
 use std::collections::HashMap;
 
-pub fn il(program: &ast::Program) -> Vec<Vec<Instruction>> {
-    let mut code = Vec::new();
-    let mut generator = Generator::new();
-
-    for func in &program.0 {
-        emit_fn(func, &mut generator);
-        code.push(generator.flush());
+pub fn il(p: &ast::Program) -> Vec<FuncDef> {
+    let mut gen = Generator::new();
+    let mut funcs = Vec::new();
+    for fun in &p.0{
+        funcs.push(gen.parse(fun));
     }
 
-    code
+    funcs
 }
 
 struct Generator {
     counters: [usize; 2],
     instructions: Vec<Instruction>,
     vars: HashMap<String, ID>,
+    context_ret: Option<ID>,
 }
 
 impl Generator {
@@ -25,6 +24,7 @@ impl Generator {
             counters: [0, 0],
             instructions: Vec::new(),
             vars: HashMap::new(),
+            context_ret: None,
         }
     }
 
@@ -35,7 +35,57 @@ impl Generator {
         generator
     }
 
-    pub fn id(&mut self, name: &str) -> ID {
+    pub fn parse(&mut self, func: &ast::FuncDecl) -> FuncDef {
+        if func.blocks.is_none() {
+            // here we should somehow show that this function can be called
+            // with some type of parameters
+            // it representation of declaration without definition
+            unimplemented!();
+        }
+    
+        let blocks = func.blocks.as_ref().unwrap();
+    
+        for block in blocks {
+            emit_block(self, block);
+        }
+    
+        self.vars.clear();
+        FuncDef{
+            name: func.name.clone(),
+            frame_size: self.allocated_memory(),
+            ret: self.context_ret.clone(),
+            instructions: self.flush(),
+        }
+    }
+
+    fn emit(&mut self, inst: Inst) -> Option<ID> {
+        match inst {
+            Inst::Op(op) => {
+                let id = match &op {
+                    Op::Assignment(Some(name), ..) => {
+                        let id = self.var_id(name);
+                        self.vars.insert(name.clone(), id.clone());
+                        id
+                    }
+                    _ => {
+                        let id = self.id(IDType::Temporary);
+                        self.inc_tmp();
+                        id
+                    }
+                };
+
+                self.instructions
+                    .push(Instruction::Op(Some(id.clone()), op));
+                Some(id)
+            }
+            Inst::ControllOp(cop) => {
+                self.instructions.push(Instruction::ControllOp(cop));
+                None
+            }
+        }
+    }
+
+    pub fn var_id(&mut self, name: &str) -> ID {
         match self.vars.get(name) {
             Some(id) => id.clone(),
             None => {
@@ -62,41 +112,6 @@ impl Generator {
         v
     }
 
-    pub fn emit(&mut self, op: Step) -> ID {
-        match op.tp {
-            OpType::NoInstruction => {
-                self.instructions.push(Instruction{id: None, op: op});
-                ID {
-                    id: 1111111111,
-                    tp: IDType::Temporary,
-                }
-            },
-            OpType::Inst => {
-                match op.op {
-                    Op::Arithmetic(ArithmeticOp::Add, ..) => {
-                        self.instructions.push(Instruction::with_id(ID{id: self.counters[0], tp: IDType::Temporary}, op));
-                        self.inc_tmp();
-                        ID {
-                            id: self.counters[0],
-                            tp: IDType::Temporary,
-                        }
-                    }
-                    Op::Assignment(ref id, ..) => {
-                        self.instructions.push(Instruction::with_id(id.clone(), op));
-                        self.inc_vars();
-                        ID {
-                            id: self.counters[1],
-                            tp: IDType::Var,
-                        }
-                    }
-                    _ => unimplemented!(),
-                }
-            }
-        }
-
-
-    }
-
     fn inc_vars(&mut self) -> usize {
         self.counters[1] += 1;
         self.counters[1]
@@ -106,125 +121,107 @@ impl Generator {
         self.counters[0] += 1;
         self.counters[0]
     }
-}
 
-fn emit_fn(
-    ast::FuncDecl {
-        parameters,
-        blocks,
-        name,
-    }: &ast::FuncDecl,
-    gen: &mut Generator,
-) {
-    if blocks.is_none() {
-        // here we should somehow show that this function can be called
-        // with some type of parameters
-        // it representation of declaration without definition
-        unimplemented!();
-    }
-
-    let blocks = blocks.as_ref().unwrap();
-    let mut body_generator = Generator::from(gen);
-    for block in blocks {
-        match block {
-            ast::BlockItem::Declaration(decl) => emit_decl(decl, &mut body_generator),
-            ast::BlockItem::Statement(st) => emit_st(st, &mut body_generator),
-        }
-    }
-
-    let def = FuncDef::Begin(name.clone(), body_generator.allocated_memory());
-    // let ret = FuncDef::Ret(Some(ID{id: 0, tp: IDType::Var}));
-    
-    gen.emit(Step{op: Op::FuncDef(def), tp: OpType::NoInstruction});
-
-    for ist in body_generator.instructions {
-        gen.instructions.push(ist);
-    }
-
-    // gen.emit(Step{op: Op::FuncDef(ret), tp: OpType::NoInstruction});
-}
-
-fn emit_decl(decl: &ast::Declaration, mut gen: &mut Generator) {
-    match decl {
-        ast::Declaration::Declare { name, exp } => {
-            if let Some(exp) = exp {
-                let id = gen.id(name); 
-                let val = emit_exp(exp, &mut gen);
-                gen.emit(Step{op: Op::Assignment(id, val), tp: OpType::Inst});
-            }
+    fn id(&self, tp: IDType) -> ID {
+        match tp {
+            IDType::Temporary => ID {
+                id: self.counters[0],
+                tp,
+            },
+            IDType::Var => ID {
+                id: self.counters[1],
+                tp,
+            },
         }
     }
 }
 
-fn emit_st(st: &ast::Statement, mut gen: &mut Generator) {
+fn emit_block(mut gen: &mut Generator, block: &ast::BlockItem) -> Option<ID> {
+    match block {
+        ast::BlockItem::Declaration(decl) => emit_decl(&mut gen, decl),
+        ast::BlockItem::Statement(st) => {
+            emit_st(&mut gen, st);
+            None
+        }
+    }
+}
+
+fn emit_st(mut gen: &mut Generator, st: &ast::Statement) {
     match st {
-        ast::Statement::Conditional {
-            cond_expr,
-            if_block,
-            else_block,
-        } => {
-
-        }
-        ast::Statement::Compound{list} => {
-            if let Some(list) = list.as_ref() {
-                for block in list {
-                    match block {
-                        ast::BlockItem::Declaration(decl) => emit_decl(decl, &mut gen),
-                        ast::BlockItem::Statement(st) => emit_st(st, &mut gen),
-                    }
+        ast::Statement::Compound { list } => {
+            if let Some(blocks) = list {
+                for block in blocks {
+                    emit_block(&mut gen, block);
                 }
             }
         }
         ast::Statement::Return{exp} => {
-            let id = emit_exp(exp, &mut gen);
-            let id = match id {
-                Val::Var(id) => id,
-                _ => unimplemented!(),
-            };
-            gen.emit(Step{op: Op::FuncDef(FuncDef::Ret(Some(id))), tp: OpType::NoInstruction});
+            gen.context_ret = Some(emit_exp(&mut gen, exp).unwrap());
         }
         ast::Statement::Exp{exp} => {
             if let Some(exp) = exp {
-                emit_exp(exp, &mut gen);
+                emit_exp(&mut gen, exp);
             }
         }
         _ => unimplemented!(),
     }
 }
 
-fn emit_exp(exp: &ast::Exp, mut gen: &mut Generator) -> Val {
-    match exp {
-        ast::Exp::BinOp(op, exp1, exp2) => match op {
-            ast::BinOp::Addition => {
-                let v1 = emit_exp(exp1, &mut gen);
-                let v2 = emit_exp(exp2, &mut gen);
-                Val::Var(gen.emit(Step{op: Op::Arithmetic(ArithmeticOp::Add, v1, v2), tp: OpType::Inst}))
+fn emit_decl(mut gen: &mut Generator, decl: &ast::Declaration) -> Option<ID> {
+    match decl {
+        ast::Declaration::Declare { name, exp } => {
+            match exp {
+                Some(exp) => {
+                    let id = emit_exp(&mut gen, exp).unwrap();
+                    gen.emit(Inst::Op(Op::Assignment(Some(name.clone()), Val::Var(id))))
+                }
+                None => {
+                    // we will create variable when
+                    // get the first time of usage
+                    //
+                    // that is correct?
+                    Some(gen.var_id(name))
+                }
             }
-            _ => unimplemented!(),
-        },
-        ast::Exp::Assign(name, exp) => {
-            let val = emit_exp(exp, &mut gen);
-            let id = gen.id(name);
-            Val::Var(gen.emit(Step{op: Op::Assignment(id, val), tp: OpType::Inst}))
         }
-        ast::Exp::Var(name) => Val::Var(gen.id(&name)),
-        ast::Exp::Const(ast::Const::Int(val)) => {
-            Val::Const(Const::Int(*val as i32))
+    }
+}
+
+fn emit_exp(mut gen: &mut Generator, exp: &ast::Exp) -> Option<ID> {
+    match exp {
+        ast::Exp::BinOp(ast::BinOp::Addition, exp1, exp2) => {
+            let id1 = emit_exp(&mut gen, exp1).unwrap();
+            let id2 = emit_exp(&mut gen, exp2).unwrap();
+            gen.emit(Inst::Op(Op::Arithmetic(ArithmeticOp::Add, id1, id2)))
+        }
+        ast::Exp::Assign(name, exp) => {
+            let id = emit_exp(&mut gen, exp).unwrap();
+            gen.emit(Inst::Op(Op::Assignment(Some(name.clone()), Val::Var(id))))
+        }
+        ast::Exp::Var(name) => {
+            // should it create variable if it not exists?
+            Some(gen.var_id(name))
+        }
+        ast::Exp::Const(ast::Const::Int(int_val)) => gen.emit(Inst::Op(Op::Assignment(
+            None,
+            Val::Const(Const::Int(*int_val as i32)),
+        ))),
+        _ => {
+            unimplemented!()
         },
-        _ => unimplemented!(),
     }
 }
 
 #[derive(Debug)]
-pub struct Instruction {
-    pub id: Option<ID>,
-    pub op: Step,
+pub enum Instruction {
+    Op(Option<ID>, Op),
+    ControllOp(ControllOp),
 }
 
-impl Instruction {
-    pub fn with_id(id: ID, op: Step) -> Self {
-        Instruction { id: Some(id), op }
-    }
+#[derive(Debug)]
+pub enum Inst {
+    Op(Op),
+    ControllOp(ControllOp),
 }
 
 #[derive(Clone, Debug)]
@@ -242,35 +239,21 @@ pub enum IDType {
 pub type Label = String;
 
 #[derive(Debug)]
-pub struct Step {
-    pub op: Op,
-    pub tp: OpType,
-}
-
-#[derive(Clone, Debug)]
-pub enum OpType {
-    NoInstruction,
-    Inst,
+pub enum Op {
+    Arithmetic(ArithmeticOp, ID, ID),
+    // here might be better used ID
+    Assignment(Option<String>, Val),
+    Relational(RelationalOp, ID, ID),
+    Call(Call, Label),
 }
 
 #[derive(Debug)]
-pub enum Op {
-    Arithmetic(ArithmeticOp, Val, Val),
-    Assignment(ID, Val),
-    Relational(RelationalOp, Val, Val),
-    Branch(LabelBranch),
-    Call(FnCall, Label),
+pub enum ControllOp {
     FuncDef(FuncDef),
-    Parameters(Parameters),
+    Branch(LabelBranch),
 }
 
 type BytesSize = usize;
-
-#[derive(Debug)]
-pub enum Parameters {
-    Push(ID),
-    Pop(BytesSize),
-}
 
 #[derive(Debug)]
 pub enum Const {
@@ -281,6 +264,22 @@ pub enum Const {
 pub enum Val {
     Var(ID),
     Const(Const),
+}
+
+impl Val {
+    fn to_var(self) -> Option<ID> {
+        match self {
+            Val::Var(id) => Some(id),
+            _ => None,
+        }
+    }
+
+    fn to_const(self) -> Option<Const> {
+        match self {
+            Val::Const(c) => Some(c),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -308,18 +307,21 @@ pub enum LabelBranch {
 }
 
 #[derive(Debug)]
-pub enum FnCall {
+pub struct Call {
+    params: Vec<ID>,
+    pop_size: BytesSize,
+    tp: FnType,
+}
+
+#[derive(Debug)]
+pub enum FnType {
     LCall,
 }
 
 #[derive(Debug)]
-pub enum FuncDef {
-    Begin(String, BytesSize),
-    Ret(Option<ID>),
+pub struct FuncDef {
+    pub name: String,
+    pub frame_size: BytesSize,
+    pub ret: Option<ID>,
+    pub instructions: Vec<Instruction>,
 }
-
-// impl FuncDef {
-//     fn new(size: BytesSize, ret: Option<ID>) -> Self {
-//         FuncDef { begin: size, ret }
-//     }
-// }
