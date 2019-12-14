@@ -10,7 +10,6 @@ pub fn il(p: &ast::Program) -> Vec<FuncDef> {
 
     funcs
 }
-
 struct Generator {
     counters: [usize; 2],
     instructions: Vec<Instruction>,
@@ -189,10 +188,11 @@ fn emit_decl(mut gen: &mut Generator, decl: &ast::Declaration) -> Option<ID> {
 
 fn emit_exp(mut gen: &mut Generator, exp: &ast::Exp) -> Option<ID> {
     match exp {
-        ast::Exp::BinOp(ast::BinOp::Addition, exp1, exp2) => {
+        ast::Exp::BinOp(op, exp1, exp2) => {
             let id1 = emit_exp(&mut gen, exp1).unwrap();
             let id2 = emit_exp(&mut gen, exp2).unwrap();
-            gen.emit(Inst::Op(Op::Arithmetic(ArithmeticOp::Add, id1, id2)))
+            let op = ArithmeticOp::from(op).unwrap();
+            gen.emit(Inst::Op(Op::Arithmetic(op, id1, id2)))
         }
         ast::Exp::Assign(name, exp) => {
             let id = emit_exp(&mut gen, exp).unwrap();
@@ -289,6 +289,19 @@ pub enum ArithmeticOp {
     Mul,
     Div,
     Mod,
+}
+
+impl ArithmeticOp {
+    fn from(op: &ast::BinOp) -> Option<Self> {
+        match op {
+            ast::BinOp::Addition => Some(ArithmeticOp::Add),
+            ast::BinOp::Sub => Some(ArithmeticOp::Sub),
+            ast::BinOp::Multiplication => Some(ArithmeticOp::Mul),
+            ast::BinOp::Division => Some(ArithmeticOp::Div),
+            ast::BinOp::Modulo => Some(ArithmeticOp::Mod),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug)]
