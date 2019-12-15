@@ -96,8 +96,17 @@ impl Generator {
     }
 
     pub fn var_id(&mut self, name: &str) -> ID {
-        self.allocated += 1;
-        self.recognize_var(name)
+        match self.vars.get(name) {
+            Some(id) => id.clone(),
+            None => {
+                let id = self.id(IDType::Var);
+                self.inc_vars();
+                self.vars.insert(name.to_owned(), id.clone());
+                self.allocated += 1;
+
+                id
+            }
+        }
     }
 
     pub fn recognize_var(&mut self, name: &str) -> ID {
