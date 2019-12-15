@@ -54,12 +54,18 @@ impl Generator {
             emit_block(self, block);
         }
 
+        let vars = self.vars
+            .iter()
+            .map(|(var, id)|(id.id, var.clone()))
+            .collect::<HashMap<usize, String>>();
+        
         self.vars.clear();
         FuncDef {
             name: func.name.clone(),
             frame_size: self.allocated_memory(),
             ret: self.context_ret.clone(),
             instructions: self.flush(),
+            vars: vars,
         }
     }
 
@@ -391,6 +397,7 @@ pub enum FnType {
 pub struct FuncDef {
     pub name: String,
     pub frame_size: BytesSize,
+    pub vars: HashMap<usize, String>,
     pub ret: Option<ID>,
     pub instructions: Vec<Instruction>,
 }
