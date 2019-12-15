@@ -4,14 +4,14 @@ use std::collections::HashMap;
 pub fn il(p: &ast::Program) -> Vec<FuncDef> {
     let mut gen = Generator::new();
     let mut funcs = Vec::new();
-    for fun in &p.0{
+    for fun in &p.0 {
         funcs.push(gen.parse(fun));
     }
 
     funcs
 }
 struct Generator {
-    counters: [usize; 2],
+    counters: [usize; 3],
     instructions: Vec<Instruction>,
     vars: HashMap<String, ID>,
     context_ret: Option<ID>,
@@ -20,7 +20,7 @@ struct Generator {
 impl Generator {
     pub fn new() -> Self {
         Generator {
-            counters: [0, 0],
+            counters: [0, 0, 0],
             instructions: Vec::new(),
             vars: HashMap::new(),
             context_ret: None,
@@ -41,15 +41,15 @@ impl Generator {
             // it representation of declaration without definition
             unimplemented!();
         }
-    
+
         let blocks = func.blocks.as_ref().unwrap();
-    
+
         for block in blocks {
             emit_block(self, block);
         }
-    
+
         self.vars.clear();
-        FuncDef{
+        FuncDef {
             name: func.name.clone(),
             frame_size: self.allocated_memory(),
             ret: self.context_ret.clone(),
@@ -121,6 +121,12 @@ impl Generator {
         self.counters[0]
     }
 
+    fn uniq_label(&mut self) -> Label {
+        let l = self.counters[2];
+        self.counters[2] += 1;
+        l
+    }
+
     fn id(&self, tp: IDType) -> ID {
         match tp {
             IDType::Temporary => ID {
@@ -154,12 +160,32 @@ fn emit_st(mut gen: &mut Generator, st: &ast::Statement) {
                 }
             }
         }
-        ast::Statement::Return{exp} => {
+        ast::Statement::Return { exp } => {
             gen.context_ret = Some(emit_exp(&mut gen, exp).unwrap());
         }
-        ast::Statement::Exp{exp} => {
+        ast::Statement::Exp { exp } => {
             if let Some(exp) = exp {
                 emit_exp(&mut gen, exp);
+            }
+        }
+        ast::Statement::Conditional {
+            cond_expr,
+            if_block,
+            else_block,
+        } => {
+            let cond_id = emit_exp(&mut gen, cond_expr).unwrap();
+            let end_label = gen.uniq_label();
+            gen.emit(Inst::ControllOp(ControllOp::Branch(LabelBranch::IfGOTO(cond_id, end_label))));
+            emit_st(&mut gen, if_block);
+            if let Some(else_block) = else_block {
+                let else_label = end_label;
+                let end_label = gen.uniq_label();
+                gen.emit(Inst::ControllOp(ControllOp::Branch(LabelBranch::GOTO(end_label))));
+                gen.emit(Inst::ControllOp(ControllOp::Branch(LabelBranch::Label(else_label))));
+                emit_st(&mut gen, else_block);
+                gen.emit(Inst::ControllOp(ControllOp::Branch(LabelBranch::Label(end_label))));
+            } else {
+                gen.emit(Inst::ControllOp(ControllOp::Branch(LabelBranch::Label(end_label))));
             }
         }
         _ => unimplemented!(),
@@ -191,8 +217,15 @@ fn emit_exp(mut gen: &mut Generator, exp: &ast::Exp) -> Option<ID> {
         ast::Exp::BinOp(op, exp1, exp2) => {
             let id1 = emit_exp(&mut gen, exp1).unwrap();
             let id2 = emit_exp(&mut gen, exp2).unwrap();
-            let op = ArithmeticOp::from(op).unwrap();
-            gen.emit(Inst::Op(Op::Arithmetic(op, id1, id2)))
+            match op {
+                ast::BinOp::Equal => {
+                    gen.emit(Inst::Op(Op::Relational(RelationalOp::Equal, id1, id2)))
+                }
+                _ => {
+                    let op = ArithmeticOp::from(op).unwrap();
+                    gen.emit(Inst::Op(Op::Arithmetic(op, id1, id2)))
+                }
+            }
         }
         ast::Exp::Assign(name, exp) => {
             let id = emit_exp(&mut gen, exp).unwrap();
@@ -206,9 +239,7 @@ fn emit_exp(mut gen: &mut Generator, exp: &ast::Exp) -> Option<ID> {
             None,
             Val::Const(Const::Int(*int_val as i32)),
         ))),
-        _ => {
-            unimplemented!()
-        },
+        _ => unimplemented!(),
     }
 }
 
@@ -236,7 +267,7 @@ pub enum IDType {
     Var,
 }
 
-pub type Label = String;
+pub type Label = usize;
 
 #[derive(Debug)]
 pub enum Op {
@@ -316,7 +347,8 @@ pub enum RelationalOp {
 pub enum LabelBranch {
     Label(Label),
     GOTO(Label),
-    IfGOTO(Val, Label),
+    // might here can be Val?
+    IfGOTO(ID, Label),
 }
 
 #[derive(Debug)]

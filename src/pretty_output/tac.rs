@@ -15,10 +15,30 @@ pub fn pretty(fun: &tac::FuncDef) {
                     tac::Op::Arithmetic(op, v1, v2) => {
                         println!("  {}: {} {} {}", pretty_id(id), pretty_id(v1), pretty_arith_op(op), pretty_id(v2));
                     }
+                    tac::Op::Relational(tac::RelationalOp::Equal, v1, v2) => {
+                        println!("  {}: {} == {}", pretty_id(id), pretty_id(v1), pretty_id(v2));
+                    }
                     _ => unimplemented!(),
                 };
             }
-            tac::Instruction::ControllOp(cop) => {}
+            tac::Instruction::ControllOp(cop) => {
+                match cop {
+                    tac::ControllOp::Branch(lb) => {
+                        match lb {
+                            tac::LabelBranch::Label(label) => {
+                                println!("{}:", pretty_label(label));
+                            },
+                            tac::LabelBranch::GOTO(label) => {
+                                println!("  Goto {}", pretty_label(label));
+                            },
+                            tac::LabelBranch::IfGOTO(id, label) => {
+                                println!("  IfZ {} Goto {}", pretty_id(id), pretty_label(label));
+                            },
+                        }
+                    }
+                    _ => unimplemented!(),
+                }
+            }
         }
     }
 
@@ -41,6 +61,10 @@ pub fn pretty_val(v: &tac::Val) -> String {
         tac::Val::Var(id) => format!("{}", pretty_id(id)),
         tac::Val::Const(tac::Const::Int(val)) => format!("{}", val),
     }
+}
+
+pub fn pretty_label(label: &tac::Label) -> String {
+    format!("_L{}", label)
 }
 
 pub fn pretty_arith_op(op: &tac::ArithmeticOp) -> String {
