@@ -11,16 +11,18 @@ pub fn il(p: &ast::Program) -> Vec<FuncDef> {
     funcs
 }
 struct Generator {
-    counters: [usize; 3],
     instructions: Vec<Instruction>,
     vars: HashMap<String, ID>,
     context_ret: Option<ID>,
+    counters: [usize; 3],
+    allocated: usize,
 }
 
 impl Generator {
     pub fn new() -> Self {
         Generator {
             counters: [0, 0, 0],
+            allocated: 0,
             instructions: Vec::new(),
             vars: HashMap::new(),
             context_ret: None,
@@ -40,6 +42,10 @@ impl Generator {
             // with some type of parameters
             // it representation of declaration without definition
             unimplemented!();
+        }
+
+        for p in func.parameters.iter() {
+            self.recognize_var(&p);
         }
 
         let blocks = func.blocks.as_ref().unwrap();
@@ -63,7 +69,6 @@ impl Generator {
                 let id = match &op {
                     Op::Assignment(Some(name), ..) => {
                         let id = self.var_id(name);
-                        self.vars.insert(name.clone(), id.clone());
                         id
                     }
                     _ => {
@@ -85,15 +90,16 @@ impl Generator {
     }
 
     pub fn var_id(&mut self, name: &str) -> ID {
+        self.allocated += 1;
+        self.recognize_var(name)
+    }
+
+    pub fn recognize_var(&mut self, name: &str) -> ID {
         match self.vars.get(name) {
             Some(id) => id.clone(),
             None => {
-                let id = ID {
-                    tp: IDType::Var,
-                    id: self.counters[1],
-                };
+                let id = self.id(IDType::Var);
                 self.inc_vars();
-
                 self.vars.insert(name.to_owned(), id.clone());
 
                 id
@@ -102,10 +108,11 @@ impl Generator {
     }
 
     pub fn allocated_memory(&self) -> BytesSize {
-        (self.counters[0] + self.counters[1]) * 4
+        self.allocated * 4
     }
 
     pub fn flush(&mut self) -> Vec<Instruction> {
+        self.allocated = 0;
         let mut v = Vec::new();
         std::mem::swap(&mut self.instructions, &mut v);
         v
@@ -117,8 +124,10 @@ impl Generator {
     }
 
     fn inc_tmp(&mut self) -> usize {
+        self.allocated += 1;
+        let i = self.counters[0];
         self.counters[0] += 1;
-        self.counters[0]
+        i
     }
 
     fn uniq_label(&mut self) -> Label {
@@ -233,12 +242,26 @@ fn emit_exp(mut gen: &mut Generator, exp: &ast::Exp) -> Option<ID> {
         }
         ast::Exp::Var(name) => {
             // should it create variable if it not exists?
-            Some(gen.var_id(name))
+            Some(gen.recognize_var(name))
         }
         ast::Exp::Const(ast::Const::Int(int_val)) => gen.emit(Inst::Op(Op::Assignment(
             None,
             Val::Const(Const::Int(*int_val as i32)),
         ))),
+        ast::Exp::FuncCall(name, params) => {
+            let params_ids = params
+                .iter()
+                .map(|p| emit_exp(&mut gen, p).unwrap())
+                .collect::<Vec<ID>>();
+            let call = Call {
+                name: name.clone(),
+                pop_size: params_ids.len() * 4,
+                params: params_ids,
+                tp: FnType::LCall,
+            };
+            
+            gen.emit(Inst::Op(Op::Call(call)))
+        }
         _ => unimplemented!(),
     }
 }
@@ -275,7 +298,7 @@ pub enum Op {
     // here might be better used ID
     Assignment(Option<String>, Val),
     Relational(RelationalOp, ID, ID),
-    Call(Call, Label),
+    Call(Call),
 }
 
 #[derive(Debug)]
@@ -353,9 +376,10 @@ pub enum LabelBranch {
 
 #[derive(Debug)]
 pub struct Call {
-    params: Vec<ID>,
-    pop_size: BytesSize,
-    tp: FnType,
+    pub name: String,
+    pub params: Vec<ID>,
+    pub pop_size: BytesSize,
+    pub tp: FnType,
 }
 
 #[derive(Debug)]

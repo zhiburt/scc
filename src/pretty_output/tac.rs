@@ -1,7 +1,7 @@
 use simple_c_compiler::tac;
 
 pub fn pretty(fun: &tac::FuncDef) {
-    println!("{}:", fun.name);
+    println!("{}:", pretty_fun_name(&fun.name));
     println!("  BeginFunc {}", fun.frame_size);
 
     for inst in &fun.instructions {
@@ -17,6 +17,14 @@ pub fn pretty(fun: &tac::FuncDef) {
                     }
                     tac::Op::Relational(tac::RelationalOp::Equal, v1, v2) => {
                         println!("  {}: {} == {}", pretty_id(id), pretty_id(v1), pretty_id(v2));
+                    }
+                    tac::Op::Call(call) => {
+                        for p in call.params.iter() {
+                            println!("  PushParam {}", pretty_id(id));
+                        }
+
+                        println!("  {}: LCall {}", pretty_id(id), pretty_fun_name(&call.name));
+                        println!("  PopParams {}", call.pop_size);
                     }
                     _ => unimplemented!(),
                 };
@@ -65,6 +73,14 @@ pub fn pretty_val(v: &tac::Val) -> String {
 
 pub fn pretty_label(label: &tac::Label) -> String {
     format!("_L{}", label)
+}
+
+pub fn pretty_fun_name(name: &str) -> String {
+    if name == "main" {
+        name.to_string()
+    } else {
+        format!("_{}", name)
+    }
 }
 
 pub fn pretty_arith_op(op: &tac::ArithmeticOp) -> String {
