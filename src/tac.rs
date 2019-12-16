@@ -212,6 +212,16 @@ fn emit_st(mut gen: &mut Generator, st: &ast::Statement) {
                 gen.emit(Inst::ControllOp(ControllOp::Branch(LabelBranch::Label(end_label))));
             }
         }
+        ast::Statement::While{exp, statement} => {
+            let cond_id = emit_exp(&mut gen, exp).unwrap();
+            let begin_label = gen.uniq_label();
+            let end_label = gen.uniq_label();
+            gen.emit(Inst::ControllOp(ControllOp::Branch(LabelBranch::Label(begin_label))));
+            gen.emit(Inst::ControllOp(ControllOp::Branch(LabelBranch::IfGOTO(cond_id, end_label))));
+            emit_st(&mut gen, statement);
+            gen.emit(Inst::ControllOp(ControllOp::Branch(LabelBranch::GOTO(begin_label))));
+            gen.emit(Inst::ControllOp(ControllOp::Branch(LabelBranch::Label(end_label))));
+        }
         _ => unimplemented!(),
     }
 }
