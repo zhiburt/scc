@@ -213,12 +213,44 @@ fn emit_st(mut gen: &mut Generator, st: &ast::Statement) {
             }
         }
         ast::Statement::While{exp, statement} => {
-            let cond_id = emit_exp(&mut gen, exp).unwrap();
             let begin_label = gen.uniq_label();
             let end_label = gen.uniq_label();
             gen.emit(Inst::ControllOp(ControllOp::Branch(LabelBranch::Label(begin_label))));
+            let cond_id = emit_exp(&mut gen, exp).unwrap();
             gen.emit(Inst::ControllOp(ControllOp::Branch(LabelBranch::IfGOTO(cond_id, end_label))));
             emit_st(&mut gen, statement);
+            gen.emit(Inst::ControllOp(ControllOp::Branch(LabelBranch::GOTO(begin_label))));
+            gen.emit(Inst::ControllOp(ControllOp::Branch(LabelBranch::Label(end_label))));
+        }
+        ast::Statement::ForDecl{decl, exp2, exp3, statement} => {
+            // there is a question with scope variables here
+            let begin_label = gen.uniq_label();
+            let end_label = gen.uniq_label();
+            emit_decl(&mut gen, decl);
+            gen.emit(Inst::ControllOp(ControllOp::Branch(LabelBranch::Label(begin_label))));
+            let cond_id = emit_exp(&mut gen, exp2).unwrap();
+            gen.emit(Inst::ControllOp(ControllOp::Branch(LabelBranch::IfGOTO(cond_id, end_label))));
+            emit_st(&mut gen, statement);
+            if let Some(exp3) = exp3 {
+                emit_exp(&mut gen, exp3).unwrap();
+            }
+            gen.emit(Inst::ControllOp(ControllOp::Branch(LabelBranch::GOTO(begin_label))));
+            gen.emit(Inst::ControllOp(ControllOp::Branch(LabelBranch::Label(end_label))));
+        }
+        ast::Statement::For{exp1, exp2, exp3, statement} => {
+            // there is a question with scope variables here
+            let begin_label = gen.uniq_label();
+            let end_label = gen.uniq_label();
+            if let Some(exp1) = exp1 {
+                emit_exp(&mut gen, exp1).unwrap();
+            }
+            gen.emit(Inst::ControllOp(ControllOp::Branch(LabelBranch::Label(begin_label))));
+            let cond_id = emit_exp(&mut gen, exp2).unwrap();
+            gen.emit(Inst::ControllOp(ControllOp::Branch(LabelBranch::IfGOTO(cond_id, end_label))));
+            emit_st(&mut gen, statement);
+            if let Some(exp3) = exp3 {
+                emit_exp(&mut gen, exp3).unwrap();
+            }
             gen.emit(Inst::ControllOp(ControllOp::Branch(LabelBranch::GOTO(begin_label))));
             gen.emit(Inst::ControllOp(ControllOp::Branch(LabelBranch::Label(end_label))));
         }
