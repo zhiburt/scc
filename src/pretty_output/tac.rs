@@ -26,12 +26,13 @@ pub fn pretty(fun: &tac::FuncDef) {
                             pretty_id(&fun.vars, v2)
                         );
                     }
-                    tac::Op::Relational(tac::RelationalOp::Equal, v1, v2) => {
+                    tac::Op::Relational(op, v1, v2) => {
                         println!(
-                            "  {}: {} == {}",
+                            "  {}: {} {} {}",
                             pretty_id(&fun.vars, id),
                             pretty_id(&fun.vars, v1),
-                            pretty_id(&fun.vars, v2)
+                            pretty_rel_op(op),
+                            pretty_id(&fun.vars, v2),
                         );
                     }
                     tac::Op::Call(call) => {
@@ -112,5 +113,18 @@ pub fn pretty_arith_op(op: &tac::ArithmeticOp) -> String {
         tac::ArithmeticOp::Mul => "*".to_string(),
         tac::ArithmeticOp::Div => "/".to_string(),
         tac::ArithmeticOp::Mod => "%".to_string(),
+    }
+}
+
+pub fn pretty_rel_op(op: &tac::RelationalOp) -> String {
+    match op {
+        tac::RelationalOp::Equal => "==".to_string(),
+        tac::RelationalOp::NotEq => "!=".to_string(),
+        tac::RelationalOp::Less => "<".to_string(),
+        tac::RelationalOp::LessOrEq => "<=".to_string(),
+        tac::RelationalOp::Greater => ">".to_string(),
+        tac::RelationalOp::GreaterOrEq => ">=".to_string(),
+        tac::RelationalOp::And => "&&".to_string(),
+        tac::RelationalOp::Or => "||".to_string(),
     }
 }

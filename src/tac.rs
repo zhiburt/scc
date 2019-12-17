@@ -297,6 +297,21 @@ fn emit_exp(mut gen: &mut Generator, exp: &ast::Exp) -> Option<ID> {
                 ast::BinOp::Equal => {
                     gen.emit(Inst::Op(Op::Relational(RelationalOp::Equal, id1, id2)))
                 }
+                ast::BinOp::NotEqual => {
+                    gen.emit(Inst::Op(Op::Relational(RelationalOp::NotEq, id1, id2)))
+                }
+                ast::BinOp::GreaterThan => {
+                    gen.emit(Inst::Op(Op::Relational(RelationalOp::Greater, id1, id2)))
+                }
+                ast::BinOp::GreaterThanOrEqual => {
+                    gen.emit(Inst::Op(Op::Relational(RelationalOp::GreaterOrEq, id1, id2)))
+                }
+                ast::BinOp::LessThan => {
+                    gen.emit(Inst::Op(Op::Relational(RelationalOp::Less, id1, id2)))
+                }
+                ast::BinOp::LessThanOrEqual => {
+                    gen.emit(Inst::Op(Op::Relational(RelationalOp::LessOrEq, id1, id2)))
+                }
                 _ => {
                     let op = ArithmeticOp::from(op).unwrap();
                     gen.emit(Inst::Op(Op::Arithmetic(op, id1, id2)))
@@ -428,7 +443,11 @@ impl ArithmeticOp {
 #[derive(Debug)]
 pub enum RelationalOp {
     Equal,
+    NotEq,
     Less,
+    LessOrEq,
+    Greater,
+    GreaterOrEq,
     And,
     Or,
 }
