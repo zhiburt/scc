@@ -69,12 +69,12 @@ impl Generator {
         }
     }
 
-    fn emit(&mut self, inst: Inst) -> Option<ID> {
+    fn emit(&mut self, inst: PreInst) -> Option<ID> {
         match inst {
-            Inst::Op(op) => {
-                let id = match &op {
-                    Op::Assignment(Some(name), ..) => {
-                        let id = self.var_id(name);
+            PreInst::Op(pre_op) => {
+                let id = match &pre_op {
+                    PreOp::Assignment(Some(name), ..) => {
+                        let id = self.var_id(&name);
                         id
                     }
                     _ => {
@@ -85,10 +85,10 @@ impl Generator {
                 };
 
                 self.instructions
-                    .push(Instruction::Op(Some(id.clone()), op));
+                    .push(Instruction::Op(Some(id.clone()), Op::from(pre_op)));
                 Some(id)
             }
-            Inst::ControllOp(cop) => {
+            PreInst::ControllOp(cop) => {
                 self.instructions.push(Instruction::ControllOp(cop));
                 None
             }
@@ -199,43 +199,43 @@ fn emit_st(mut gen: &mut Generator, st: &ast::Statement) {
         } => {
             let cond_id = emit_exp(&mut gen, cond_expr).unwrap();
             let end_label = gen.uniq_label();
-            gen.emit(Inst::ControllOp(ControllOp::Branch(LabelBranch::IfGOTO(cond_id, end_label))));
+            gen.emit(PreInst::ControllOp(ControllOp::Branch(LabelBranch::IfGOTO(cond_id, end_label))));
             emit_st(&mut gen, if_block);
             if let Some(else_block) = else_block {
                 let else_label = end_label;
                 let end_label = gen.uniq_label();
-                gen.emit(Inst::ControllOp(ControllOp::Branch(LabelBranch::GOTO(end_label))));
-                gen.emit(Inst::ControllOp(ControllOp::Branch(LabelBranch::Label(else_label))));
+                gen.emit(PreInst::ControllOp(ControllOp::Branch(LabelBranch::GOTO(end_label))));
+                gen.emit(PreInst::ControllOp(ControllOp::Branch(LabelBranch::Label(else_label))));
                 emit_st(&mut gen, else_block);
-                gen.emit(Inst::ControllOp(ControllOp::Branch(LabelBranch::Label(end_label))));
+                gen.emit(PreInst::ControllOp(ControllOp::Branch(LabelBranch::Label(end_label))));
             } else {
-                gen.emit(Inst::ControllOp(ControllOp::Branch(LabelBranch::Label(end_label))));
+                gen.emit(PreInst::ControllOp(ControllOp::Branch(LabelBranch::Label(end_label))));
             }
         }
         ast::Statement::While{exp, statement} => {
             let begin_label = gen.uniq_label();
             let end_label = gen.uniq_label();
-            gen.emit(Inst::ControllOp(ControllOp::Branch(LabelBranch::Label(begin_label))));
+            gen.emit(PreInst::ControllOp(ControllOp::Branch(LabelBranch::Label(begin_label))));
             let cond_id = emit_exp(&mut gen, exp).unwrap();
-            gen.emit(Inst::ControllOp(ControllOp::Branch(LabelBranch::IfGOTO(cond_id, end_label))));
+            gen.emit(PreInst::ControllOp(ControllOp::Branch(LabelBranch::IfGOTO(cond_id, end_label))));
             emit_st(&mut gen, statement);
-            gen.emit(Inst::ControllOp(ControllOp::Branch(LabelBranch::GOTO(begin_label))));
-            gen.emit(Inst::ControllOp(ControllOp::Branch(LabelBranch::Label(end_label))));
+            gen.emit(PreInst::ControllOp(ControllOp::Branch(LabelBranch::GOTO(begin_label))));
+            gen.emit(PreInst::ControllOp(ControllOp::Branch(LabelBranch::Label(end_label))));
         }
         ast::Statement::ForDecl{decl, exp2, exp3, statement} => {
             // there is a question with scope variables here
             let begin_label = gen.uniq_label();
             let end_label = gen.uniq_label();
             emit_decl(&mut gen, decl);
-            gen.emit(Inst::ControllOp(ControllOp::Branch(LabelBranch::Label(begin_label))));
+            gen.emit(PreInst::ControllOp(ControllOp::Branch(LabelBranch::Label(begin_label))));
             let cond_id = emit_exp(&mut gen, exp2).unwrap();
-            gen.emit(Inst::ControllOp(ControllOp::Branch(LabelBranch::IfGOTO(cond_id, end_label))));
+            gen.emit(PreInst::ControllOp(ControllOp::Branch(LabelBranch::IfGOTO(cond_id, end_label))));
             emit_st(&mut gen, statement);
             if let Some(exp3) = exp3 {
                 emit_exp(&mut gen, exp3).unwrap();
             }
-            gen.emit(Inst::ControllOp(ControllOp::Branch(LabelBranch::GOTO(begin_label))));
-            gen.emit(Inst::ControllOp(ControllOp::Branch(LabelBranch::Label(end_label))));
+            gen.emit(PreInst::ControllOp(ControllOp::Branch(LabelBranch::GOTO(begin_label))));
+            gen.emit(PreInst::ControllOp(ControllOp::Branch(LabelBranch::Label(end_label))));
         }
         ast::Statement::For{exp1, exp2, exp3, statement} => {
             // there is a question with scope variables here
@@ -244,25 +244,25 @@ fn emit_st(mut gen: &mut Generator, st: &ast::Statement) {
             if let Some(exp1) = exp1 {
                 emit_exp(&mut gen, exp1).unwrap();
             }
-            gen.emit(Inst::ControllOp(ControllOp::Branch(LabelBranch::Label(begin_label))));
+            gen.emit(PreInst::ControllOp(ControllOp::Branch(LabelBranch::Label(begin_label))));
             let cond_id = emit_exp(&mut gen, exp2).unwrap();
-            gen.emit(Inst::ControllOp(ControllOp::Branch(LabelBranch::IfGOTO(cond_id, end_label))));
+            gen.emit(PreInst::ControllOp(ControllOp::Branch(LabelBranch::IfGOTO(cond_id, end_label))));
             emit_st(&mut gen, statement);
             if let Some(exp3) = exp3 {
                 emit_exp(&mut gen, exp3).unwrap();
             }
-            gen.emit(Inst::ControllOp(ControllOp::Branch(LabelBranch::GOTO(begin_label))));
-            gen.emit(Inst::ControllOp(ControllOp::Branch(LabelBranch::Label(end_label))));
+            gen.emit(PreInst::ControllOp(ControllOp::Branch(LabelBranch::GOTO(begin_label))));
+            gen.emit(PreInst::ControllOp(ControllOp::Branch(LabelBranch::Label(end_label))));
         }
         ast::Statement::Do{exp, statement} => {
             let begin_label = gen.uniq_label();
             let end_label = gen.uniq_label();
-            gen.emit(Inst::ControllOp(ControllOp::Branch(LabelBranch::Label(begin_label))));
+            gen.emit(PreInst::ControllOp(ControllOp::Branch(LabelBranch::Label(begin_label))));
             emit_st(&mut gen, statement);
             let cond_id = emit_exp(&mut gen, exp).unwrap();
-            gen.emit(Inst::ControllOp(ControllOp::Branch(LabelBranch::IfGOTO(cond_id, end_label))));
-            gen.emit(Inst::ControllOp(ControllOp::Branch(LabelBranch::GOTO(begin_label))));
-            gen.emit(Inst::ControllOp(ControllOp::Branch(LabelBranch::Label(end_label))));
+            gen.emit(PreInst::ControllOp(ControllOp::Branch(LabelBranch::IfGOTO(cond_id, end_label))));
+            gen.emit(PreInst::ControllOp(ControllOp::Branch(LabelBranch::GOTO(begin_label))));
+            gen.emit(PreInst::ControllOp(ControllOp::Branch(LabelBranch::Label(end_label))));
         }
         _ => unimplemented!(),
     }
@@ -274,7 +274,7 @@ fn emit_decl(mut gen: &mut Generator, decl: &ast::Declaration) -> Option<ID> {
             match exp {
                 Some(exp) => {
                     let id = emit_exp(&mut gen, exp).unwrap();
-                    gen.emit(Inst::Op(Op::Assignment(Some(name.clone()), Val::Var(id))))
+                    gen.emit(PreInst::Op(PreOp::Assignment(Some(name.clone()), Val::Var(id))))
                 }
                 None => {
                     // we will create variable when
@@ -295,47 +295,49 @@ fn emit_exp(mut gen: &mut Generator, exp: &ast::Exp) -> Option<ID> {
             let id2 = emit_exp(&mut gen, exp2).unwrap();
 
             if let Some(b_op) = BitwiseOp::from(op) {
-                gen.emit(Inst::Op(Op::Bit(b_op, id1, id2)))
+                gen.emit(PreInst::Op(PreOp::Bit(b_op, id1, id2)))
             } else {
                 match op {
                     ast::BinOp::Equal => {
-                        gen.emit(Inst::Op(Op::Relational(RelationalOp::Equal, id1, id2)))
+                        gen.emit(PreInst::Op(PreOp::Relational(RelationalOp::Equal, id1, id2)))
                     }
                     ast::BinOp::NotEqual => {
-                        gen.emit(Inst::Op(Op::Relational(RelationalOp::NotEq, id1, id2)))
+                        gen.emit(PreInst::Op(PreOp::Relational(RelationalOp::NotEq, id1, id2)))
                     }
                     ast::BinOp::GreaterThan => {
-                        gen.emit(Inst::Op(Op::Relational(RelationalOp::Greater, id1, id2)))
+                        gen.emit(PreInst::Op(PreOp::Relational(RelationalOp::Greater, id1, id2)))
                     }
                     ast::BinOp::GreaterThanOrEqual => {
-                        gen.emit(Inst::Op(Op::Relational(RelationalOp::GreaterOrEq, id1, id2)))
+                        gen.emit(PreInst::Op(PreOp::Relational(RelationalOp::GreaterOrEq, id1, id2)))
                     }
                     ast::BinOp::LessThan => {
-                        gen.emit(Inst::Op(Op::Relational(RelationalOp::Less, id1, id2)))
+                        gen.emit(PreInst::Op(PreOp::Relational(RelationalOp::Less, id1, id2)))
                     }
                     ast::BinOp::LessThanOrEqual => {
-                        gen.emit(Inst::Op(Op::Relational(RelationalOp::LessOrEq, id1, id2)))
+                        gen.emit(PreInst::Op(PreOp::Relational(RelationalOp::LessOrEq, id1, id2)))
                     }
                     _ => {
                         let op = ArithmeticOp::from(op).unwrap();
-                        gen.emit(Inst::Op(Op::Arithmetic(op, id1, id2)))
+                        gen.emit(PreInst::Op(PreOp::Arithmetic(op, id1, id2)))
                     }
                 }
             }
         }
         ast::Exp::UnOp(op, exp) => {
+            // this id is the variable's one
             let id = emit_exp(&mut gen, exp).unwrap();
-            gen.emit(Inst::Op(Op::Unary(UnOp::from(op), id)))
+            let un_op = UnOpInst::from(op);
+            gen.emit(PreInst::Op(PreOp::Unary(un_op, id)))
         }
         ast::Exp::Assign(name, exp) => {
             let id = emit_exp(&mut gen, exp).unwrap();
-            gen.emit(Inst::Op(Op::Assignment(Some(name.clone()), Val::Var(id))))
+            gen.emit(PreInst::Op(PreOp::Assignment(Some(name.clone()), Val::Var(id))))
         }
         ast::Exp::Var(name) => {
             // should it create variable if it not exists?
             Some(gen.recognize_var(name))
         }
-        ast::Exp::Const(ast::Const::Int(int_val)) => gen.emit(Inst::Op(Op::Assignment(
+        ast::Exp::Const(ast::Const::Int(int_val)) => gen.emit(PreInst::Op(PreOp::Assignment(
             None,
             Val::Const(Const::Int(*int_val as i32)),
         ))),
@@ -351,7 +353,7 @@ fn emit_exp(mut gen: &mut Generator, exp: &ast::Exp) -> Option<ID> {
                 tp: FnType::LCall,
             };
             
-            gen.emit(Inst::Op(Op::Call(call)))
+            gen.emit(PreInst::Op(PreOp::Call(call)))
         }
         _ => unimplemented!(),
     }
@@ -364,8 +366,8 @@ pub enum Instruction {
 }
 
 #[derive(Debug)]
-pub enum Inst {
-    Op(Op),
+pub enum PreInst {
+    Op(PreOp),
     ControllOp(ControllOp),
 }
 
@@ -385,12 +387,53 @@ pub type Label = usize;
 
 #[derive(Debug)]
 pub enum Op {
+    // here might be better used ID
+    Assignment(Option<String>, Val),
+    Op(TypeOp, ID, ID),
+    Unary(UnOp, ID),
+    Call(Call),
+}
+
+#[derive(Debug)]
+pub enum TypeOp {
+    Arithmetic(ArithmeticOp),
+    Relational(RelationalOp),
+    Bit(BitwiseOp),
+}
+
+impl Op {
+    fn from(pre: PreOp) -> Self {
+        match pre {
+            PreOp::Arithmetic(op, id1, id2) => {
+                Op::Op(TypeOp::Arithmetic(op), id1, id2)
+            },
+            PreOp::Relational(op, id1, id2) => {
+                Op::Op(TypeOp::Relational(op), id1, id2)
+            },
+            PreOp::Bit(op, id1, id2) => {
+                Op::Op(TypeOp::Bit(op), id1, id2)
+            },
+            PreOp::Assignment(name, val) => {
+                Op::Assignment(name, val)
+            },
+            PreOp::Unary(op, id) => {
+                Op::Unary(UnOp::from(op), id)
+            },
+            PreOp::Call(call) => {
+                Op::Call(call)
+            },
+        }
+    } 
+}
+
+#[derive(Debug)]
+pub enum PreOp {
     Arithmetic(ArithmeticOp, ID, ID),
     // here might be better used ID
     Assignment(Option<String>, Val),
     Relational(RelationalOp, ID, ID),
     Bit(BitwiseOp, ID, ID),
-    Unary(UnOp, ID),
+    Unary(UnOpInst, ID),
     Call(Call),
 }
 
@@ -473,9 +516,31 @@ impl BitwiseOp {
     }
 }
 
-
 #[derive(Debug)]
 pub enum UnOp {
+    Neg,
+    BitComplement,
+    LogicNeg,
+    Inc,
+    Dec,
+}
+
+impl UnOp {
+    fn from(op: UnOpInst) -> Self {
+        match op {
+            UnOpInst::Neg => UnOp::Neg,
+            UnOpInst::BitComplement => UnOp::BitComplement,
+            UnOpInst::LogicNeg => UnOp::LogicNeg,
+            UnOpInst::IncPre => UnOp::Inc,
+            UnOpInst::IncPost => UnOp::Inc,
+            UnOpInst::DecPre => UnOp::Dec,
+            UnOpInst::DecPost => UnOp::Dec,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum UnOpInst {
     Neg,
     BitComplement,
     LogicNeg,
@@ -485,16 +550,16 @@ pub enum UnOp {
     DecPost,
 }
 
-impl UnOp {
+impl UnOpInst {
     fn from(op: &ast::UnOp) -> Self {
         match op {
-            ast::UnOp::Negation => UnOp::Neg,
-            ast::UnOp::BitwiseComplement => UnOp::BitComplement,
-            ast::UnOp::LogicalNegation => UnOp::LogicNeg,
-            ast::UnOp::IncrementPrefix => UnOp::IncPre,
-            ast::UnOp::IncrementPostfix => UnOp::IncPost,
-            ast::UnOp::DecrementPrefix => UnOp::DecPre,
-            ast::UnOp::DecrementPostfix => UnOp::DecPost,
+            ast::UnOp::Negation => UnOpInst::Neg,
+            ast::UnOp::BitwiseComplement => UnOpInst::BitComplement,
+            ast::UnOp::LogicalNegation => UnOpInst::LogicNeg,
+            ast::UnOp::IncrementPrefix => UnOpInst::IncPre,
+            ast::UnOp::IncrementPostfix => UnOpInst::IncPost,
+            ast::UnOp::DecrementPrefix => UnOpInst::DecPre,
+            ast::UnOp::DecrementPostfix => UnOpInst::DecPost,
         }
     }
 }

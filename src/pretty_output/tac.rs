@@ -17,38 +17,21 @@ pub fn pretty(fun: &tac::FuncDef) {
                             pretty_val(&fun.vars, val)
                         );
                     }
-                    tac::Op::Arithmetic(op, v1, v2) => {
+                    tac::Op::Op(t, v1, v2) => {
                         println!(
                             "  {}: {} {} {}",
                             pretty_id(&fun.vars, id),
                             pretty_id(&fun.vars, v1),
-                            pretty_arith_op(op),
+                            pretty_type(t),
                             pretty_id(&fun.vars, v2)
-                        );
-                    }
-                    tac::Op::Relational(op, v1, v2) => {
-                        println!(
-                            "  {}: {} {} {}",
-                            pretty_id(&fun.vars, id),
-                            pretty_id(&fun.vars, v1),
-                            pretty_rel_op(op),
-                            pretty_id(&fun.vars, v2),
-                        );
-                    }
-                    tac::Op::Bit(op, v1, v2) => {
-                        println!(
-                            "  {}: {} {} {}",
-                            pretty_id(&fun.vars, id),
-                            pretty_id(&fun.vars, v1),
-                            pretty_bit_op(op),
-                            pretty_id(&fun.vars, v2),
                         );
                     }
                     tac::Op::Unary(op, v1) => {
                         println!(
-                            "  {}: {}",
+                            "  {}: {} {}",
                             pretty_id(&fun.vars, id),
-                            pretty_unary_op_with(op, &pretty_id(&fun.vars, v1)),
+                            pretty_unary_op(op),
+                            pretty_id(&fun.vars, v1),
                         );
                     }
                     tac::Op::Call(call) => {
@@ -121,6 +104,14 @@ pub fn pretty_fun_name(name: &str) -> String {
     }
 }
 
+pub fn pretty_type(op: &tac::TypeOp) -> String {
+    match op {
+        tac::TypeOp::Arithmetic(op) => pretty_arith_op(op),
+        tac::TypeOp::Relational(op) => pretty_rel_op(op),
+        tac::TypeOp::Bit(op) => pretty_bit_op(op),
+    }
+}
+
 pub fn pretty_arith_op(op: &tac::ArithmeticOp) -> String {
     match op {
         tac::ArithmeticOp::Add => "+".to_string(),
@@ -154,14 +145,12 @@ pub fn pretty_bit_op(op: &tac::BitwiseOp) -> String {
     }
 }
 
-pub fn pretty_unary_op_with(op: &tac::UnOp, id: &str) -> String {
+pub fn pretty_unary_op(op: &tac::UnOp) -> String {
     match op {
-        tac::UnOp::Neg => format!("-{}", id),
-        tac::UnOp::BitComplement => format!("~{}", id),
-        tac::UnOp::LogicNeg => format!("!{}", id),
-        tac::UnOp::IncPre => format!("++{}", id),
-        tac::UnOp::IncPost => format!("{}++", id),
-        tac::UnOp::DecPre => format!("--{}", id),
-        tac::UnOp::DecPost => format!("{}--", id),
+        tac::UnOp::Neg => "-".to_string(),
+        tac::UnOp::LogicNeg => "!".to_string(),
+        tac::UnOp::BitComplement => "~".to_string(),
+        tac::UnOp::Inc => "++".to_string(),
+        tac::UnOp::Dec => "--".to_string(),
     }
 }
