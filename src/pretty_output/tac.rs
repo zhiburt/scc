@@ -35,6 +35,15 @@ pub fn pretty(fun: &tac::FuncDef) {
                             pretty_id(&fun.vars, v2),
                         );
                     }
+                    tac::Op::Bit(op, v1, v2) => {
+                        println!(
+                            "  {}: {} {} {}",
+                            pretty_id(&fun.vars, id),
+                            pretty_id(&fun.vars, v1),
+                            pretty_bit_op(op),
+                            pretty_id(&fun.vars, v2),
+                        );
+                    }
                     tac::Op::Call(call) => {
                         for p in call.params.iter() {
                             println!("  PushParam {}", pretty_id(&fun.vars, p));
@@ -126,5 +135,16 @@ pub fn pretty_rel_op(op: &tac::RelationalOp) -> String {
         tac::RelationalOp::GreaterOrEq => ">=".to_string(),
         tac::RelationalOp::And => "&&".to_string(),
         tac::RelationalOp::Or => "||".to_string(),
+    }
+}
+
+
+pub fn pretty_bit_op(op: &tac::BitwiseOp) -> String {
+    match op {
+    tac::BitwiseOp::And => "&".to_string(),
+    tac::BitwiseOp::Or => "|".to_string(),
+    tac::BitwiseOp::Xor => "^".to_string(),
+    tac::BitwiseOp::LShift => "<<".to_string(),
+    tac::BitwiseOp::RShift => ">>".to_string(),
     }
 }

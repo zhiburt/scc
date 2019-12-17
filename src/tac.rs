@@ -293,28 +293,33 @@ fn emit_exp(mut gen: &mut Generator, exp: &ast::Exp) -> Option<ID> {
         ast::Exp::BinOp(op, exp1, exp2) => {
             let id1 = emit_exp(&mut gen, exp1).unwrap();
             let id2 = emit_exp(&mut gen, exp2).unwrap();
-            match op {
-                ast::BinOp::Equal => {
-                    gen.emit(Inst::Op(Op::Relational(RelationalOp::Equal, id1, id2)))
-                }
-                ast::BinOp::NotEqual => {
-                    gen.emit(Inst::Op(Op::Relational(RelationalOp::NotEq, id1, id2)))
-                }
-                ast::BinOp::GreaterThan => {
-                    gen.emit(Inst::Op(Op::Relational(RelationalOp::Greater, id1, id2)))
-                }
-                ast::BinOp::GreaterThanOrEqual => {
-                    gen.emit(Inst::Op(Op::Relational(RelationalOp::GreaterOrEq, id1, id2)))
-                }
-                ast::BinOp::LessThan => {
-                    gen.emit(Inst::Op(Op::Relational(RelationalOp::Less, id1, id2)))
-                }
-                ast::BinOp::LessThanOrEqual => {
-                    gen.emit(Inst::Op(Op::Relational(RelationalOp::LessOrEq, id1, id2)))
-                }
-                _ => {
-                    let op = ArithmeticOp::from(op).unwrap();
-                    gen.emit(Inst::Op(Op::Arithmetic(op, id1, id2)))
+
+            if let Some(b_op) = BitwiseOp::from(op) {
+                gen.emit(Inst::Op(Op::Bit(b_op, id1, id2)))
+            } else {
+                match op {
+                    ast::BinOp::Equal => {
+                        gen.emit(Inst::Op(Op::Relational(RelationalOp::Equal, id1, id2)))
+                    }
+                    ast::BinOp::NotEqual => {
+                        gen.emit(Inst::Op(Op::Relational(RelationalOp::NotEq, id1, id2)))
+                    }
+                    ast::BinOp::GreaterThan => {
+                        gen.emit(Inst::Op(Op::Relational(RelationalOp::Greater, id1, id2)))
+                    }
+                    ast::BinOp::GreaterThanOrEqual => {
+                        gen.emit(Inst::Op(Op::Relational(RelationalOp::GreaterOrEq, id1, id2)))
+                    }
+                    ast::BinOp::LessThan => {
+                        gen.emit(Inst::Op(Op::Relational(RelationalOp::Less, id1, id2)))
+                    }
+                    ast::BinOp::LessThanOrEqual => {
+                        gen.emit(Inst::Op(Op::Relational(RelationalOp::LessOrEq, id1, id2)))
+                    }
+                    _ => {
+                        let op = ArithmeticOp::from(op).unwrap();
+                        gen.emit(Inst::Op(Op::Arithmetic(op, id1, id2)))
+                    }
                 }
             }
         }
@@ -380,6 +385,7 @@ pub enum Op {
     // here might be better used ID
     Assignment(Option<String>, Val),
     Relational(RelationalOp, ID, ID),
+    Bit(BitwiseOp, ID, ID),
     Call(Call),
 }
 
@@ -435,6 +441,28 @@ impl ArithmeticOp {
             ast::BinOp::Multiplication => Some(ArithmeticOp::Mul),
             ast::BinOp::Division => Some(ArithmeticOp::Div),
             ast::BinOp::Modulo => Some(ArithmeticOp::Mod),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum BitwiseOp {
+    And,
+    Or,
+    Xor,
+    LShift,
+    RShift,
+}
+
+impl BitwiseOp {
+    fn from(op: &ast::BinOp) -> Option<Self> {
+        match op {
+            ast::BinOp::BitwiseAnd => Some(BitwiseOp::And),
+            ast::BinOp::BitwiseOr => Some(BitwiseOp::Or),
+            ast::BinOp::BitwiseXor => Some(BitwiseOp::Xor),
+            ast::BinOp::BitwiseLeftShift => Some(BitwiseOp::LShift),
+            ast::BinOp::BitwiseRightShift => Some(BitwiseOp::RShift),
             _ => None,
         }
     }
