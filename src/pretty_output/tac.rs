@@ -44,6 +44,13 @@ pub fn pretty(fun: &tac::FuncDef) {
                             pretty_id(&fun.vars, v2),
                         );
                     }
+                    tac::Op::Unary(op, v1) => {
+                        println!(
+                            "  {}: {}",
+                            pretty_id(&fun.vars, id),
+                            pretty_unary_op_with(op, &pretty_id(&fun.vars, v1)),
+                        );
+                    }
                     tac::Op::Call(call) => {
                         for p in call.params.iter() {
                             println!("  PushParam {}", pretty_id(&fun.vars, p));
@@ -56,7 +63,6 @@ pub fn pretty(fun: &tac::FuncDef) {
                         );
                         println!("  PopParams {}", call.pop_size);
                     }
-                    _ => unimplemented!(),
                 };
             }
             tac::Instruction::ControllOp(cop) => match cop {
@@ -138,7 +144,6 @@ pub fn pretty_rel_op(op: &tac::RelationalOp) -> String {
     }
 }
 
-
 pub fn pretty_bit_op(op: &tac::BitwiseOp) -> String {
     match op {
     tac::BitwiseOp::And => "&".to_string(),
@@ -146,5 +151,17 @@ pub fn pretty_bit_op(op: &tac::BitwiseOp) -> String {
     tac::BitwiseOp::Xor => "^".to_string(),
     tac::BitwiseOp::LShift => "<<".to_string(),
     tac::BitwiseOp::RShift => ">>".to_string(),
+    }
+}
+
+pub fn pretty_unary_op_with(op: &tac::UnOp, id: &str) -> String {
+    match op {
+        tac::UnOp::Neg => format!("-{}", id),
+        tac::UnOp::BitComplement => format!("~{}", id),
+        tac::UnOp::LogicNeg => format!("!{}", id),
+        tac::UnOp::IncPre => format!("++{}", id),
+        tac::UnOp::IncPost => format!("{}++", id),
+        tac::UnOp::DecPre => format!("--{}", id),
+        tac::UnOp::DecPost => format!("{}--", id),
     }
 }

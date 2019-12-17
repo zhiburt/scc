@@ -323,6 +323,10 @@ fn emit_exp(mut gen: &mut Generator, exp: &ast::Exp) -> Option<ID> {
                 }
             }
         }
+        ast::Exp::UnOp(op, exp) => {
+            let id = emit_exp(&mut gen, exp).unwrap();
+            gen.emit(Inst::Op(Op::Unary(UnOp::from(op), id)))
+        }
         ast::Exp::Assign(name, exp) => {
             let id = emit_exp(&mut gen, exp).unwrap();
             gen.emit(Inst::Op(Op::Assignment(Some(name.clone()), Val::Var(id))))
@@ -386,6 +390,7 @@ pub enum Op {
     Assignment(Option<String>, Val),
     Relational(RelationalOp, ID, ID),
     Bit(BitwiseOp, ID, ID),
+    Unary(UnOp, ID),
     Call(Call),
 }
 
@@ -464,6 +469,32 @@ impl BitwiseOp {
             ast::BinOp::BitwiseLeftShift => Some(BitwiseOp::LShift),
             ast::BinOp::BitwiseRightShift => Some(BitwiseOp::RShift),
             _ => None,
+        }
+    }
+}
+
+
+#[derive(Debug)]
+pub enum UnOp {
+    Neg,
+    BitComplement,
+    LogicNeg,
+    IncPre,
+    IncPost,
+    DecPre,
+    DecPost,
+}
+
+impl UnOp {
+    fn from(op: &ast::UnOp) -> Self {
+        match op {
+            ast::UnOp::Negation => UnOp::Neg,
+            ast::UnOp::BitwiseComplement => UnOp::BitComplement,
+            ast::UnOp::LogicalNegation => UnOp::LogicNeg,
+            ast::UnOp::IncrementPrefix => UnOp::IncPre,
+            ast::UnOp::IncrementPostfix => UnOp::IncPost,
+            ast::UnOp::DecrementPrefix => UnOp::DecPre,
+            ast::UnOp::DecrementPostfix => UnOp::DecPost,
         }
     }
 }
