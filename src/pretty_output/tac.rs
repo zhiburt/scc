@@ -150,7 +150,5 @@ pub fn pretty_unary_op(op: &tac::UnOp) -> String {
         tac::UnOp::Neg => "-".to_string(),
         tac::UnOp::LogicNeg => "!".to_string(),
         tac::UnOp::BitComplement => "~".to_string(),
-        tac::UnOp::Inc => "++".to_string(),
-        tac::UnOp::Dec => "--".to_string(),
     }
 }

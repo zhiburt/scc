@@ -73,23 +73,9 @@ impl Generator {
         match inst {
             PreInst::Op(pre_op) => {
                 let id = match &pre_op {
-                    PreOp::Assignment(Some(name), ..) => {
-                        let id = self.var_id(&name);
-                        id
+                    PreOp::Assignment(Some(id), ..) => {
+                        id.clone()
                     }
-                    PreOp::Unary(op, id) => {
-                        match op {
-                            UnOpInst::IncPre | UnOpInst::IncPost |
-                            UnOpInst::DecPre | UnOpInst::DecPost => {
-                                id.clone()
-                            }
-                            _ => {
-                                let id = self.id(IDType::Temporary);
-                                self.inc_tmp();
-                                id
-                            }
-                        }
-                    },
                     _ => {
                         let id = self.id(IDType::Temporary);
                         self.inc_tmp();
@@ -287,7 +273,8 @@ fn emit_decl(mut gen: &mut Generator, decl: &ast::Declaration) -> Option<ID> {
             match exp {
                 Some(exp) => {
                     let id = emit_exp(&mut gen, exp).unwrap();
-                    gen.emit(PreInst::Op(PreOp::Assignment(Some(name.clone()), Val::Var(id))))
+                    let var_id = gen.recognize_var(name);
+                    gen.emit(PreInst::Op(PreOp::Assignment(Some(var_id), Val::Var(id))))
                 }
                 None => {
                     // we will create variable when
@@ -341,20 +328,48 @@ fn emit_exp(mut gen: &mut Generator, exp: &ast::Exp) -> Option<ID> {
             let id = emit_exp(&mut gen, exp).unwrap();
             let un_op = UnOpInst::from(op);
             match op {
-                ast::UnOp::DecrementPostfix | ast::UnOp::IncrementPostfix => {
-                    let tmp_id  = gen.emit(PreInst::Op(PreOp::Assignment(
+                ast::UnOp::IncrementPostfix | ast::UnOp::DecrementPostfix |
+                ast::UnOp::IncrementPrefix | ast::UnOp::DecrementPrefix => {
+                    let tmp_id = match op {
+                        ast::UnOp::IncrementPostfix | ast::UnOp::DecrementPostfix => {
+                            gen.emit(PreInst::Op(PreOp::Assignment(
+                                None,
+                                Val::Var(id.clone()),
+                            )))
+                        }
+                        _ => None,
+                    };
+                    let inc_const = gen.emit(PreInst::Op(PreOp::Assignment(
                         None,
-                        Val::Var(id.clone()),
+                        Val::Const(Const::Int(1)),
+                    ))).unwrap();
+                    let changed_id = match op {
+                        ast::UnOp::IncrementPostfix | ast::UnOp::IncrementPrefix => {
+                            gen.emit(PreInst::Op(PreOp::Arithmetic(ArithmeticOp::Add, id.clone(), inc_const))).unwrap()
+                        }
+                        ast::UnOp::DecrementPostfix | ast::UnOp::DecrementPrefix => {
+                            gen.emit(PreInst::Op(PreOp::Arithmetic(ArithmeticOp::Sub, id.clone(), inc_const))).unwrap()
+                        }
+                        _ => unreachable!(),
+                    };
+                    let var_id = gen.emit(PreInst::Op(PreOp::Assignment(
+                        Some(id),
+                        Val::Var(changed_id),
                     )));
-                    gen.emit(PreInst::Op(PreOp::Unary(un_op, id)));
-                    tmp_id
+                    match op {
+                        ast::UnOp::IncrementPostfix | ast::UnOp::DecrementPostfix => {
+                            tmp_id
+                        }
+                        _ => var_id,
+                    }
                 }
             _ => gen.emit(PreInst::Op(PreOp::Unary(un_op, id)))
             }
         }
         ast::Exp::Assign(name, exp) => {
             let id = emit_exp(&mut gen, exp).unwrap();
-            gen.emit(PreInst::Op(PreOp::Assignment(Some(name.clone()), Val::Var(id))))
+            let var_id = gen.recognize_var(name);
+            gen.emit(PreInst::Op(PreOp::Assignment(Some(var_id), Val::Var(id))))
         }
         ast::Exp::Var(name) => {
             // should it create variable if it not exists?
@@ -411,7 +426,7 @@ pub type Label = usize;
 #[derive(Debug)]
 pub enum Op {
     // here might be better used ID
-    Assignment(Option<String>, Val),
+    Assignment(Option<ID>, Val),
     Op(TypeOp, ID, ID),
     Unary(UnOp, ID),
     Call(Call),
@@ -453,7 +468,7 @@ impl Op {
 pub enum PreOp {
     Arithmetic(ArithmeticOp, ID, ID),
     // here might be better used ID
-    Assignment(Option<String>, Val),
+    Assignment(Option<ID>, Val),
     Relational(RelationalOp, ID, ID),
     Bit(BitwiseOp, ID, ID),
     Unary(UnOpInst, ID),
@@ -544,8 +559,6 @@ pub enum UnOp {
     Neg,
     BitComplement,
     LogicNeg,
-    Inc,
-    Dec,
 }
 
 impl UnOp {
@@ -554,10 +567,7 @@ impl UnOp {
             UnOpInst::Neg => UnOp::Neg,
             UnOpInst::BitComplement => UnOp::BitComplement,
             UnOpInst::LogicNeg => UnOp::LogicNeg,
-            UnOpInst::IncPre => UnOp::Inc,
-            UnOpInst::IncPost => UnOp::Inc,
-            UnOpInst::DecPre => UnOp::Dec,
-            UnOpInst::DecPost => UnOp::Dec,
+            _ => unreachable!(),
         }
     }
 }
