@@ -77,6 +77,19 @@ impl Generator {
                         let id = self.var_id(&name);
                         id
                     }
+                    PreOp::Unary(op, id) => {
+                        match op {
+                            UnOpInst::IncPre | UnOpInst::IncPost |
+                            UnOpInst::DecPre | UnOpInst::DecPost => {
+                                id.clone()
+                            }
+                            _ => {
+                                let id = self.id(IDType::Temporary);
+                                self.inc_tmp();
+                                id
+                            }
+                        }
+                    },
                     _ => {
                         let id = self.id(IDType::Temporary);
                         self.inc_tmp();
@@ -327,7 +340,17 @@ fn emit_exp(mut gen: &mut Generator, exp: &ast::Exp) -> Option<ID> {
             // this id is the variable's one
             let id = emit_exp(&mut gen, exp).unwrap();
             let un_op = UnOpInst::from(op);
-            gen.emit(PreInst::Op(PreOp::Unary(un_op, id)))
+            match op {
+                ast::UnOp::DecrementPostfix | ast::UnOp::IncrementPostfix => {
+                    let tmp_id  = gen.emit(PreInst::Op(PreOp::Assignment(
+                        None,
+                        Val::Var(id.clone()),
+                    )));
+                    gen.emit(PreInst::Op(PreOp::Unary(un_op, id)));
+                    tmp_id
+                }
+            _ => gen.emit(PreInst::Op(PreOp::Unary(un_op, id)))
+            }
         }
         ast::Exp::Assign(name, exp) => {
             let id = emit_exp(&mut gen, exp).unwrap();
