@@ -299,10 +299,10 @@ fn emit_exp(mut gen: &mut Generator, exp: &ast::Exp) -> Option<ID> {
             } else {
                 match op {
                     ast::BinOp::Equal => {
-                        gen.emit(PreInst::Op(PreOp::Relational(RelationalOp::Equal, id1, id2)))
+                        gen.emit(PreInst::Op(PreOp::Equality(EqualityOp::Equal, id1, id2)))
                     }
                     ast::BinOp::NotEqual => {
-                        gen.emit(PreInst::Op(PreOp::Relational(RelationalOp::NotEq, id1, id2)))
+                        gen.emit(PreInst::Op(PreOp::Equality(EqualityOp::NotEq, id1, id2)))
                     }
                     ast::BinOp::GreaterThan => {
                         gen.emit(PreInst::Op(PreOp::Relational(RelationalOp::Greater, id1, id2)))
@@ -317,10 +317,10 @@ fn emit_exp(mut gen: &mut Generator, exp: &ast::Exp) -> Option<ID> {
                         gen.emit(PreInst::Op(PreOp::Relational(RelationalOp::LessOrEq, id1, id2)))
                     }
                     ast::BinOp::And => {
-                        gen.emit(PreInst::Op(PreOp::Relational(RelationalOp::And, id1, id2)))
+                        gen.emit(PreInst::Op(PreOp::Logical(LogicalOp::And, id1, id2)))
                     }
                     ast::BinOp::Or => {
-                        gen.emit(PreInst::Op(PreOp::Relational(RelationalOp::Or, id1, id2)))
+                        gen.emit(PreInst::Op(PreOp::Logical(LogicalOp::Or, id1, id2)))
                     }
                     _ => {
                         let op = ArithmeticOp::from(op).unwrap();
@@ -442,6 +442,8 @@ pub enum Op {
 pub enum TypeOp {
     Arithmetic(ArithmeticOp),
     Relational(RelationalOp),
+    Logic(LogicalOp),
+    Equality(EqualityOp),
     Bit(BitwiseOp),
 }
 
@@ -456,6 +458,12 @@ impl Op {
             },
             PreOp::Bit(op, id1, id2) => {
                 Op::Op(TypeOp::Bit(op), id1, id2)
+            },
+            PreOp::Logical(op, id1, id2) => {
+                Op::Op(TypeOp::Logic(op), id1, id2)
+            },
+            PreOp::Equality(op, id1, id2) => {
+                Op::Op(TypeOp::Equality(op), id1, id2)
             },
             PreOp::Assignment(name, val) => {
                 Op::Assignment(name, val)
@@ -476,6 +484,8 @@ pub enum PreOp {
     // here might be better used ID
     Assignment(Option<ID>, Val),
     Relational(RelationalOp, ID, ID),
+    Equality(EqualityOp, ID, ID),
+    Logical(LogicalOp, ID, ID),
     Bit(BitwiseOp, ID, ID),
     Unary(UnOpInst, ID),
     Call(Call),
@@ -605,14 +615,22 @@ impl UnOpInst {
 
 #[derive(Debug)]
 pub enum RelationalOp {
-    Equal,
-    NotEq,
     Less,
     LessOrEq,
     Greater,
     GreaterOrEq,
+}
+
+
+#[derive(Debug)]
+pub enum LogicalOp {
     And,
     Or,
+}
+#[derive(Debug)]
+pub enum EqualityOp {
+    Equal,
+    NotEq,
 }
 
 #[derive(Debug)]
