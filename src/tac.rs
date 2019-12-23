@@ -316,6 +316,12 @@ fn emit_exp(mut gen: &mut Generator, exp: &ast::Exp) -> Option<ID> {
                     ast::BinOp::LessThanOrEqual => {
                         gen.emit(PreInst::Op(PreOp::Relational(RelationalOp::LessOrEq, id1, id2)))
                     }
+                    ast::BinOp::And => {
+                        gen.emit(PreInst::Op(PreOp::Relational(RelationalOp::And, id1, id2)))
+                    }
+                    ast::BinOp::Or => {
+                        gen.emit(PreInst::Op(PreOp::Relational(RelationalOp::Or, id1, id2)))
+                    }
                     _ => {
                         let op = ArithmeticOp::from(op).unwrap();
                         gen.emit(PreInst::Op(PreOp::Arithmetic(op, id1, id2)))
