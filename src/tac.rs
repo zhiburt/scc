@@ -399,6 +399,21 @@ fn emit_exp(mut gen: &mut Generator, exp: &ast::Exp) -> Option<ID> {
             
             gen.emit(PreInst::Op(PreOp::Call(call)))
         }
+        ast::Exp::CondExp(cond, exp1, exp2) => {
+            let cond_id = emit_exp(&mut gen, cond).unwrap();
+            let else_label = gen.uniq_label();
+            let end_label = gen.uniq_label();
+            let mut val_id = gen.emit(PreInst::Op(PreOp::Assignment(None, Val::Const(Const::Int(0)))));
+            gen.emit(PreInst::ControllOp(ControllOp::Branch(LabelBranch::IfGOTO(cond_id, end_label))));
+            let exp1_id = emit_exp(&mut gen, exp1).unwrap();
+            gen.emit(PreInst::Op(PreOp::Assignment(val_id.clone(), Val::Var(exp1_id))));
+            gen.emit(PreInst::ControllOp(ControllOp::Branch(LabelBranch::GOTO(end_label))));
+            gen.emit(PreInst::ControllOp(ControllOp::Branch(LabelBranch::Label(else_label))));
+            let exp2_id = emit_exp(&mut gen, exp2).unwrap();
+            gen.emit(PreInst::Op(PreOp::Assignment(val_id.clone(), Val::Var(exp2_id))));
+            gen.emit(PreInst::ControllOp(ControllOp::Branch(LabelBranch::Label(end_label))));
+            val_id
+        }
         _ => unimplemented!(),
     }
 }
