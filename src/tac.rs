@@ -5,7 +5,9 @@ pub fn il(p: &ast::Program) -> Vec<FuncDef> {
     let mut gen = Generator::new();
     let mut funcs = Vec::new();
     for fun in &p.0 {
-        funcs.push(gen.parse(fun));
+        if let Some(func) = gen.parse(fun) {
+            funcs.push(func);
+        }
     }
 
     funcs
@@ -46,12 +48,14 @@ impl Generator {
         generator
     }
 
-    pub fn parse(&mut self, func: &ast::FuncDecl) -> FuncDef {
+    pub fn parse(&mut self, func: &ast::FuncDecl) -> Option<FuncDef> {
         if func.blocks.is_none() {
             // here we should somehow show that this function can be called
             // with some type of parameters
             // it representation of declaration without definition
-            unimplemented!();
+            // 
+            // unimplemented!()
+            return None;
         }
 
         for p in func.parameters.iter() {
@@ -70,13 +74,13 @@ impl Generator {
             .collect::<HashMap<usize, String>>();
         
         self.vars.clear();
-        FuncDef {
+        Some(FuncDef {
             name: func.name.clone(),
             frame_size: self.allocated_memory(),
             ret: self.context.ret_ctx.clone(),
             instructions: self.flush(),
             vars: vars,
-        }
+        })
     }
 
     fn emit(&mut self, inst: PreInst) -> Option<ID> {
@@ -411,18 +415,19 @@ fn emit_exp(mut gen: &mut Generator, exp: &ast::Exp) -> Option<ID> {
             Val::Const(Const::Int(*int_val as i32)),
         ))),
         ast::Exp::FuncCall(name, params) => {
-            let params_ids = params
-                .iter()
+            let params_ids: Vec<ID> = params.iter()
                 .map(|p| emit_exp(&mut gen, p).unwrap())
-                .collect::<Vec<ID>>();
-            let call = Call {
+                .collect();
+
+            // this part seems arcetecture dependent
+            let pop_size = params_ids.len() * 8;
+
+            gen.emit(PreInst::Op(PreOp::Call(Call{
                 name: name.clone(),
-                pop_size: params_ids.len() * 4,
                 params: params_ids,
+                pop_size: pop_size,
                 tp: FnType::LCall,
-            };
-            
-            gen.emit(PreInst::Op(PreOp::Call(call)))
+            })))
         }
         ast::Exp::CondExp(cond, exp1, exp2) => {
             let cond_id = emit_exp(&mut gen, cond).unwrap();
