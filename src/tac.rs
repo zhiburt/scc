@@ -13,9 +13,19 @@ pub fn il(p: &ast::Program) -> Vec<FuncDef> {
 struct Generator {
     instructions: Vec<Instruction>,
     vars: HashMap<String, ID>,
-    context_ret: Option<ID>,
+    context: Context,
     counters: [usize; 3],
     allocated: usize,
+}
+
+struct Context {
+    ret_ctx: Option<ID>,
+    loop_ctx: Option<LoopContext>,
+}
+
+struct LoopContext {
+    begin: Label,
+    end: Label,
 }
 
 impl Generator {
@@ -25,7 +35,7 @@ impl Generator {
             allocated: 0,
             instructions: Vec::new(),
             vars: HashMap::new(),
-            context_ret: None,
+            context: Context{ret_ctx: None, loop_ctx: None},
         }
     }
 
@@ -63,7 +73,7 @@ impl Generator {
         FuncDef {
             name: func.name.clone(),
             frame_size: self.allocated_memory(),
-            ret: self.context_ret.clone(),
+            ret: self.context.ret_ctx.clone(),
             instructions: self.flush(),
             vars: vars,
         }
@@ -184,7 +194,7 @@ fn emit_st(mut gen: &mut Generator, st: &ast::Statement) {
             }
         }
         ast::Statement::Return { exp } => {
-            gen.context_ret = Some(emit_exp(&mut gen, exp).unwrap());
+            gen.context.ret_ctx = Some(emit_exp(&mut gen, exp).unwrap());
         }
         ast::Statement::Exp { exp } => {
             if let Some(exp) = exp {
@@ -225,6 +235,7 @@ fn emit_st(mut gen: &mut Generator, st: &ast::Statement) {
             // there is a question with scope variables here
             let begin_label = gen.uniq_label();
             let end_label = gen.uniq_label();
+            gen.context.loop_ctx = Some(LoopContext{begin: begin_label, end: end_label});
             emit_decl(&mut gen, decl);
             gen.emit(PreInst::ControllOp(ControllOp::Branch(LabelBranch::Label(begin_label))));
             let cond_id = emit_exp(&mut gen, exp2).unwrap();
@@ -240,6 +251,7 @@ fn emit_st(mut gen: &mut Generator, st: &ast::Statement) {
             // there is a question with scope variables here
             let begin_label = gen.uniq_label();
             let end_label = gen.uniq_label();
+            gen.context.loop_ctx = Some(LoopContext{begin: begin_label, end: end_label});
             if let Some(exp1) = exp1 {
                 emit_exp(&mut gen, exp1).unwrap();
             }
@@ -256,12 +268,25 @@ fn emit_st(mut gen: &mut Generator, st: &ast::Statement) {
         ast::Statement::Do{exp, statement} => {
             let begin_label = gen.uniq_label();
             let end_label = gen.uniq_label();
+            gen.context.loop_ctx = Some(LoopContext{begin: begin_label, end: end_label});
             gen.emit(PreInst::ControllOp(ControllOp::Branch(LabelBranch::Label(begin_label))));
             emit_st(&mut gen, statement);
             let cond_id = emit_exp(&mut gen, exp).unwrap();
             gen.emit(PreInst::ControllOp(ControllOp::Branch(LabelBranch::IfGOTO(cond_id, end_label))));
             gen.emit(PreInst::ControllOp(ControllOp::Branch(LabelBranch::GOTO(begin_label))));
             gen.emit(PreInst::ControllOp(ControllOp::Branch(LabelBranch::Label(end_label))));
+        }
+        ast::Statement::Break => {
+            if let Some(loop_ctx) = gen.context.loop_ctx.as_ref() {
+                let end = loop_ctx.end;
+                gen.emit(PreInst::ControllOp(ControllOp::Branch(LabelBranch::GOTO(end))));
+            }
+        }
+        ast::Statement::Continue => {
+            if let Some(loop_ctx) = gen.context.loop_ctx.as_ref() {
+                let start = loop_ctx.begin;
+                gen.emit(PreInst::ControllOp(ControllOp::Branch(LabelBranch::GOTO(start))));
+            }
         }
         _ => unimplemented!(),
     }
