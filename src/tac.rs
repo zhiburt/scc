@@ -319,6 +319,41 @@ fn emit_decl(mut gen: &mut Generator, decl: &ast::Declaration) -> Option<ID> {
 
 fn emit_exp(mut gen: &mut Generator, exp: &ast::Exp) -> Option<ID> {
     match exp {
+        ast::Exp::BinOp(ast::BinOp::And, exp1, exp2) => {
+            let second_branch = gen.uniq_label();
+            let false_branch = gen.uniq_label();
+            let true_branch = gen.uniq_label();
+            let end_label = gen.uniq_label();
+            let val_id = gen.emit(PreInst::Op(PreOp::Assignment(None, Val::Const(Const::Int(0)))));
+            let id1 = emit_exp(&mut gen, exp1).unwrap();
+            gen.emit(PreInst::ControllOp(ControllOp::Branch(LabelBranch::IfGOTO(id1, second_branch))));
+            gen.emit(PreInst::ControllOp(ControllOp::Branch(LabelBranch::GOTO(false_branch))));
+            gen.emit(PreInst::ControllOp(ControllOp::Branch(LabelBranch::Label(second_branch))));
+            let id2 = emit_exp(&mut gen, exp2).unwrap();
+            gen.emit(PreInst::ControllOp(ControllOp::Branch(LabelBranch::IfGOTO(id2, true_branch))));
+            gen.emit(PreInst::ControllOp(ControllOp::Branch(LabelBranch::Label(false_branch))));
+            gen.emit(PreInst::Op(PreOp::Assignment(val_id.clone(), Val::Const(Const::Int(0)))));
+            gen.emit(PreInst::ControllOp(ControllOp::Branch(LabelBranch::GOTO(end_label))));
+            gen.emit(PreInst::ControllOp(ControllOp::Branch(LabelBranch::Label(true_branch))));
+            gen.emit(PreInst::Op(PreOp::Assignment(val_id.clone(), Val::Const(Const::Int(1)))));
+            gen.emit(PreInst::ControllOp(ControllOp::Branch(LabelBranch::Label(end_label))));
+            val_id
+        }
+        ast::Exp::BinOp(ast::BinOp::Or, exp1, exp2) => {
+            let true_branch = gen.uniq_label();
+            let end_label = gen.uniq_label();
+            let val_id = gen.emit(PreInst::Op(PreOp::Assignment(None, Val::Const(Const::Int(0)))));
+            let id1 = emit_exp(&mut gen, exp1).unwrap();
+            gen.emit(PreInst::ControllOp(ControllOp::Branch(LabelBranch::IfGOTO(id1, true_branch))));
+            let id2 = emit_exp(&mut gen, exp2).unwrap();
+            gen.emit(PreInst::ControllOp(ControllOp::Branch(LabelBranch::IfGOTO(id2, true_branch))));
+            gen.emit(PreInst::Op(PreOp::Assignment(val_id.clone(), Val::Const(Const::Int(0)))));
+            gen.emit(PreInst::ControllOp(ControllOp::Branch(LabelBranch::GOTO(end_label))));
+            gen.emit(PreInst::ControllOp(ControllOp::Branch(LabelBranch::Label(true_branch))));
+            gen.emit(PreInst::Op(PreOp::Assignment(val_id.clone(), Val::Const(Const::Int(1)))));
+            gen.emit(PreInst::ControllOp(ControllOp::Branch(LabelBranch::Label(end_label))));
+            val_id
+        }
         ast::Exp::BinOp(op, exp1, exp2) => {
             let id1 = emit_exp(&mut gen, exp1).unwrap();
             let id2 = emit_exp(&mut gen, exp2).unwrap();
@@ -344,12 +379,6 @@ fn emit_exp(mut gen: &mut Generator, exp: &ast::Exp) -> Option<ID> {
                     }
                     ast::BinOp::LessThanOrEqual => {
                         gen.emit(PreInst::Op(PreOp::Relational(RelationalOp::LessOrEq, id1, id2)))
-                    }
-                    ast::BinOp::And => {
-                        gen.emit(PreInst::Op(PreOp::Logical(LogicalOp::And, id1, id2)))
-                    }
-                    ast::BinOp::Or => {
-                        gen.emit(PreInst::Op(PreOp::Logical(LogicalOp::Or, id1, id2)))
                     }
                     _ => {
                         let op = ArithmeticOp::from(op).unwrap();
@@ -487,7 +516,6 @@ pub enum Op {
 pub enum TypeOp {
     Arithmetic(ArithmeticOp),
     Relational(RelationalOp),
-    Logic(LogicalOp),
     Equality(EqualityOp),
     Bit(BitwiseOp),
 }
@@ -503,9 +531,6 @@ impl Op {
             },
             PreOp::Bit(op, id1, id2) => {
                 Op::Op(TypeOp::Bit(op), id1, id2)
-            },
-            PreOp::Logical(op, id1, id2) => {
-                Op::Op(TypeOp::Logic(op), id1, id2)
             },
             PreOp::Equality(op, id1, id2) => {
                 Op::Op(TypeOp::Equality(op), id1, id2)
@@ -530,7 +555,6 @@ pub enum PreOp {
     Assignment(Option<ID>, Val),
     Relational(RelationalOp, ID, ID),
     Equality(EqualityOp, ID, ID),
-    Logical(LogicalOp, ID, ID),
     Bit(BitwiseOp, ID, ID),
     Unary(UnOpInst, ID),
     Call(Call),
@@ -666,12 +690,6 @@ pub enum RelationalOp {
     GreaterOrEq,
 }
 
-
-#[derive(Debug)]
-pub enum LogicalOp {
-    And,
-    Or,
-}
 #[derive(Debug)]
 pub enum EqualityOp {
     Equal,
