@@ -108,7 +108,6 @@ pub fn pretty_type(op: &tac::TypeOp) -> String {
     match op {
         tac::TypeOp::Arithmetic(op) => pretty_arith_op(op),
         tac::TypeOp::Relational(op) => pretty_rel_op(op),
-        tac::TypeOp::Logic(op) => pretty_logic_op(op),
         tac::TypeOp::Equality(op) => pretty_eq_op(op),
         tac::TypeOp::Bit(op) => pretty_bit_op(op),
     }
@@ -137,13 +136,6 @@ pub fn pretty_eq_op(op: &tac::EqualityOp) -> String {
     match op {
         tac::EqualityOp::Equal => "==".to_string(),
         tac::EqualityOp::NotEq => "!=".to_string(),
-    }
-}
-
-pub fn pretty_logic_op(op: &tac::LogicalOp) -> String {
-    match op {
-        tac::LogicalOp::And => "&&".to_string(),
-        tac::LogicalOp::Or => "||".to_string(),
     }
 }
 
