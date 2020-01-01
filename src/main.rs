@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use structopt::StructOpt;
 
-use simple_c_compiler::{Lexer, parser, gen, checks};
+use simple_c_compiler::{Lexer, parser, gen, checks, tac};
 
 mod pretty_output;
 
@@ -38,7 +38,12 @@ fn main() {
         eprintln!("invalid function declaration or definition");
         std::process::exit(120);
     }
-    
+  
+    let tac = tac::il(&program);
+    for f in &tac {
+        pretty_output::pretty_tac(f);
+    }
+
     let mut asm_file = std::fs::File::create(output_file).expect("Cannot create assembler code");
     asm_file.write_all(gen(program, "main").unwrap().as_ref()).unwrap();
 }
