@@ -92,38 +92,4 @@ pub struct FuncDecl{
 }
 
 // Add block node which is decl
-pub struct  Program(pub Vec<FuncDecl>);
-
-pub enum AstType<'a> {
-    BinOp(&'a BinOp),
-    Const(&'a Const),
-    UnOp(&'a UnOp),
-    AssignmentOp(&'a AssignmentOp),
-    Exp(&'a Exp),
-    Statement(&'a Statement),
-    Declaration(&'a Declaration),
-    Func(&'a FuncDecl),
-}
-
-pub fn traverse<F>(p: &Program, mut f: F)
-where F : FnMut(AstType)
-{
-    for p in &p.0 {
-        f(AstType::Func(&p));
-    }
-
-    for p in &p.0 {
-        if let Some(blocks) = p.blocks.as_ref() {
-            for block in blocks {
-                match block {
-                    BlockItem::Declaration(decl) => {
-                        f(AstType::Declaration(decl));
-                    }
-                    BlockItem::Statement(st) => {
-                        f(AstType::Statement(st));
-                    }
-                }
-            }
-        }
-    }
-}
+pub struct Program(pub Vec<FuncDecl>);
