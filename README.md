@@ -20,4 +20,6 @@ compiler.sh file1
 Nowadays it works only with integer types. Without support of global variables (it might be managed in the nearest).
 The assembly code is kind of freaky in the look :)
 
+There are a lot of things that should be done by the book to get it in healthy shape. The most important ones is presented in the issues tab.
+
 > This project takes it's origin from education aims.
