@@ -92,4 +92,4 @@ pub struct FuncDecl{
 }
 
 // Add block node which is decl
-pub struct  Program(pub Vec<FuncDecl>);
+pub struct Program(pub Vec<FuncDecl>);
