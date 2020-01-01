@@ -1,22 +1,44 @@
 use std::io::Write;
+use std::path::PathBuf;
+
+use structopt::StructOpt;
 
 use simple_c_compiler::{Lexer, parser, gen, checks, tac};
 
 mod pretty_output;
 
+#[derive(Debug, StructOpt)]
+#[structopt(name = "scc", about = "simple c compiler")]
+struct Opt {
+    #[structopt(short, long)]
+    verbose: bool,
+
+    #[structopt(parse(from_os_str))]
+    input_file: PathBuf,
+
+    #[structopt(short, parse(from_os_str))]
+    out_file: Option<PathBuf>,
+}
+
 fn main() {
-    let args = std::env::args().collect::<Vec<String>>();
-    let file = args[1].clone();
-    let output_file = args.get(2).map_or("asm.s", |name| name.as_ref());
-    let program = std::fs::File::open(file).unwrap();
+    let opt = Opt::from_args();
+    let input_file = opt.input_file;
+    let output_file = opt.out_file.map_or(PathBuf::from("asm.s"), |name| name);
+    
+    let program = std::fs::File::open(input_file).unwrap();
     let lexer = Lexer::new();
     let tokens = lexer.lex(program);
     let program = parser::parse(tokens).expect("Cannot parse program");
-    println!("\n{}\n", pretty_output::pretty_prog(&program));
+    
+    if opt.verbose {
+        println!("\n{}\n", pretty_output::pretty_prog(&program));
+    }
+
     if !checks::func_check(&program) {
-        println!("invalid function declaration or definition");
+        eprintln!("invalid function declaration or definition");
         std::process::exit(120);
     }
+  
     let tac = tac::il(&program);
     for f in &tac {
         pretty_output::pretty_tac(f);
