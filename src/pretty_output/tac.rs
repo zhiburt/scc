@@ -141,11 +141,11 @@ pub fn pretty_eq_op(op: &tac::EqualityOp) -> String {
 
 pub fn pretty_bit_op(op: &tac::BitwiseOp) -> String {
     match op {
-    tac::BitwiseOp::And => "&".to_string(),
-    tac::BitwiseOp::Or => "|".to_string(),
-    tac::BitwiseOp::Xor => "^".to_string(),
-    tac::BitwiseOp::LShift => "<<".to_string(),
-    tac::BitwiseOp::RShift => ">>".to_string(),
+        tac::BitwiseOp::And => "&".to_string(),
+        tac::BitwiseOp::Or => "|".to_string(),
+        tac::BitwiseOp::Xor => "^".to_string(),
+        tac::BitwiseOp::LShift => "<<".to_string(),
+        tac::BitwiseOp::RShift => ">>".to_string(),
     }
 }
 
