@@ -8,7 +8,7 @@ edition = "2018"
 
 [dependencies]
 regex = "*"
-structopt = { version = "0.3", default-features = false }
+clap = { git = "https://github.com/clap-rs/clap" }
 
 [dev-dependencies]
 lazy_static = "1.4.0"
