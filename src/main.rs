@@ -41,7 +41,7 @@ fn main() {
   
     let tac = tac::il(&program);
     for f in &tac {
-        pretty_output::pretty_tac(f);
+        pretty_output::pretty_tac(std::io::stdout(), f);
     }
 
     let mut asm_file = std::fs::File::create(output_file).expect("Cannot create assembler code");
