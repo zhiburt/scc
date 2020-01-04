@@ -562,7 +562,6 @@ pub enum PreOp {
 
 #[derive(Debug)]
 pub enum ControllOp {
-    FuncDef(FuncDef),
     Branch(LabelBranch),
 }
 
