@@ -64,17 +64,17 @@ pub fn pretty(fun: &tac::FuncDef) {
                         );
                     }
                 },
+                tac::ControllOp::Return(id) => {
+                    match id {
+                        Some(id) => println!("  Return {}", pretty_id(&fun.vars, id)),
+                        None => println!("  Return void"),
+                    }
+                }
                 _ => unimplemented!(),
             },
         }
     }
 
-    println!(
-        "  Return {};",
-        fun.ret
-            .as_ref()
-            .map_or("NO".to_owned(), |id| pretty_id(&fun.vars, id))
-    );
     println!("  EndFunc;");
 }
 
