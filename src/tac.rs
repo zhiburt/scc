@@ -26,7 +26,6 @@ struct Generator {
 pub struct InstructionLine(pub Instruction, pub Option<ID>);
 
 struct Context {
-    ret_ctx: Option<ID>,
     loop_ctx: Option<LoopContext>,
 }
 
@@ -43,7 +42,6 @@ impl Generator {
             instructions: Vec::new(),
             vars: HashMap::new(),
             context: Context {
-                ret_ctx: None,
                 loop_ctx: None,
             },
         }
@@ -86,7 +84,6 @@ impl Generator {
         Some(FuncDef {
             name: func.name.clone(),
             frame_size: self.allocated_memory(),
-            ret: self.context.ret_ctx.clone(),
             instructions: self.flush(),
             vars: vars,
         })
@@ -181,8 +178,10 @@ impl Generator {
 
     fn emit_statement(&mut self, st: &ast::Statement) {
         match st {
-            ast::Statement::Exp { exp: Some(exp) } => {
-                self.emit_expr(exp);
+            ast::Statement::Exp { exp: exp } => {
+                if let Some(exp) = exp {
+                    self.emit_expr(exp);
+                }
             }
             ast::Statement::Return { exp } => {
                 let id = self.emit_expr(exp);
@@ -214,12 +213,95 @@ impl Generator {
                     self.emit(Instruction::ControlOp(ControlOp::Label(end_label)));
                 }
             }
-            ast::Statement::Compound { list: Some(list) } => {
-                for block in list {
-                    self.emit_block(block);
+            ast::Statement::Compound { list: list } => {
+                if let Some(list) = list {
+                    for block in list {
+                        self.emit_block(block);
+                    }
                 }
             }
-            _ => unimplemented!(),
+            ast::Statement::While { exp, statement } => {
+                let begin_label = self.uniq_label();
+                let end_label = self.uniq_label();
+
+                self.emit(Instruction::ControlOp(ControlOp::Label(begin_label)));
+                let cond_id = self.emit_expr(exp);
+                self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::IfGOTO(
+                    cond_id, end_label,
+                ))));
+                self.emit_statement(statement);
+                self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::GOTO(
+                    begin_label,
+                ))));
+                self.emit(Instruction::ControlOp(ControlOp::Label(end_label)));
+            }
+            ast::Statement::Do { exp, statement } => {
+                let begin_label = self.uniq_label();
+                let end_label = self.uniq_label();
+
+                self.emit(Instruction::ControlOp(ControlOp::Label(begin_label)));
+                self.emit_statement(statement);
+                let cond_id = self.emit_expr(exp);
+                self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::IfGOTO(
+                    cond_id, end_label,
+                ))));
+                self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::GOTO(
+                    begin_label,
+                ))));
+                self.emit(Instruction::ControlOp(ControlOp::Label(end_label)));
+            }
+            ast::Statement::ForDecl {
+                decl,
+                exp2,
+                exp3,
+                statement,
+            } => {
+                let begin_label = self.uniq_label();
+                let end_label = self.uniq_label();
+
+                self.emit_decl(decl);
+                self.emit(Instruction::ControlOp(ControlOp::Label(begin_label)));
+                let cond_id = self.emit_expr(exp2);
+                self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::IfGOTO(
+                    cond_id, end_label,
+                ))));
+                self.emit_statement(statement);
+                if let Some(exp3) = exp3 {
+                    self.emit_expr(exp3);
+                }
+                self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::GOTO(
+                    begin_label,
+                ))));
+                self.emit(Instruction::ControlOp(ControlOp::Label(end_label)));
+            }
+            ast::Statement::For {
+                exp1,
+                exp2,
+                exp3,
+                statement,
+            } => {
+                let begin_label = self.uniq_label();
+                let end_label = self.uniq_label();
+
+                if let Some(exp) = exp1 {
+                    self.emit_expr(exp);
+                }
+                self.emit(Instruction::ControlOp(ControlOp::Label(begin_label)));
+                let cond_id = self.emit_expr(exp2);
+                self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::IfGOTO(
+                    cond_id, end_label,
+                ))));
+                self.emit_statement(statement);
+                if let Some(exp3) = exp3 {
+                    self.emit_expr(exp3);
+                }
+                self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::GOTO(
+                    begin_label,
+                ))));
+                self.emit(Instruction::ControlOp(ControlOp::Label(end_label)));
+            }
+            ast::Statement::Break => { unimplemented!() }
+            ast::Statement::Continue => { unimplemented!() }
         }
     }
 
@@ -522,6 +604,5 @@ pub struct FuncDef {
     pub name: String,
     pub frame_size: BytesSize,
     pub vars: HashMap<usize, String>,
-    pub ret: Option<ID>,
     pub instructions: Vec<InstructionLine>,
 }
