@@ -73,8 +73,8 @@ pub fn pretty<W: Write>(mut w: W, fun: &tac::FuncDef) {
                 },
                 tac::ControllOp::Return(id) => {
                     match id {
-                        Some(id) => writeln!(w, "  Return {}", pretty_id(&fun.vars, id)),
-                        None => writeln!(w, "  Return void"),
+                        Some(id) => writeln!(w, "  Return {}", pretty_id(&fun.vars, id)).unwrap(),
+                        None => writeln!(w, "  Return void").unwrap(),
                     }
                 }
                 _ => unimplemented!(),

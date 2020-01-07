@@ -37,7 +37,7 @@ fn main() {
         if opt.verbose > 1 {
             let tac = tac::il(&program);
             for f in &tac {
-                pretty_output::pretty_tac(f);
+                pretty_output::pretty_tac(std::io::stdout(), f);
             }
         }
     }
