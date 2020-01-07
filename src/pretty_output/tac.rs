@@ -1,9 +1,11 @@
-use simple_c_compiler::tac;
 use std::collections::HashMap;
+use std::io::Write;
 
-pub fn pretty(fun: &tac::FuncDef) {
-    println!("{}:", pretty_fun_name(&fun.name));
-    println!("  BeginFunc {}", fun.frame_size);
+use simple_c_compiler::tac;
+
+pub fn pretty<W: Write>(mut w: W, fun: &tac::FuncDef) {
+    writeln!(w, "{}:", pretty_fun_name(&fun.name));
+    writeln!(w, "  BeginFunc {}", fun.frame_size);
 
     for inst in &fun.instructions {
         match inst {
@@ -11,14 +13,16 @@ pub fn pretty(fun: &tac::FuncDef) {
                 let id = id.as_ref().unwrap();
                 match op {
                     tac::Op::Assignment(.., val) => {
-                        println!(
+                        writeln!(
+                            w,
                             "  {}: {}",
                             pretty_id(&fun.vars, id),
                             pretty_val(&fun.vars, val)
                         );
                     }
                     tac::Op::Op(t, v1, v2) => {
-                        println!(
+                        writeln!(
+                            w,
                             "  {}: {} {} {}",
                             pretty_id(&fun.vars, id),
                             pretty_id(&fun.vars, v1),
@@ -27,7 +31,8 @@ pub fn pretty(fun: &tac::FuncDef) {
                         );
                     }
                     tac::Op::Unary(op, v1) => {
-                        println!(
+                        writeln!(
+                            w,
                             "  {}: {} {}",
                             pretty_id(&fun.vars, id),
                             pretty_unary_op(op),
@@ -36,28 +41,30 @@ pub fn pretty(fun: &tac::FuncDef) {
                     }
                     tac::Op::Call(call) => {
                         for p in call.params.iter() {
-                            println!("  PushParam {}", pretty_id(&fun.vars, p));
+                            writeln!(w, "  PushParam {}", pretty_id(&fun.vars, p));
                         }
 
-                        println!(
+                        writeln!(
+                            w,
                             "  {}: LCall {}",
                             pretty_id(&fun.vars, id),
                             pretty_fun_name(&call.name)
                         );
-                        println!("  PopParams {}", call.pop_size);
+                        writeln!(w, "  PopParams {}", call.pop_size);
                     }
                 };
             }
             tac::Instruction::ControllOp(cop) => match cop {
                 tac::ControllOp::Branch(lb) => match lb {
                     tac::LabelBranch::Label(label) => {
-                        println!("{}:", pretty_label(label));
+                        writeln!(w, "{}:", pretty_label(label));
                     }
                     tac::LabelBranch::GOTO(label) => {
-                        println!("  Goto {}", pretty_label(label));
+                        writeln!(w, "  Goto {}", pretty_label(label));
                     }
                     tac::LabelBranch::IfGOTO(id, label) => {
-                        println!(
+                        writeln!(
+                            w,
                             "  IfZ {} Goto {}",
                             pretty_id(&fun.vars, id),
                             pretty_label(label)
@@ -69,13 +76,14 @@ pub fn pretty(fun: &tac::FuncDef) {
         }
     }
 
-    println!(
+    writeln!(
+        w,
         "  Return {};",
         fun.ret
             .as_ref()
             .map_or("NO".to_owned(), |id| pretty_id(&fun.vars, id))
     );
-    println!("  EndFunc;");
+    writeln!(w, "  EndFunc;");
 }
 
 pub fn pretty_id(vars: &HashMap<usize, String>, id: &tac::ID) -> String {
@@ -141,11 +149,11 @@ pub fn pretty_eq_op(op: &tac::EqualityOp) -> String {
 
 pub fn pretty_bit_op(op: &tac::BitwiseOp) -> String {
     match op {
-    tac::BitwiseOp::And => "&".to_string(),
-    tac::BitwiseOp::Or => "|".to_string(),
-    tac::BitwiseOp::Xor => "^".to_string(),
-    tac::BitwiseOp::LShift => "<<".to_string(),
-    tac::BitwiseOp::RShift => ">>".to_string(),
+        tac::BitwiseOp::And => "&".to_string(),
+        tac::BitwiseOp::Or => "|".to_string(),
+        tac::BitwiseOp::Xor => "^".to_string(),
+        tac::BitwiseOp::LShift => "<<".to_string(),
+        tac::BitwiseOp::RShift => ">>".to_string(),
     }
 }
 

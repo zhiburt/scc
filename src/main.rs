@@ -46,7 +46,7 @@ fn main() {
         eprintln!("invalid function declaration or definition");
         std::process::exit(120);
     }
-  
+
     let mut asm_file = std::fs::File::create(output_file).expect("Cannot create assembler code");
     asm_file.write_all(gen(program, "main").unwrap().as_ref()).unwrap();
 }
