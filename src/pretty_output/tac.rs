@@ -7,10 +7,16 @@ pub fn pretty<W: Write>(mut w: W, fun: &tac::FuncDef) {
     writeln!(w, "{}:", pretty_fun_name(&fun.name));
     writeln!(w, "  BeginFunc {}", fun.frame_size);
 
-    for (inst, id) in &fun.instructions {
+    for tac::InstructionLine(inst, id) in &fun.instructions {
         match inst {
             tac::Instruction::Alloc(tac::Const::Int(val)) => {
-                writeln!(w, "  {}: {}", pretty_id(&fun.vars, id.as_ref().unwrap()), val).unwrap();
+                writeln!(
+                    w,
+                    "  {}: {}",
+                    pretty_id(&fun.vars, id.as_ref().unwrap()),
+                    val
+                )
+                .unwrap();
             }
             tac::Instruction::Assignment(id1, id2) => {
                 writeln!(

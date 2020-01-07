@@ -15,12 +15,15 @@ pub fn il(p: &ast::Program) -> Vec<FuncDef> {
 struct Generator {
     // TODO: certainly not sure about contains this tuple
     // it has been done only for pretty_output purposes right now
-    instructions: Vec<(Instruction, Option<ID>)>,
+    instructions: Vec<InstructionLine>,
     vars: HashMap<String, ID>,
     context: Context,
     counters: [usize; 3],
     allocated: usize,
 }
+
+#[derive(Debug)]
+pub struct InstructionLine(pub Instruction, pub Option<ID>);
 
 struct Context {
     ret_ctx: Option<ID>,
@@ -109,7 +112,7 @@ impl Generator {
             }
             _ => None,
         };
-        self.instructions.push((inst, id.clone()));
+        self.instructions.push(InstructionLine(inst, id.clone()));
         id
     }
 
@@ -211,7 +214,7 @@ impl Generator {
                     self.emit(Instruction::ControlOp(ControlOp::Label(end_label)));
                 }
             }
-            ast::Statement::Compound{ list: Some(list) } => {
+            ast::Statement::Compound { list: Some(list) } => {
                 for block in list {
                     self.emit_block(block);
                 }
@@ -251,7 +254,7 @@ impl Generator {
         self.allocated * 4
     }
 
-    pub fn flush(&mut self) -> Vec<(Instruction, Option<ID>)> {
+    pub fn flush(&mut self) -> Vec<InstructionLine> {
         self.allocated = 0;
         let mut v = Vec::new();
         std::mem::swap(&mut self.instructions, &mut v);
@@ -520,5 +523,5 @@ pub struct FuncDef {
     pub frame_size: BytesSize,
     pub vars: HashMap<usize, String>,
     pub ret: Option<ID>,
-    pub instructions: Vec<(Instruction, Option<ID>)>,
+    pub instructions: Vec<InstructionLine>,
 }
