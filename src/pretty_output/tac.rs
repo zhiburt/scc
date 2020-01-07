@@ -71,19 +71,16 @@ pub fn pretty<W: Write>(mut w: W, fun: &tac::FuncDef) {
                         );
                     }
                 },
+                tac::ControllOp::Return(id) => {
+                    match id {
+                        Some(id) => writeln!(w, "  Return {}", pretty_id(&fun.vars, id)),
+                        None => writeln!(w, "  Return void"),
+                    }
+                }
                 _ => unimplemented!(),
             },
         }
     }
-
-    writeln!(
-        w,
-        "  Return {};",
-        fun.ret
-            .as_ref()
-            .map_or("NO".to_owned(), |id| pretty_id(&fun.vars, id))
-    );
-    writeln!(w, "  EndFunc;");
 }
 
 pub fn pretty_id(vars: &HashMap<usize, String>, id: &tac::ID) -> String {

@@ -21,7 +21,7 @@ struct Generator {
 }
 
 struct Context {
-    ret_ctx: Option<ID>,
+    ret: Option<Label>,
     loop_ctx: Option<LoopContext>,
 }
 
@@ -37,7 +37,7 @@ impl Generator {
             allocated: 0,
             instructions: Vec::new(),
             vars: HashMap::new(),
-            context: Context{ret_ctx: None, loop_ctx: None},
+            context: Context{ret: None, loop_ctx: None},
         }
     }
 
@@ -77,7 +77,6 @@ impl Generator {
         Some(FuncDef {
             name: func.name.clone(),
             frame_size: self.allocated_memory(),
-            ret: self.context.ret_ctx.clone(),
             instructions: self.flush(),
             vars: vars,
         })
@@ -198,7 +197,8 @@ fn emit_st(mut gen: &mut Generator, st: &ast::Statement) {
             }
         }
         ast::Statement::Return { exp } => {
-            gen.context.ret_ctx = Some(emit_exp(&mut gen, exp).unwrap());
+            let id = emit_exp(&mut gen, exp);
+            gen.emit(PreInst::ControllOp(ControllOp::Return(id)));
         }
         ast::Statement::Exp { exp } => {
             if let Some(exp) = exp {
@@ -562,8 +562,8 @@ pub enum PreOp {
 
 #[derive(Debug)]
 pub enum ControllOp {
-    FuncDef(FuncDef),
     Branch(LabelBranch),
+    Return(Option<ID>),
 }
 
 type BytesSize = usize;
@@ -722,6 +722,5 @@ pub struct FuncDef {
     pub name: String,
     pub frame_size: BytesSize,
     pub vars: HashMap<usize, String>,
-    pub ret: Option<ID>,
     pub instructions: Vec<Instruction>,
 }
