@@ -1,27 +1,27 @@
 use std::io::Write;
 use std::path::PathBuf;
 
-use structopt::StructOpt;
+use clap::Clap;
 
 use simple_c_compiler::{Lexer, parser, gen, checks, tac};
 
 mod pretty_output;
 
-#[derive(Debug, StructOpt)]
-#[structopt(name = "scc", about = "simple c compiler")]
+#[derive(Clap)]
+#[clap(name = "scc", version="0.0.1", about = "simple c compiler")]
 struct Opt {
-    #[structopt(short, long)]
-    verbose: bool,
+    #[clap(short = "v", parse(from_occurrences))]
+    verbose: i32,
 
-    #[structopt(parse(from_os_str))]
+    #[clap(parse(from_os_str))]
     input_file: PathBuf,
 
-    #[structopt(short, parse(from_os_str))]
+    #[clap(short = "o", parse(from_os_str))]
     out_file: Option<PathBuf>,
 }
 
 fn main() {
-    let opt = Opt::from_args();
+    let opt = Opt::parse();
     let input_file = opt.input_file;
     let output_file = opt.out_file.map_or(PathBuf::from("asm.s"), |name| name);
     
@@ -29,19 +29,22 @@ fn main() {
     let lexer = Lexer::new();
     let tokens = lexer.lex(program);
     let program = parser::parse(tokens).expect("Cannot parse program");
-    
-    if opt.verbose {
-        println!("\n{}\n", pretty_output::pretty_prog(&program));
+   
+    {
+        if opt.verbose > 0 {
+            println!("\n{}\n", pretty_output::pretty_prog(&program));
+        }
+        if opt.verbose > 1 {
+            let tac = tac::il(&program);
+            for f in &tac {
+                pretty_output::pretty_tac(f);
+            }
+        }
     }
 
     if !checks::func_check(&program) {
         eprintln!("invalid function declaration or definition");
         std::process::exit(120);
-    }
-  
-    let tac = tac::il(&program);
-    for f in &tac {
-        pretty_output::pretty_tac(std::io::stdout(), f);
     }
 
     let mut asm_file = std::fs::File::create(output_file).expect("Cannot create assembler code");
