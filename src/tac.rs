@@ -62,7 +62,6 @@ impl Context {
                 it may be implemented as a feature, what means that we can pass here a config of polices to such type of behavior
 
                 It's not handled anywhere above in the chain of compilation process
-            
             */
             unimplemented!()
         }
@@ -244,6 +243,32 @@ impl Generator {
                 let var_id = self.recognize_var(name);
                 let exp_id = self.emit_expr(exp);
                 self.emit(Instruction::Assignment(var_id, exp_id)).unwrap()
+            }
+            ast::Exp::CondExp(cond, exp1, exp2) => {
+                /*
+                    NOTION: if we will get a track with assign id an operator
+                    it can be simplified by removing tmp_id
+                */
+                let end_label = self.uniq_label();
+                let exp2_label = self.uniq_label();
+
+                let tmp_id = self.alloc_tmp();
+
+                let cond_id = self.emit_expr(cond);
+                self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::IfGOTO(
+                    cond_id, exp2_label,
+                ))));
+                let exp_id = self.emit_expr(exp1);
+                self.emit(Instruction::Assignment(tmp_id.clone(), exp_id));
+                self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::GOTO(
+                    end_label,
+                ))));
+                self.emit(Instruction::ControlOp(ControlOp::Label(exp2_label)));
+                let exp_id = self.emit_expr(exp2);
+                self.emit(Instruction::Assignment(tmp_id.clone(), exp_id));
+                self.emit(Instruction::ControlOp(ControlOp::Label(end_label)));
+
+                tmp_id
             }
             _ => unimplemented!(),
         }
