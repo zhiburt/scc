@@ -17,8 +17,7 @@ struct Generator {
     // TODO: certainly not sure about contains this tuple
     // it has been done only for pretty_output purposes right now
     instructions: Vec<InstructionLine>,
-    vars: HashMap<String, ID>,
-    context: ContextList,
+    context: Context,
     counters: [usize; 3],
     allocated: usize,
 }
@@ -26,13 +25,19 @@ struct Generator {
 #[derive(Debug)]
 pub struct InstructionLine(pub Instruction, pub Option<ID>);
 
-struct ContextList(Vec<Context>);
-
 struct Context {
-    loop_ctx: Option<LoopContext>,
+    vars: HashMap<String, ID>,
+    loop_ctx: Vec<LoopContext>,
 }
 
-impl ContextList {
+impl Context {
+    fn new() -> Self {
+        Context {
+            vars: HashMap::new(),
+            loop_ctx: Vec::new(),
+        }
+    }
+
     /*
         NOTION: could we store in context more useful information?
         e.g variables context
@@ -45,21 +50,19 @@ impl ContextList {
         do some stuff with context, and then it goes off the scope drop will be called
     */
     fn push_loop(&mut self, ctx: LoopContext) {
-        self.0.push(Context {
-            loop_ctx: Some(ctx),
-        });
+        self.loop_ctx.push(ctx);
     }
 
     fn pop_loop(&mut self) {
-        self.0.pop();
+        self.loop_ctx.pop();
     }
 
     fn loop_end(&self) -> Label {
-        self.0.last().unwrap().loop_ctx.as_ref().unwrap().end
+        self.loop_ctx.last().as_ref().unwrap().end
     }
 
     fn loop_start(&self) -> Label {
-        self.0.last().unwrap().loop_ctx.as_ref().unwrap().begin
+        self.loop_ctx.last().as_ref().unwrap().begin
     }
 }
 
@@ -80,8 +83,7 @@ impl Generator {
             counters: [0, 0, 0],
             allocated: 0,
             instructions: Vec::new(),
-            vars: HashMap::new(),
-            context: ContextList(Vec::new()),
+            context: Context::new(),
         }
     }
 
@@ -113,12 +115,13 @@ impl Generator {
         }
 
         let vars = self
+            .context
             .vars
             .iter()
             .map(|(var, id)| (id.id, var.clone()))
             .collect::<HashMap<usize, String>>();
 
-        self.vars.clear();
+        self.context.vars.clear();
         Some(FuncDef {
             name: func.name.clone(),
             frame_size: self.allocated_memory(),
@@ -372,12 +375,12 @@ impl Generator {
     }
 
     pub fn var_id(&mut self, name: &str) -> ID {
-        match self.vars.get(name) {
+        match self.context.vars.get(name) {
             Some(id) => id.clone(),
             None => {
                 let id = self.id(IDType::Var);
                 self.inc_vars();
-                self.vars.insert(name.to_owned(), id.clone());
+                self.context.vars.insert(name.to_owned(), id.clone());
                 self.allocated += 1;
 
                 id
@@ -386,12 +389,12 @@ impl Generator {
     }
 
     pub fn recognize_var(&mut self, name: &str) -> ID {
-        match self.vars.get(name) {
+        match self.context.vars.get(name) {
             Some(id) => id.clone(),
             None => {
                 let id = self.id(IDType::Var);
                 self.inc_vars();
-                self.vars.insert(name.to_owned(), id.clone());
+                self.context.vars.insert(name.to_owned(), id.clone());
 
                 id
             }
