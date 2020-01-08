@@ -299,7 +299,7 @@ impl Generator {
                         end_label,
                     ))));
                     self.emit(Instruction::ControlOp(ControlOp::Label(else_label)));
-                    self.emit_statement(if_block);
+                    self.emit_statement(else_block);
                     self.emit(Instruction::ControlOp(ControlOp::Label(end_label)));
                 } else {
                     self.emit(Instruction::ControlOp(ControlOp::Label(end_label)));
