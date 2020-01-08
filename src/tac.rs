@@ -270,7 +270,14 @@ impl Generator {
 
                 tmp_id
             }
-            _ => unimplemented!(),
+            ast::Exp::AssignOp(name, op, exp) => {
+                let id = self.recognize_var(name);
+                let op = assign_op_to_type_op(op);
+                let exp_id = self.emit_expr(exp);
+                let resp = self.emit(Instruction::Op(Op::Op(op, id.clone(), exp_id))).unwrap();
+                self.emit(Instruction::Assignment(id, resp.clone()));
+                resp
+            }
         }
     }
 
@@ -764,4 +771,19 @@ pub struct FuncDef {
     pub frame_size: BytesSize,
     pub vars: HashMap<usize, String>,
     pub instructions: Vec<InstructionLine>,
+}
+
+fn assign_op_to_type_op(op: &ast::AssignmentOp) -> TypeOp {
+    match op {
+        ast::AssignmentOp::Plus => TypeOp::Arithmetic(ArithmeticOp::Add),
+        ast::AssignmentOp::Mul => TypeOp::Arithmetic(ArithmeticOp::Mul),
+        ast::AssignmentOp::Sub => TypeOp::Arithmetic(ArithmeticOp::Sub),
+        ast::AssignmentOp::Div => TypeOp::Arithmetic(ArithmeticOp::Div),
+        ast::AssignmentOp::Mod => TypeOp::Arithmetic(ArithmeticOp::Mod),
+        ast::AssignmentOp::BitAnd => TypeOp::Bit(BitwiseOp::And),
+        ast::AssignmentOp::BitOr => TypeOp::Bit(BitwiseOp::Or),
+        ast::AssignmentOp::BitXor => TypeOp::Bit(BitwiseOp::Xor),
+        ast::AssignmentOp::BitLeftShift => TypeOp::Bit(BitwiseOp::LShift),
+        ast::AssignmentOp::BitRightShift => TypeOp::Bit(BitwiseOp::RShift),
+    }
 }
