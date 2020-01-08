@@ -1,4 +1,4 @@
-cargo run $1
+cargo run -- -vv $1
 status=$?
 if [[ $status -ne 0 ]]; then
     exit 1

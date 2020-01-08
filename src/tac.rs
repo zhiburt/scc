@@ -1,5 +1,5 @@
 use crate::ast;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 pub fn il(p: &ast::Program) -> Vec<FuncDef> {
     let mut gen = Generator::new();
@@ -26,16 +26,64 @@ struct Generator {
 pub struct InstructionLine(pub Instruction, pub Option<ID>);
 
 struct Context {
-    vars: HashMap<String, ID>,
+    /*
+        NOTION: take away from ID as a dependency
+    */
+    symbols: HashMap<String, ID>,
+    symbols_counter: usize,
+    scopes: Vec<HashSet<String>>,
     loop_ctx: Vec<LoopContext>,
 }
 
 impl Context {
     fn new() -> Self {
         Context {
-            vars: HashMap::new(),
+            symbols: HashMap::new(),
+            symbols_counter: 0,
+            scopes: vec![HashSet::new()],
             loop_ctx: Vec::new(),
         }
+    }
+
+    fn push_scope(&mut self) {
+        self.scopes.push(HashSet::new());
+    }
+
+    fn pop_scope(&mut self) {
+        self.scopes.pop();
+    }
+
+    fn add_symbol(&mut self, name: &str) -> ID {
+        if !self.add_symbol_to_scope(name) {
+            /*
+                TODO: Here should be raised a error since we have added the same variable to scope
+                what is error
+
+                it may be implemented as a feature, what means that we can pass here a config of polices to such type of behavior
+
+                It's not handled anywhere above in the chain of compilation process
+            
+            */
+            unimplemented!()
+        }
+
+        let id = ID::new(self.symbols_counter, IDType::Var);
+        self.symbols.insert(name.to_owned(), id.clone());
+        id
+    }
+
+    fn scope_symbol(&self, name: &str) -> Option<&ID> {
+        let last_scope = self.scopes.last().unwrap();
+        if last_scope.contains(name) {
+            self.symbols.get(name)
+        } else {
+            None
+        }
+    }
+
+    fn add_symbol_to_scope(&mut self, name: &str) -> bool {
+        let last_scope = self.scopes.last_mut().unwrap();
+        last_scope.insert(name.to_owned())
     }
 
     /*
@@ -105,7 +153,10 @@ impl Generator {
         }
 
         for p in func.parameters.iter() {
-            self.recognize_var(&p);
+            /*
+                TODO: investigate whatever it should increase alloc counter or not
+            */
+            self.alloc_var(&p);
         }
 
         let blocks = func.blocks.as_ref().unwrap();
@@ -116,12 +167,12 @@ impl Generator {
 
         let vars = self
             .context
-            .vars
+            .symbols
             .iter()
             .map(|(var, id)| (id.id, var.clone()))
             .collect::<HashMap<usize, String>>();
 
-        self.context.vars.clear();
+        self.context.symbols.clear();
         Some(FuncDef {
             name: func.name.clone(),
             frame_size: self.allocated_memory(),
@@ -201,7 +252,7 @@ impl Generator {
     fn emit_decl(&mut self, decl: &ast::Declaration) {
         match decl {
             ast::Declaration::Declare { name, exp } => {
-                let var_id = self.var_id(name);
+                let var_id = self.alloc_var(name);
                 if let Some(exp) = exp {
                     let exp_id = self.emit_expr(exp);
                     self.emit(Instruction::Assignment(var_id, exp_id));
@@ -255,11 +306,15 @@ impl Generator {
                 }
             }
             ast::Statement::Compound { list: list } => {
+                self.start_scope();
+
                 if let Some(list) = list {
                     for block in list {
                         self.emit_block(block);
                     }
                 }
+
+                self.end_scope();
             }
             ast::Statement::While { exp, statement } => {
                 let begin_label = self.uniq_label();
@@ -273,7 +328,11 @@ impl Generator {
                 self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::IfGOTO(
                     cond_id, end_label,
                 ))));
+
+                self.start_scope();
                 self.emit_statement(statement);
+                self.end_scope();
+
                 self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::GOTO(
                     begin_label,
                 ))));
@@ -289,7 +348,11 @@ impl Generator {
                     .push_loop(LoopContext::new(begin_label, end_label));
 
                 self.emit(Instruction::ControlOp(ControlOp::Label(begin_label)));
+
+                self.start_scope();
                 self.emit_statement(statement);
+                self.end_scope();
+
                 let cond_id = self.emit_expr(exp);
                 self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::IfGOTO(
                     cond_id, end_label,
@@ -313,13 +376,20 @@ impl Generator {
                 self.context
                     .push_loop(LoopContext::new(begin_label, end_label));
 
+                self.start_scope();
                 self.emit_decl(decl);
+                self.end_scope();
+
                 self.emit(Instruction::ControlOp(ControlOp::Label(begin_label)));
                 let cond_id = self.emit_expr(exp2);
                 self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::IfGOTO(
                     cond_id, end_label,
                 ))));
+
+                self.start_scope();
                 self.emit_statement(statement);
+                self.end_scope();
+
                 if let Some(exp3) = exp3 {
                     self.emit_expr(exp3);
                 }
@@ -350,7 +420,11 @@ impl Generator {
                 self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::IfGOTO(
                     cond_id, end_label,
                 ))));
+
+                self.start_scope();
                 self.emit_statement(statement);
+                self.end_scope();
+
                 if let Some(exp3) = exp3 {
                     self.emit_expr(exp3);
                 }
@@ -374,31 +448,17 @@ impl Generator {
         }
     }
 
-    pub fn var_id(&mut self, name: &str) -> ID {
-        match self.context.vars.get(name) {
-            Some(id) => id.clone(),
-            None => {
-                let id = self.id(IDType::Var);
-                self.inc_vars();
-                self.context.vars.insert(name.to_owned(), id.clone());
-                self.allocated += 1;
+    // TODO: implement a a function which call something in scope
+    fn start_scope(&mut self) {
+        self.context.push_scope();
+    }
 
-                id
-            }
-        }
+    fn end_scope(&mut self) {
+        self.context.pop_scope();
     }
 
     pub fn recognize_var(&mut self, name: &str) -> ID {
-        match self.context.vars.get(name) {
-            Some(id) => id.clone(),
-            None => {
-                let id = self.id(IDType::Var);
-                self.inc_vars();
-                self.context.vars.insert(name.to_owned(), id.clone());
-
-                id
-            }
-        }
+        self.context.scope_symbol(name).unwrap().clone()
     }
 
     pub fn allocated_memory(&self) -> BytesSize {
@@ -415,6 +475,11 @@ impl Generator {
     fn alloc_tmp(&mut self) -> ID {
         self.allocated += 1;
         ID::new(self.inc_tmp(), IDType::Temporary)
+    }
+
+    fn alloc_var(&mut self, name: &str) -> ID {
+        self.allocated += 1;
+        self.context.add_symbol(name)
     }
 
     fn inc_vars(&mut self) -> usize {
