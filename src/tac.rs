@@ -71,13 +71,8 @@ impl Context {
         id
     }
 
-    fn scope_symbol(&self, name: &str) -> Option<&ID> {
-        let last_scope = self.scopes.last().unwrap();
-        if last_scope.contains(name) {
-            self.symbols.get(name)
-        } else {
-            None
-        }
+    fn get_symbol(&self, name: &str) -> Option<&ID> {
+        self.symbols.get(name)
     }
 
     fn add_symbol_to_scope(&mut self, name: &str) -> bool {
@@ -490,7 +485,7 @@ impl Generator {
     }
 
     pub fn recognize_var(&mut self, name: &str) -> ID {
-        self.context.scope_symbol(name).unwrap().clone()
+        self.context.get_symbol(name).unwrap().clone()
     }
 
     pub fn allocated_memory(&self) -> BytesSize {
