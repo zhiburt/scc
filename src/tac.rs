@@ -12,12 +12,13 @@ pub fn il(p: &ast::Program) -> Vec<FuncDef> {
 
     funcs
 }
+
 struct Generator {
     // TODO: certainly not sure about contains this tuple
     // it has been done only for pretty_output purposes right now
     instructions: Vec<InstructionLine>,
     vars: HashMap<String, ID>,
-    context: Context,
+    context: ContextList,
     counters: [usize; 3],
     allocated: usize,
 }
@@ -25,13 +26,52 @@ struct Generator {
 #[derive(Debug)]
 pub struct InstructionLine(pub Instruction, pub Option<ID>);
 
+struct ContextList(Vec<Context>);
+
 struct Context {
     loop_ctx: Option<LoopContext>,
+}
+
+impl ContextList {
+    /*
+        NOTION: could we store in context more useful information?
+        e.g variables context
+
+        on that regard we could develop a more convenient approach like
+
+        let ctx = generator.push_ctx();
+        ...
+
+        do some stuff with context, and then it goes off the scope drop will be called
+    */
+    fn push_loop(&mut self, ctx: LoopContext) {
+        self.0.push(Context {
+            loop_ctx: Some(ctx),
+        });
+    }
+
+    fn pop_loop(&mut self) {
+        self.0.pop();
+    }
+
+    fn loop_end(&self) -> Label {
+        self.0.last().unwrap().loop_ctx.as_ref().unwrap().end
+    }
+
+    fn loop_start(&self) -> Label {
+        self.0.last().unwrap().loop_ctx.as_ref().unwrap().begin
+    }
 }
 
 struct LoopContext {
     begin: Label,
     end: Label,
+}
+
+impl LoopContext {
+    fn new(begin: Label, end: Label) -> Self {
+        LoopContext { begin, end }
+    }
 }
 
 impl Generator {
@@ -41,9 +81,7 @@ impl Generator {
             allocated: 0,
             instructions: Vec::new(),
             vars: HashMap::new(),
-            context: Context {
-                loop_ctx: None,
-            },
+            context: ContextList(Vec::new()),
         }
     }
 
@@ -224,6 +262,9 @@ impl Generator {
                 let begin_label = self.uniq_label();
                 let end_label = self.uniq_label();
 
+                self.context
+                    .push_loop(LoopContext::new(begin_label, end_label));
+
                 self.emit(Instruction::ControlOp(ControlOp::Label(begin_label)));
                 let cond_id = self.emit_expr(exp);
                 self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::IfGOTO(
@@ -234,10 +275,15 @@ impl Generator {
                     begin_label,
                 ))));
                 self.emit(Instruction::ControlOp(ControlOp::Label(end_label)));
+
+                self.context.pop_loop();
             }
             ast::Statement::Do { exp, statement } => {
                 let begin_label = self.uniq_label();
                 let end_label = self.uniq_label();
+
+                self.context
+                    .push_loop(LoopContext::new(begin_label, end_label));
 
                 self.emit(Instruction::ControlOp(ControlOp::Label(begin_label)));
                 self.emit_statement(statement);
@@ -249,6 +295,8 @@ impl Generator {
                     begin_label,
                 ))));
                 self.emit(Instruction::ControlOp(ControlOp::Label(end_label)));
+
+                self.context.pop_loop();
             }
             ast::Statement::ForDecl {
                 decl,
@@ -258,6 +306,9 @@ impl Generator {
             } => {
                 let begin_label = self.uniq_label();
                 let end_label = self.uniq_label();
+
+                self.context
+                    .push_loop(LoopContext::new(begin_label, end_label));
 
                 self.emit_decl(decl);
                 self.emit(Instruction::ControlOp(ControlOp::Label(begin_label)));
@@ -273,6 +324,8 @@ impl Generator {
                     begin_label,
                 ))));
                 self.emit(Instruction::ControlOp(ControlOp::Label(end_label)));
+
+                self.context.pop_loop();
             }
             ast::Statement::For {
                 exp1,
@@ -282,6 +335,9 @@ impl Generator {
             } => {
                 let begin_label = self.uniq_label();
                 let end_label = self.uniq_label();
+
+                self.context
+                    .push_loop(LoopContext::new(begin_label, end_label));
 
                 if let Some(exp) = exp1 {
                     self.emit_expr(exp);
@@ -299,9 +355,19 @@ impl Generator {
                     begin_label,
                 ))));
                 self.emit(Instruction::ControlOp(ControlOp::Label(end_label)));
+
+                self.context.pop_loop();
             }
-            ast::Statement::Break => { unimplemented!() }
-            ast::Statement::Continue => { unimplemented!() }
+            ast::Statement::Break => {
+                self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::GOTO(
+                    self.context.loop_end(),
+                ))));
+            }
+            ast::Statement::Continue => {
+                self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::GOTO(
+                    self.context.loop_start(),
+                ))));
+            }
         }
     }
 
