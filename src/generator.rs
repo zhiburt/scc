@@ -415,6 +415,7 @@ fn gen_expr(expr: &ast::Exp, scope: &AsmScope) -> Result<Vec<String>> {
     match expr {
         ast::Exp::Const(c) => Ok(gen_const(c)),
         ast::Exp::UnOp(op, exp) => gen_unop(op, exp, scope),
+        ast::Exp::IncOrDec(name, op) => gen_inc_dec_op(name, op, scope),
         ast::Exp::BinOp(op, exp1, exp2) => gen_binop(op, exp1, exp2, scope),
         ast::Exp::AssignOp(name, op, exp) => gen_assign_op(name, op, exp, scope),
         ast::Exp::Assign(name, exp) => {
@@ -528,30 +529,23 @@ fn gen_unop(op: &ast::UnOp, exp: &ast::Exp, scope: &AsmScope) -> Result<Vec<Stri
             code.push("not    %eax".to_owned());
             code
         }
-        ast::UnOp::IncrementPrefix => {
-            let storage = match exp {
-                ast::Exp::Var(name) => {
-                    scope.variable_map.get(name).ok_or(GenError::InvalidVariableUsage(name.clone()))?
-                }
-                _ => unreachable!(),
-            };
-            let place = var_place(storage);
+    };
+    Ok(code)
+}
 
+fn gen_inc_dec_op(name: &str, op: &ast::IncOrDec, scope: &AsmScope) -> Result<Vec<String>> {
+    let storage = scope.variable_map.get(name).ok_or(GenError::InvalidVariableUsage(name.to_owned()))?;
+    let place = var_place(storage);
+
+    let code = match op {
+        ast::IncOrDec::Inc(ast::OperationSide::Prefix) => {
             vec![
                 format!("mov {}, %rax", place),
                 "inc %rax".to_owned(),
                 format!("mov %rax, {}", place),
             ]
         }
-        ast::UnOp::IncrementPostfix => {
-            let storage = match exp {
-                ast::Exp::Var(name) => {
-                    scope.variable_map.get(name).ok_or(GenError::InvalidVariableUsage(name.clone()))?
-                }
-                _ => unreachable!(),
-            };
-            let place = var_place(storage);
-
+        ast::IncOrDec::Inc(ast::OperationSide::Postfix) => {
             vec![
                 format!("mov {}, %rax", place),
                 "inc %rax".to_owned(),
@@ -559,30 +553,14 @@ fn gen_unop(op: &ast::UnOp, exp: &ast::Exp, scope: &AsmScope) -> Result<Vec<Stri
                 "dec %rax".to_owned(),
             ]
         }
-        ast::UnOp::DecrementPrefix => {
-            let storage = match exp {
-                ast::Exp::Var(name) => {
-                    scope.variable_map.get(name).ok_or(GenError::InvalidVariableUsage(name.clone()))?
-                }
-                _ => unreachable!(),
-            };
-            let place = var_place(storage);
-
+        ast::IncOrDec::Dec(ast::OperationSide::Prefix) => {
             vec![
                 format!("mov {}, %rax", place),
                 "dec %rax".to_owned(),
                 format!("mov    %rax, {}", place),
             ]
         }
-        ast::UnOp::DecrementPostfix => {
-            let storage = match exp {
-                ast::Exp::Var(name) => {
-                    scope.variable_map.get(name).ok_or(GenError::InvalidVariableUsage(name.clone()))?
-                }
-                _ => unreachable!(),
-            };
-            let place = var_place(storage);
-
+        ast::IncOrDec::Dec(ast::OperationSide::Postfix) => {
             vec![
                 format!("mov {}, %rax", place),
                 "dec %rax".to_owned(),
@@ -591,6 +569,7 @@ fn gen_unop(op: &ast::UnOp, exp: &ast::Exp, scope: &AsmScope) -> Result<Vec<Stri
             ]
         }
     };
+
     Ok(code)
 }
 
