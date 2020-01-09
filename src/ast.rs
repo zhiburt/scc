@@ -39,6 +39,15 @@ pub enum IncOrDec {
     Dec(OperationSide),
 }
 
+impl IncOrDec {
+    pub fn is_postfix(&self) -> bool {
+        match self {
+            IncOrDec::Inc(OperationSide::Postfix) | IncOrDec::Dec(OperationSide::Postfix) => true,
+            _ => false
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum OperationSide {
     Prefix,

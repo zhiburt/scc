@@ -232,59 +232,38 @@ impl Generator {
             ast::Exp::IncOrDec(name, op) => {
                 let var_id = self.recognize_var(name);
                 let one = self.emit(Instruction::Alloc(Const::Int(1))).unwrap();
-                match op {
-                    ast::IncOrDec::Inc(side) => match side {
-                        ast::OperationSide::Prefix => {
-                            let changed_id = self
-                                .emit(Instruction::Op(Op::Op(
-                                    TypeOp::Arithmetic(ArithmeticOp::Add),
-                                    one,
-                                    var_id.clone(),
-                                )))
-                                .unwrap();
-                            self.emit(Instruction::Assignment(var_id, changed_id.clone())).unwrap();
-                            changed_id
-                        }
-                        ast::OperationSide::Postfix => {
-                            let tmp_id = self.emit(Instruction::Alloc(Const::Int(0))).unwrap();
-                            let var_copy_id = self.emit(Instruction::Assignment(tmp_id, var_id.clone())).unwrap();
-                            let changed_id = self
-                                .emit(Instruction::Op(Op::Op(
-                                    TypeOp::Arithmetic(ArithmeticOp::Add),
-                                    one,
-                                    var_id.clone(),
-                                )))
-                                .unwrap();
-                            self.emit(Instruction::Assignment(var_id, changed_id)).unwrap();
-                            var_copy_id
-                        }
-                    },
-                    ast::IncOrDec::Dec(side) => match side {
-                        ast::OperationSide::Prefix => {
-                            let changed_id = self
-                                .emit(Instruction::Op(Op::Op(
-                                    TypeOp::Arithmetic(ArithmeticOp::Sub),
-                                    one,
-                                    var_id.clone(),
-                                )))
-                                .unwrap();
-                            self.emit(Instruction::Assignment(var_id, changed_id.clone())).unwrap();
-                            changed_id
-                        }
-                        ast::OperationSide::Postfix => {
-                            let tmp_id = self.emit(Instruction::Alloc(Const::Int(0))).unwrap();
-                            let var_copy_id = self.emit(Instruction::Assignment(tmp_id, var_id.clone())).unwrap();
-                            let changed_id = self
-                                .emit(Instruction::Op(Op::Op(
-                                    TypeOp::Arithmetic(ArithmeticOp::Sub),
-                                    one,
-                                    var_id.clone(),
-                                )))
-                                .unwrap();
-                            self.emit(Instruction::Assignment(var_id, changed_id)).unwrap();
-                            var_copy_id
-                        }
-                    },
+
+                let arithmetic_op = match op {
+                    ast::IncOrDec::Inc(..) => TypeOp::Arithmetic(ArithmeticOp::Add),
+                    ast::IncOrDec::Dec(..) => TypeOp::Arithmetic(ArithmeticOp::Sub),
+                };
+
+                if op.is_postfix() {
+                    let tmp_id = self.emit(Instruction::Alloc(Const::Int(0))).unwrap();
+                    let var_copy_id = self
+                        .emit(Instruction::Assignment(tmp_id, var_id.clone()))
+                        .unwrap();
+                    let changed_id = self
+                        .emit(Instruction::Op(Op::Op(
+                            arithmetic_op,
+                            one,
+                            var_id.clone(),
+                        )))
+                        .unwrap();
+                    self.emit(Instruction::Assignment(var_id, changed_id))
+                        .unwrap();
+                    var_copy_id
+                } else {
+                    let changed_id = self
+                        .emit(Instruction::Op(Op::Op(
+                            arithmetic_op,
+                            one,
+                            var_id.clone(),
+                        )))
+                        .unwrap();
+                    self.emit(Instruction::Assignment(var_id, changed_id.clone()))
+                        .unwrap();
+                    changed_id
                 }
             }
             ast::Exp::BinOp(op, exp1, exp2) => {
