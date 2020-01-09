@@ -338,6 +338,7 @@ fn compile_expr(code: &str) -> usize {
 
     let compiler = std::process::Command::new("./target/debug/simple-c-compiler")
         .arg(&code_file)
+        .arg("-o")
         .arg(&asm_file)
         .output()
         .expect("start compilation process");

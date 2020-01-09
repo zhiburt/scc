@@ -228,6 +228,64 @@ impl Generator {
                 self.emit(Instruction::Op(Op::Unary(UnOp::from(op), exp_id)))
                     .unwrap()
             }
+            ast::Exp::IncOrDec(name, op) => {
+                let var_id = self.recognize_var(name);
+                let one = self.emit(Instruction::Alloc(Const::Int(1))).unwrap();
+                match op {
+                    ast::IncOrDec::Inc(side) => match side {
+                        ast::OperationSide::Prefix => {
+                            let changed_id = self
+                                .emit(Instruction::Op(Op::Op(
+                                    TypeOp::Arithmetic(ArithmeticOp::Add),
+                                    one,
+                                    var_id.clone(),
+                                )))
+                                .unwrap();
+                            self.emit(Instruction::Assignment(var_id, changed_id.clone())).unwrap();
+                            changed_id
+                        }
+                        ast::OperationSide::Postfix => {
+                            let tmp_id = self.emit(Instruction::Alloc(Const::Int(0))).unwrap();
+                            let var_copy_id = self.emit(Instruction::Assignment(tmp_id, var_id.clone())).unwrap();
+                            let changed_id = self
+                                .emit(Instruction::Op(Op::Op(
+                                    TypeOp::Arithmetic(ArithmeticOp::Add),
+                                    one,
+                                    var_id.clone(),
+                                )))
+                                .unwrap();
+                            self.emit(Instruction::Assignment(var_id, changed_id)).unwrap();
+                            var_copy_id
+                        }
+                    },
+                    ast::IncOrDec::Dec(side) => match side {
+                        ast::OperationSide::Prefix => {
+                            let changed_id = self
+                                .emit(Instruction::Op(Op::Op(
+                                    TypeOp::Arithmetic(ArithmeticOp::Sub),
+                                    one,
+                                    var_id.clone(),
+                                )))
+                                .unwrap();
+                            self.emit(Instruction::Assignment(var_id, changed_id.clone())).unwrap();
+                            changed_id
+                        }
+                        ast::OperationSide::Postfix => {
+                            let tmp_id = self.emit(Instruction::Alloc(Const::Int(0))).unwrap();
+                            let var_copy_id = self.emit(Instruction::Assignment(tmp_id, var_id.clone())).unwrap();
+                            let changed_id = self
+                                .emit(Instruction::Op(Op::Op(
+                                    TypeOp::Arithmetic(ArithmeticOp::Sub),
+                                    one,
+                                    var_id.clone(),
+                                )))
+                                .unwrap();
+                            self.emit(Instruction::Assignment(var_id, changed_id)).unwrap();
+                            var_copy_id
+                        }
+                    },
+                }
+            }
             ast::Exp::BinOp(op, exp1, exp2) => {
                 let id1 = self.emit_expr(exp1);
                 let id2 = self.emit_expr(exp2);
@@ -269,7 +327,9 @@ impl Generator {
                 let id = self.recognize_var(name);
                 let op = assign_op_to_type_op(op);
                 let exp_id = self.emit_expr(exp);
-                let resp = self.emit(Instruction::Op(Op::Op(op, id.clone(), exp_id))).unwrap();
+                let resp = self
+                    .emit(Instruction::Op(Op::Op(op, id.clone(), exp_id)))
+                    .unwrap();
                 self.emit(Instruction::Assignment(id, resp.clone()));
                 resp
             }
@@ -710,7 +770,6 @@ impl UnOp {
             ast::UnOp::Negation => UnOp::Neg,
             ast::UnOp::BitwiseComplement => UnOp::BitComplement,
             ast::UnOp::LogicalNegation => UnOp::LogicNeg,
-            _ => unreachable!(),
         }
     }
 }
