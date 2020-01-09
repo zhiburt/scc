@@ -67,6 +67,7 @@ impl Context {
         }
 
         let id = ID::new(self.symbols_counter, IDType::Var);
+        self.symbols_counter += 1;
         self.symbols.insert(name.to_owned(), id.clone());
         id
     }
