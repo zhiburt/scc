@@ -143,6 +143,7 @@ fn pretty_expr(exp: &ast::Exp) -> String {
         ast::Exp::BinOp(op, exp1, exp2) => format!("{} BIN_OP<{:?}> {}", pretty_expr(exp1), op, pretty_expr(exp2)),
         ast::Exp::Const(c) => format!("{:?}", c),
         ast::Exp::UnOp(op, exp) => format!("UN_OP<{:?}> {}", op, pretty_expr(exp)),
+        ast::Exp::IncOrDec(name, op) => format!("VAR[{}] {:?}", name, op),
         ast::Exp::Assign(name, exp) => format!("VAR[{}] = {}", name, pretty_expr(exp)),
         ast::Exp::Var(name) => format!("VAR[{}]", name),
         ast::Exp::AssignOp(name, op, exp) => format!("VAR[{}] ASSIGN_OP<{:?}> {}", name, op, pretty_expr(exp)),

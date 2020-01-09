@@ -31,10 +31,18 @@ pub enum UnOp {
     Negation,
     BitwiseComplement,
     LogicalNegation,
-    IncrementPrefix,
-    IncrementPostfix,
-    DecrementPrefix,
-    DecrementPostfix,
+}
+
+#[derive(Debug)]
+pub enum IncOrDec {
+    Inc(OperationSide),
+    Dec(OperationSide),
+}
+
+#[derive(Debug)]
+pub enum OperationSide {
+    Prefix,
+    Postfix,
 }
 
 #[derive(Debug)]
@@ -56,6 +64,7 @@ pub enum Exp {
     Assign(String, Box<Exp>),
     Var(String),
     Const(Const),
+    IncOrDec(String, IncOrDec),
     UnOp(UnOp, Box<Exp>),
     BinOp(BinOp, Box<Exp>, Box<Exp>),
     AssignOp(String, AssignmentOp, Box<Exp>),
