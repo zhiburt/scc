@@ -391,43 +391,43 @@ fn emit_exp(mut gen: &mut Generator, exp: &ast::Exp) -> Option<ID> {
             // this id is the variable's one
             let id = emit_exp(&mut gen, exp).unwrap();
             let un_op = UnOpInst::from(op);
-            match op {
-                ast::UnOp::IncrementPostfix | ast::UnOp::DecrementPostfix |
-                ast::UnOp::IncrementPrefix | ast::UnOp::DecrementPrefix => {
-                    let tmp_id = match op {
-                        ast::UnOp::IncrementPostfix | ast::UnOp::DecrementPostfix => {
-                            gen.emit(PreInst::Op(PreOp::Assignment(
-                                None,
-                                Val::Var(id.clone()),
-                            )))
-                        }
-                        _ => None,
-                    };
-                    let inc_const = gen.emit(PreInst::Op(PreOp::Assignment(
+            gen.emit(PreInst::Op(PreOp::Unary(un_op, id)))
+        }
+        ast::Exp::IncOrDec(name, op) => {
+            let var_id = gen.recognize_var(name);
+            let tmp_id = match op {
+                ast::IncOrDec::Inc(ast::OperationSide::Postfix) |
+                ast::IncOrDec::Dec(ast::OperationSide::Postfix) => {
+                    gen.emit(PreInst::Op(PreOp::Assignment(
                         None,
-                        Val::Const(Const::Int(1)),
-                    ))).unwrap();
-                    let changed_id = match op {
-                        ast::UnOp::IncrementPostfix | ast::UnOp::IncrementPrefix => {
-                            gen.emit(PreInst::Op(PreOp::Arithmetic(ArithmeticOp::Add, id.clone(), inc_const))).unwrap()
-                        }
-                        ast::UnOp::DecrementPostfix | ast::UnOp::DecrementPrefix => {
-                            gen.emit(PreInst::Op(PreOp::Arithmetic(ArithmeticOp::Sub, id.clone(), inc_const))).unwrap()
-                        }
-                        _ => unreachable!(),
-                    };
-                    let var_id = gen.emit(PreInst::Op(PreOp::Assignment(
-                        Some(id),
-                        Val::Var(changed_id),
-                    )));
-                    match op {
-                        ast::UnOp::IncrementPostfix | ast::UnOp::DecrementPostfix => {
-                            tmp_id
-                        }
-                        _ => var_id,
-                    }
+                        Val::Var(var_id.clone()),
+                    )))
                 }
-            _ => gen.emit(PreInst::Op(PreOp::Unary(un_op, id)))
+                _ => None,
+            };
+            let inc_const = gen.emit(PreInst::Op(PreOp::Assignment(
+                None,
+                Val::Const(Const::Int(1)),
+            ))).unwrap();
+            let changed_id = match op {
+                ast::IncOrDec::Inc(..) => {
+                    gen.emit(PreInst::Op(PreOp::Arithmetic(ArithmeticOp::Add, var_id.clone(), inc_const))).unwrap()
+                }
+                ast::IncOrDec::Dec(..) => {
+                    gen.emit(PreInst::Op(PreOp::Arithmetic(ArithmeticOp::Sub, var_id.clone(), inc_const))).unwrap()
+                }
+                _ => unreachable!(),
+            };
+            let var_id = gen.emit(PreInst::Op(PreOp::Assignment(
+                Some(var_id),
+                Val::Var(changed_id.clone()),
+            )));
+            match op {
+                ast::IncOrDec::Inc(ast::OperationSide::Postfix) |
+                ast::IncOrDec::Dec(ast::OperationSide::Postfix) => {
+                    tmp_id
+                }
+                _ => var_id,
             }
         }
         ast::Exp::Assign(name, exp) => {
@@ -674,10 +674,6 @@ impl UnOpInst {
             ast::UnOp::Negation => UnOpInst::Neg,
             ast::UnOp::BitwiseComplement => UnOpInst::BitComplement,
             ast::UnOp::LogicalNegation => UnOpInst::LogicNeg,
-            ast::UnOp::IncrementPrefix => UnOpInst::IncPre,
-            ast::UnOp::IncrementPostfix => UnOpInst::IncPost,
-            ast::UnOp::DecrementPrefix => UnOpInst::DecPre,
-            ast::UnOp::DecrementPostfix => UnOpInst::DecPost,
         }
     }
 }
