@@ -244,22 +244,14 @@ impl Generator {
                         .emit(Instruction::Assignment(tmp_id, var_id.clone()))
                         .unwrap();
                     let changed_id = self
-                        .emit(Instruction::Op(Op::Op(
-                            arithmetic_op,
-                            one,
-                            var_id.clone(),
-                        )))
+                        .emit(Instruction::Op(Op::Op(arithmetic_op, one, var_id.clone())))
                         .unwrap();
                     self.emit(Instruction::Assignment(var_id, changed_id))
                         .unwrap();
                     var_copy_id
                 } else {
                     let changed_id = self
-                        .emit(Instruction::Op(Op::Op(
-                            arithmetic_op,
-                            one,
-                            var_id.clone(),
-                        )))
+                        .emit(Instruction::Op(Op::Op(arithmetic_op, one, var_id.clone())))
                         .unwrap();
                     self.emit(Instruction::Assignment(var_id, changed_id.clone()))
                         .unwrap();
@@ -267,10 +259,56 @@ impl Generator {
                 }
             }
             ast::Exp::BinOp(op, exp1, exp2) => {
-                let id1 = self.emit_expr(exp1);
-                let id2 = self.emit_expr(exp2);
-                self.emit(Instruction::Op(Op::Op(TypeOp::from(op), id1, id2)))
-                    .unwrap()
+                if let ast::BinOp::And = op {
+                    let end_label = self.uniq_label();
+                    let id1 = self.emit_expr(exp1);
+                    let tmp_var = self.emit(Instruction::Alloc(Const::Int(0))).unwrap();
+                    self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::IfGOTO(
+                        id1,
+                        end_label,
+                    ))));
+                    let id2 = self.emit_expr(exp2);
+                    self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::IfGOTO(
+                        id2,
+                        end_label,
+                    ))));
+                    let false_var = self.emit(Instruction::Alloc(Const::Int(1))).unwrap();
+                    self.emit(Instruction::Assignment(tmp_var.clone(), false_var));
+                    self.emit(Instruction::ControlOp(ControlOp::Label(end_label)));
+                    tmp_var
+                } else if let ast::BinOp::Or = op {
+                    let second_branch = self.uniq_label();
+                    let false_branch = self.uniq_label();
+                    let end_label = self.uniq_label();
+                    let id1 = self.emit_expr(exp1);
+                    let tmp_var = self.emit(Instruction::Alloc(Const::Int(1))).unwrap();
+                    self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::IfGOTO(
+                        id1,
+                        second_branch,
+                    ))));
+                    self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::GOTO(
+                        end_label,
+                    ))));
+                    self.emit(Instruction::ControlOp(ControlOp::Label(second_branch)));
+                    let id2 = self.emit_expr(exp2);
+                    self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::IfGOTO(
+                        id2,
+                        false_branch,
+                    ))));
+                    self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::GOTO(
+                        end_label,
+                    ))));
+                    self.emit(Instruction::ControlOp(ControlOp::Label(false_branch)));
+                    let false_var = self.emit(Instruction::Alloc(Const::Int(0))).unwrap();
+                    self.emit(Instruction::Assignment(tmp_var.clone(), false_var));
+                    self.emit(Instruction::ControlOp(ControlOp::Label(end_label)));
+                    tmp_var
+                } else {
+                    let id1 = self.emit_expr(exp1);
+                    let id2 = self.emit_expr(exp2);
+                    self.emit(Instruction::Op(Op::Op(TypeOp::from(op), id1, id2)))
+                        .unwrap()
+                }
             }
             ast::Exp::Assign(name, exp) => {
                 let var_id = self.recognize_var(name);
