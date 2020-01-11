@@ -29,7 +29,7 @@ struct Context {
     /*
         NOTION: take away from ID as a dependency
     */
-    symbols: HashMap<String, ID>,
+    symbols: HashMap<String, Vec<ID>>,
     symbols_counter: usize,
     scopes: Vec<HashSet<String>>,
     loop_ctx: Vec<LoopContext>,
@@ -68,12 +68,16 @@ impl Context {
 
         let id = ID::new(self.symbols_counter, IDType::Var);
         self.symbols_counter += 1;
-        self.symbols.insert(name.to_owned(), id.clone());
+        self.symbols
+            .entry(name.to_owned())
+            .or_default()
+            .push(id.clone());
+
         id
     }
 
     fn get_symbol(&self, name: &str) -> Option<&ID> {
-        self.symbols.get(name)
+        self.symbols.get(name).map_or(None, |ids| ids.last())
     }
 
     fn add_symbol_to_scope(&mut self, name: &str) -> bool {
@@ -164,7 +168,10 @@ impl Generator {
             .context
             .symbols
             .iter()
-            .map(|(var, id)| (id.id, var.clone()))
+            .map(|(var, ids)| {
+                ids.iter().map(|id| (id.id, var.clone())).collect::<Vec<_>>()
+            })
+            .flatten()
             .collect::<HashMap<usize, String>>();
 
         self.context.symbols.clear();
@@ -264,13 +271,11 @@ impl Generator {
                     let id1 = self.emit_expr(exp1);
                     let tmp_var = self.emit(Instruction::Alloc(Const::Int(0))).unwrap();
                     self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::IfGOTO(
-                        id1,
-                        end_label,
+                        id1, end_label,
                     ))));
                     let id2 = self.emit_expr(exp2);
                     self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::IfGOTO(
-                        id2,
-                        end_label,
+                        id2, end_label,
                     ))));
                     let false_var = self.emit(Instruction::Alloc(Const::Int(1))).unwrap();
                     self.emit(Instruction::Assignment(tmp_var.clone(), false_var));
