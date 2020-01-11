@@ -1,11 +1,10 @@
 /// Parse package does all stuff to create AST
-/// 
+///
 /// TODO: should we have rejected logic when we remove(0) from tokens
 /// might be better to check it and if something wrong fail?
 /// but not effect original vector, but it's not very crucial now, until we return tokens even in error,
 /// or take &tokens not move them
-
-use crate::{Token, TokenType, ast};
+use crate::{ast, lexer::Token, lexer::TokenType};
 
 use std::error;
 use std::fmt;
@@ -33,21 +32,25 @@ fn tokens_to_types(tokens: &Vec<Token>) -> Vec<TokenType> {
     tokens.iter().map(|t| t.token_type).collect()
 }
 
-fn parse_expr<ParsExpFunc>(parse: ParsExpFunc, opt_tokens: &[TokenType], tokens: Vec<Token>)
-    -> Result<(ast::Exp, Vec<Token>)>
-    where ParsExpFunc : Fn(Vec<Token>) -> Result<(ast::Exp, Vec<Token>)>
+fn parse_expr<ParsExpFunc>(
+    parse: ParsExpFunc,
+    opt_tokens: &[TokenType],
+    tokens: Vec<Token>,
+) -> Result<(ast::Exp, Vec<Token>)>
+where
+    ParsExpFunc: Fn(Vec<Token>) -> Result<(ast::Exp, Vec<Token>)>,
 {
     let (mut exp, mut tokens) = parse(tokens)?;
-    while let Some(tok) = tokens.get(0)  {
-            if !opt_tokens.contains(&tok.token_type) {
-                break;
-            }
-            
-            let tok_type = tokens.remove(0).token_type;
-            let (right, stashed_tokens) = parse(tokens)?;
-            let op = map_token_to_ast(tok_type).unwrap();
-            exp = ast::Exp::BinOp(op, Box::new(exp), Box::new(right));
-            tokens = stashed_tokens;
+    while let Some(tok) = tokens.get(0) {
+        if !opt_tokens.contains(&tok.token_type) {
+            break;
+        }
+
+        let tok_type = tokens.remove(0).token_type;
+        let (right, stashed_tokens) = parse(tokens)?;
+        let op = map_token_to_ast(tok_type).unwrap();
+        exp = ast::Exp::BinOp(op, Box::new(exp), Box::new(right));
+        tokens = stashed_tokens;
     }
 
     Ok((exp, tokens))
@@ -55,25 +58,25 @@ fn parse_expr<ParsExpFunc>(parse: ParsExpFunc, opt_tokens: &[TokenType], tokens:
 
 fn map_token_to_ast(t: TokenType) -> Option<ast::BinOp> {
     match t {
-            TokenType::BitwiseXor => Some(ast::BinOp::BitwiseXor),
-            TokenType::BitwiseOr => Some(ast::BinOp::BitwiseOr),
-            TokenType::BitwiseAnd => Some(ast::BinOp::BitwiseAnd),
-            TokenType::Addition => Some(ast::BinOp::Addition),
-            TokenType::Negation => Some(ast::BinOp::Sub),
-            TokenType::Multiplication => Some(ast::BinOp::Multiplication),
-            TokenType::Division => Some(ast::BinOp::Division),
-            TokenType::Modulo => Some(ast::BinOp::Modulo),
-            TokenType::And => Some(ast::BinOp::And),
-            TokenType::Or => Some(ast::BinOp::Or),
-            TokenType::Equal => Some(ast::BinOp::Equal),
-            TokenType::NotEqual => Some(ast::BinOp::NotEqual),
-            TokenType::LessThan => Some(ast::BinOp::LessThan),
-            TokenType::LessThanOrEqual => Some(ast::BinOp::LessThanOrEqual),
-            TokenType::GreaterThan => Some(ast::BinOp::GreaterThan),
-            TokenType::GreaterThanOrEqual => Some(ast::BinOp::GreaterThanOrEqual),
-            TokenType::BitwiseLeftShift => Some(ast::BinOp::BitwiseLeftShift),
-            TokenType::BitwiseRightShift => Some(ast::BinOp::BitwiseRightShift),
-            _ => None,
+        TokenType::BitwiseXor => Some(ast::BinOp::BitwiseXor),
+        TokenType::BitwiseOr => Some(ast::BinOp::BitwiseOr),
+        TokenType::BitwiseAnd => Some(ast::BinOp::BitwiseAnd),
+        TokenType::Addition => Some(ast::BinOp::Addition),
+        TokenType::Negation => Some(ast::BinOp::Sub),
+        TokenType::Multiplication => Some(ast::BinOp::Multiplication),
+        TokenType::Division => Some(ast::BinOp::Division),
+        TokenType::Modulo => Some(ast::BinOp::Modulo),
+        TokenType::And => Some(ast::BinOp::And),
+        TokenType::Or => Some(ast::BinOp::Or),
+        TokenType::Equal => Some(ast::BinOp::Equal),
+        TokenType::NotEqual => Some(ast::BinOp::NotEqual),
+        TokenType::LessThan => Some(ast::BinOp::LessThan),
+        TokenType::LessThanOrEqual => Some(ast::BinOp::LessThanOrEqual),
+        TokenType::GreaterThan => Some(ast::BinOp::GreaterThan),
+        TokenType::GreaterThanOrEqual => Some(ast::BinOp::GreaterThanOrEqual),
+        TokenType::BitwiseLeftShift => Some(ast::BinOp::BitwiseLeftShift),
+        TokenType::BitwiseRightShift => Some(ast::BinOp::BitwiseRightShift),
+        _ => None,
     }
 }
 
@@ -131,21 +134,25 @@ fn map_assign_op(t: &Token) -> Option<ast::AssignmentOp> {
 }
 
 pub fn parse_exp(mut tokens: Vec<Token>) -> Result<(ast::Exp, Vec<Token>)> {
-    if tokens[0].is_type(TokenType::Identifier)
-        && tokens[1].is_type(TokenType::Assignment) {
+    if tokens[0].is_type(TokenType::Identifier) && tokens[1].is_type(TokenType::Assignment) {
         let var = tokens.remove(0);
         tokens.remove(0);
         let (exp, tokens) = parse_exp(tokens)?;
 
-        Ok((ast::Exp::Assign(var.val.unwrap().to_owned(), Box::new(exp)), tokens))
-    } else if tokens[0].is_type(TokenType::Identifier)
-        && map_assign_op(&tokens[1]).is_some() {
+        Ok((
+            ast::Exp::Assign(var.val.unwrap().to_owned(), Box::new(exp)),
+            tokens,
+        ))
+    } else if tokens[0].is_type(TokenType::Identifier) && map_assign_op(&tokens[1]).is_some() {
         let var = tokens.remove(0);
         let op = map_assign_op(&tokens[0]).unwrap();
         tokens.remove(0);
         let (exp, tokens) = parse_exp(tokens)?;
 
-        Ok((ast::Exp::AssignOp(var.val.unwrap().to_owned(), op, Box::new(exp)), tokens))
+        Ok((
+            ast::Exp::AssignOp(var.val.unwrap().to_owned(), op, Box::new(exp)),
+            tokens,
+        ))
     } else {
         parse_conditional_expr(tokens)
     }
@@ -156,11 +163,11 @@ pub fn parse_conditional_expr(tokens: Vec<Token>) -> Result<(ast::Exp, Vec<Token
     match tokens.get(0) {
         Some(tok) if tok.token_type == TokenType::QuestionSign => {
             tokens.remove(0);
-            
+
             let (left_exp, mut toks) = parse_exp(tokens)?;
             compare_token(toks.remove(0), TokenType::Colon)?;
             let (right_exp, toks) = parse_conditional_expr(toks)?;
-            
+
             tokens = toks;
             exp = ast::Exp::CondExp(Box::new(exp), Box::new(left_exp), Box::new(right_exp))
         }
@@ -179,27 +186,64 @@ pub fn parse_and_expr(tokens: Vec<Token>) -> Result<(ast::Exp, Vec<Token>)> {
 }
 
 pub fn parse_equality_expr(tokens: Vec<Token>) -> Result<(ast::Exp, Vec<Token>)> {
-    parse_expr(parse_relational_expr, &[TokenType::Equal, TokenType::NotEqual], tokens)
+    parse_expr(
+        parse_relational_expr,
+        &[TokenType::Equal, TokenType::NotEqual],
+        tokens,
+    )
 }
 
 pub fn parse_relational_expr(tokens: Vec<Token>) -> Result<(ast::Exp, Vec<Token>)> {
-    parse_expr(parse_addictive_expr, &[TokenType::GreaterThan, TokenType::GreaterThanOrEqual, TokenType::LessThan, TokenType::LessThanOrEqual], tokens)
+    parse_expr(
+        parse_addictive_expr,
+        &[
+            TokenType::GreaterThan,
+            TokenType::GreaterThanOrEqual,
+            TokenType::LessThan,
+            TokenType::LessThanOrEqual,
+        ],
+        tokens,
+    )
 }
 
 pub fn parse_addictive_expr(tokens: Vec<Token>) -> Result<(ast::Exp, Vec<Token>)> {
-    parse_expr(parse_bitwise_expr, &[TokenType::Addition, TokenType::Negation], tokens)
+    parse_expr(
+        parse_bitwise_expr,
+        &[TokenType::Addition, TokenType::Negation],
+        tokens,
+    )
 }
 
 pub fn parse_bitwise_expr(tokens: Vec<Token>) -> Result<(ast::Exp, Vec<Token>)> {
-    parse_expr(parse_un_op_term, &[TokenType::BitwiseLeftShift, TokenType::BitwiseRightShift], tokens)
+    parse_expr(
+        parse_un_op_term,
+        &[TokenType::BitwiseLeftShift, TokenType::BitwiseRightShift],
+        tokens,
+    )
 }
 
 pub fn parse_un_op_term(tokens: Vec<Token>) -> Result<(ast::Exp, Vec<Token>)> {
-    parse_expr(parse_term, &[TokenType::BitwiseAnd, TokenType::BitwiseOr, TokenType::BitwiseXor], tokens)
+    parse_expr(
+        parse_term,
+        &[
+            TokenType::BitwiseAnd,
+            TokenType::BitwiseOr,
+            TokenType::BitwiseXor,
+        ],
+        tokens,
+    )
 }
 
 pub fn parse_term(tokens: Vec<Token>) -> Result<(ast::Exp, Vec<Token>)> {
-    parse_expr(parse_factor, &[TokenType::Multiplication, TokenType::Modulo, TokenType::Division], tokens)
+    parse_expr(
+        parse_factor,
+        &[
+            TokenType::Multiplication,
+            TokenType::Modulo,
+            TokenType::Division,
+        ],
+        tokens,
+    )
 }
 
 pub fn parse_factor(mut tokens: Vec<Token>) -> Result<(ast::Exp, Vec<Token>)> {
@@ -217,11 +261,16 @@ pub fn parse_factor(mut tokens: Vec<Token>) -> Result<(ast::Exp, Vec<Token>)> {
         TokenType::Identifier => {
             let token = tokens.remove(0);
             match tokens.get(0) {
-                Some(tok) if tok.is_type(TokenType::Decrement) || tok.is_type(TokenType::Increment) => {
+                Some(tok)
+                    if tok.is_type(TokenType::Decrement) || tok.is_type(TokenType::Increment) =>
+                {
                     let var_name = token.val.unwrap().to_owned();
                     let tok_type = tok.token_type;
                     tokens.remove(0);
-                    Ok((ast::Exp::IncOrDec(var_name, map_inc_dec_token(tok_type, true).unwrap()), tokens))
+                    Ok((
+                        ast::Exp::IncOrDec(var_name, map_inc_dec_token(tok_type, true).unwrap()),
+                        tokens,
+                    ))
                 }
                 Some(tok) if tok.is_type(TokenType::OpenParenthesis) => {
                     tokens.remove(0);
@@ -247,12 +296,20 @@ pub fn parse_factor(mut tokens: Vec<Token>) -> Result<(ast::Exp, Vec<Token>)> {
         }
         TokenType::IntegerLiteral => {
             let token = tokens.remove(0);
-            Ok((ast::Exp::Const(ast::Const::Int(token.val.as_ref().unwrap().parse().unwrap())), tokens))
+            Ok((
+                ast::Exp::Const(ast::Const::Int(
+                    token.val.as_ref().unwrap().parse().unwrap(),
+                )),
+                tokens,
+            ))
         }
         TokenType::Negation | TokenType::LogicalNegation | TokenType::BitwiseComplement => {
             let token = tokens.remove(0);
             let (expr, tokens) = parse_expr(parse_factor, &[TokenType::Or], tokens).unwrap();
-            Ok((ast::Exp::UnOp(map_token_to_unop(token.token_type).unwrap(), Box::new(expr)), tokens))
+            Ok((
+                ast::Exp::UnOp(map_token_to_unop(token.token_type).unwrap(), Box::new(expr)),
+                tokens,
+            ))
         }
         _ => parse_inc_dec_expr(tokens),
     }
@@ -262,7 +319,13 @@ pub fn parse_inc_dec_expr(mut tokens: Vec<Token>) -> Result<(ast::Exp, Vec<Token
     let token = tokens.remove(0);
     let var_token = tokens.remove(0);
     let var_name = var_token.val.unwrap().to_owned();
-    Ok((ast::Exp::IncOrDec(var_name, map_inc_dec_token(token.token_type, false).unwrap()), tokens))
+    Ok((
+        ast::Exp::IncOrDec(
+            var_name,
+            map_inc_dec_token(token.token_type, false).unwrap(),
+        ),
+        tokens,
+    ))
 }
 
 pub fn parse_opt_exp(tokens: Vec<Token>) -> Result<(Option<ast::Exp>, Vec<Token>)> {
@@ -283,8 +346,8 @@ pub fn parse_statement(mut tokens: Vec<Token>) -> Result<(ast::Statement, Vec<To
             let (exp, mut tokens) = parse_exp(tokens).unwrap();
             compare_token(tokens.remove(0), TokenType::Semicolon).unwrap();
 
-            (ast::Statement::Return{exp: exp}, tokens)
-        },
+            (ast::Statement::Return { exp: exp }, tokens)
+        }
         TokenType::For => {
             tokens.remove(0);
 
@@ -292,24 +355,42 @@ pub fn parse_statement(mut tokens: Vec<Token>) -> Result<(ast::Statement, Vec<To
             if is_seem_decl(&tokens) {
                 let (decl, toks) = parse_decl(tokens)?;
                 let (controll_exp, mut toks) = parse_opt_exp(toks)?;
-                let controll_exp = controll_exp.map_or(ast::Exp::Const(ast::Const::Int(1)), |ce| ce);
+                let controll_exp =
+                    controll_exp.map_or(ast::Exp::Const(ast::Const::Int(1)), |ce| ce);
                 compare_token(toks.remove(0), TokenType::Semicolon).unwrap();
                 let (exp, mut toks) = parse_opt_exp(toks)?;
                 compare_token(toks.remove(0), TokenType::CloseParenthesis).unwrap();
                 let (statement, toks) = parse_statement(toks)?;
 
-                (ast::Statement::ForDecl{decl: decl, exp2: controll_exp, exp3: exp, statement: Box::new(statement)}, toks)
+                (
+                    ast::Statement::ForDecl {
+                        decl: decl,
+                        exp2: controll_exp,
+                        exp3: exp,
+                        statement: Box::new(statement),
+                    },
+                    toks,
+                )
             } else {
                 let (exp1, mut toks) = parse_opt_exp(tokens)?;
                 compare_token(toks.remove(0), TokenType::Semicolon).unwrap();
                 let (controll_exp, mut toks) = parse_opt_exp(toks)?;
-                let controll_exp = controll_exp.map_or(ast::Exp::Const(ast::Const::Int(1)), |ce| ce);
+                let controll_exp =
+                    controll_exp.map_or(ast::Exp::Const(ast::Const::Int(1)), |ce| ce);
                 compare_token(toks.remove(0), TokenType::Semicolon).unwrap();
                 let (exp, mut toks) = parse_opt_exp(toks)?;
                 compare_token(toks.remove(0), TokenType::CloseParenthesis).unwrap();
                 let (statement, toks) = parse_statement(toks)?;
 
-                (ast::Statement::For{exp1: exp1, exp2: controll_exp, exp3: exp, statement: Box::new(statement)}, toks)
+                (
+                    ast::Statement::For {
+                        exp1: exp1,
+                        exp2: controll_exp,
+                        exp3: exp,
+                        statement: Box::new(statement),
+                    },
+                    toks,
+                )
             }
         }
         TokenType::While => {
@@ -320,7 +401,13 @@ pub fn parse_statement(mut tokens: Vec<Token>) -> Result<(ast::Statement, Vec<To
             compare_token(toks.remove(0), TokenType::CloseParenthesis).unwrap();
             let (statement, toks) = parse_statement(toks)?;
 
-            (ast::Statement::While{exp: exp, statement: Box::new(statement)}, toks)
+            (
+                ast::Statement::While {
+                    exp: exp,
+                    statement: Box::new(statement),
+                },
+                toks,
+            )
         }
         TokenType::Do => {
             tokens.remove(0);
@@ -334,7 +421,13 @@ pub fn parse_statement(mut tokens: Vec<Token>) -> Result<(ast::Statement, Vec<To
             compare_token(toks.remove(0), TokenType::CloseParenthesis).unwrap();
             compare_token(toks.remove(0), TokenType::Semicolon).unwrap();
 
-            (ast::Statement::Do{statement: Box::new(statement), exp: exp}, toks)
+            (
+                ast::Statement::Do {
+                    statement: Box::new(statement),
+                    exp: exp,
+                },
+                toks,
+            )
         }
         TokenType::Break => {
             tokens.remove(0);
@@ -353,21 +446,28 @@ pub fn parse_statement(mut tokens: Vec<Token>) -> Result<(ast::Statement, Vec<To
             compare_token(tokens.remove(0), TokenType::OpenParenthesis).unwrap();
             let (exp, mut tokens) = parse_exp(tokens)?;
             compare_token(tokens.remove(0), TokenType::CloseParenthesis).unwrap();
-            
-            let (if_block, mut tokens) = parse_statement(tokens)?;            
-            
-            let else_block= match tokens.get(0) {
+
+            let (if_block, mut tokens) = parse_statement(tokens)?;
+
+            let else_block = match tokens.get(0) {
                 Some(tok) if tok.token_type == TokenType::Else => {
                     tokens.remove(0);
-                    
-                    let (else_block, toks) = parse_statement(tokens)?;            
+
+                    let (else_block, toks) = parse_statement(tokens)?;
                     tokens = toks;
                     Some(Box::new(else_block))
-                },
+                }
                 _ => None,
             };
-            
-            (ast::Statement::Conditional{cond_expr: exp, if_block: Box::new(if_block), else_block}, tokens)
+
+            (
+                ast::Statement::Conditional {
+                    cond_expr: exp,
+                    if_block: Box::new(if_block),
+                    else_block,
+                },
+                tokens,
+            )
         }
         TokenType::OpenBrace => {
             tokens.remove(0);
@@ -380,20 +480,16 @@ pub fn parse_statement(mut tokens: Vec<Token>) -> Result<(ast::Statement, Vec<To
             }
             tokens.remove(0);
 
-            let list = if !list.is_empty() {
-                Some(list)
-            } else {
-                None
-            };
+            let list = if !list.is_empty() { Some(list) } else { None };
 
-            (ast::Statement::Compound{list: list}, tokens)
+            (ast::Statement::Compound { list: list }, tokens)
         }
         _ => {
             let (exp, mut tokens) = parse_opt_exp(tokens)?;
             compare_token(tokens.remove(0), TokenType::Semicolon).unwrap();
 
-            (ast::Statement::Exp{exp: exp}, tokens)
-        },
+            (ast::Statement::Exp { exp: exp }, tokens)
+        }
     };
 
     Ok((stat, tokens))
@@ -410,27 +506,27 @@ pub fn parse_decl(mut tokens: Vec<Token>) -> Result<(ast::Declaration, Vec<Token
                     let (exp, toks) = parse_exp(tokens)?;
                     tokens = toks;
                     Some(exp)
-                } ,
+                }
                 _ => None,
             };
             compare_token(tokens.remove(0), TokenType::Semicolon).unwrap();
 
-            Ok((ast::Declaration::Declare{name: var.val.unwrap().to_owned(), exp: exp}, tokens))
-        },
-        _ =>  {
-            Err(CompilerError::ParsingError)
-        },
+            Ok((
+                ast::Declaration::Declare {
+                    name: var.val.unwrap().to_owned(),
+                    exp: exp,
+                },
+                tokens,
+            ))
+        }
+        _ => Err(CompilerError::ParsingError),
     }
 }
 
 pub fn is_seem_decl(tokens: &[Token]) -> bool {
     match tokens.get(0) {
-        Some(tok) if tok.token_type == TokenType::Int => {
-            true
-        },
-        _ =>  {
-            false
-        },
+        Some(tok) if tok.token_type == TokenType::Int => true,
+        _ => false,
     }
 }
 
@@ -442,11 +538,11 @@ pub fn parse_block_item(mut tokens: Vec<Token>) -> Result<(ast::BlockItem, Vec<T
         Some(tok) if is_seem_decl(&tokens) => {
             let (decl, tokens) = parse_decl(tokens)?;
             Ok((ast::BlockItem::Declaration(decl), tokens))
-        },
-        _ =>  {
+        }
+        _ => {
             let (state, tokens) = parse_statement(tokens)?;
             Ok((ast::BlockItem::Statement(state), tokens))
-        },
+        }
     }
 }
 
@@ -476,7 +572,7 @@ pub fn parse_func(mut tokens: Vec<Token>) -> Result<(ast::FuncDecl, Vec<Token>)>
                 let (block, toks) = parse_block_item(tokens).unwrap();
                 blocks.push(block);
                 tokens = toks;
-            } 
+            }
             tokens.remove(0);
 
             Some(blocks)
@@ -485,7 +581,14 @@ pub fn parse_func(mut tokens: Vec<Token>) -> Result<(ast::FuncDecl, Vec<Token>)>
         _ => return Err(CompilerError::ParsingError),
     };
 
-    Ok((ast::FuncDecl{name: func_name.val.unwrap().clone(), parameters: params, blocks: blocks}, tokens))
+    Ok((
+        ast::FuncDecl {
+            name: func_name.val.unwrap().clone(),
+            parameters: params,
+            blocks: blocks,
+        },
+        tokens,
+    ))
 }
 
 pub fn parse(mut tokens: Vec<Token>) -> Result<ast::Program> {
@@ -495,7 +598,7 @@ pub fn parse(mut tokens: Vec<Token>) -> Result<ast::Program> {
         tokens = toks;
         functions.push(decl);
     }
-    
+
     Ok(ast::Program(functions))
 }
 

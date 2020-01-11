@@ -1,4 +1,4 @@
-use simple_c_compiler::{Token, TokenType};
+use simple_c_compiler::lexer::{Token, TokenType};
 
 pub fn pretty_tokens(tokens: &Vec<Token>) -> String {
     format!(

@@ -1,10 +1,8 @@
-mod generator;
-mod lexer;
-pub mod parser;
 pub mod ast;
-pub mod function_checks;
-pub mod tac;
+pub mod generator;
+pub mod il;
+pub mod lexer;
+pub mod parser;
+pub mod semantic_checks;
 
-pub use generator::gen;
-pub use lexer::{Lexer, Token, TokenType};
-pub use function_checks as checks;
+pub use semantic_checks as checks;

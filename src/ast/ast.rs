@@ -18,12 +18,11 @@ pub enum BinOp {
     GreaterThanOrEqual,
     BitwiseLeftShift,
     BitwiseRightShift,
-    
 }
 
 #[derive(Debug)]
 pub enum Const {
-    Int(i64)
+    Int(i64),
 }
 
 #[derive(Debug)]
@@ -43,7 +42,7 @@ impl IncOrDec {
     pub fn is_postfix(&self) -> bool {
         match self {
             IncOrDec::Inc(OperationSide::Postfix) | IncOrDec::Dec(OperationSide::Postfix) => true,
-            _ => false
+            _ => false,
         }
     }
 }
@@ -82,20 +81,46 @@ pub enum Exp {
 }
 
 pub enum Statement {
-    Return{exp: Exp},
-    Exp{exp: Option<Exp>},
-    Conditional{cond_expr: Exp, if_block: Box<Statement>, else_block: Option<Box<Statement>>},
-    Compound{list: Option<Vec<BlockItem>>},
-    For{exp1: Option<Exp>, exp2: Exp, exp3: Option<Exp>, statement: Box<Statement>},
-    ForDecl{decl: Declaration, exp2: Exp, exp3: Option<Exp>, statement: Box<Statement>},
-    While{exp: Exp, statement: Box<Statement>},
-    Do{statement: Box<Statement>, exp: Exp},
+    Return {
+        exp: Exp,
+    },
+    Exp {
+        exp: Option<Exp>,
+    },
+    Conditional {
+        cond_expr: Exp,
+        if_block: Box<Statement>,
+        else_block: Option<Box<Statement>>,
+    },
+    Compound {
+        list: Option<Vec<BlockItem>>,
+    },
+    For {
+        exp1: Option<Exp>,
+        exp2: Exp,
+        exp3: Option<Exp>,
+        statement: Box<Statement>,
+    },
+    ForDecl {
+        decl: Declaration,
+        exp2: Exp,
+        exp3: Option<Exp>,
+        statement: Box<Statement>,
+    },
+    While {
+        exp: Exp,
+        statement: Box<Statement>,
+    },
+    Do {
+        statement: Box<Statement>,
+        exp: Exp,
+    },
     Break,
     Continue,
 }
 
 pub enum Declaration {
-    Declare{name: String, exp: Option<Exp>},
+    Declare { name: String, exp: Option<Exp> },
 }
 
 pub enum BlockItem {
@@ -103,7 +128,7 @@ pub enum BlockItem {
     Declaration(Declaration),
 }
 
-pub struct FuncDecl{
+pub struct FuncDecl {
     pub name: String,
     pub parameters: Vec<String>,
     pub blocks: Option<Vec<BlockItem>>,
