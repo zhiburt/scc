@@ -248,14 +248,12 @@ mod tests {
         test_bin_op(">=", TokenType::GreaterThanOrEqual);
     }
 
-
     fn test_bin_op(op: &str, tt: TokenType) {
         let program = format!("1 {} 2", op);
         let buff = Cursor::new(program.as_bytes());
         let lexer = Lexer::new();
 
         let tokens = lexer.lex(buff);
-
 
         let first_int = Token {
             token_type: TokenType::IntegerLiteral,
@@ -264,19 +262,22 @@ mod tests {
         };
         let bin_op = Token {
             token_type: tt,
-            pos: Pos { start: 2, end: 2 + op.len() },
+            pos: Pos {
+                start: 2,
+                end: 2 + op.len(),
+            },
             val: None,
         };
         let second_int = Token {
             token_type: TokenType::IntegerLiteral,
-            pos: Pos { start: bin_op.pos.end + 1, end: bin_op.pos.end + 2 },
+            pos: Pos {
+                start: bin_op.pos.end + 1,
+                end: bin_op.pos.end + 2,
+            },
             val: Some(String::from("2")),
         };
 
-        assert_eq!(
-            tokens,
-            vec![first_int, bin_op, second_int],
-        );
+        assert_eq!(tokens, vec![first_int, bin_op, second_int],);
     }
 
     #[test]

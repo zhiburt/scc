@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::io::Write;
 
-use simple_c_compiler::tac;
+use simple_c_compiler::il::tac;
 
 pub fn pretty<W: Write>(mut w: W, fun: &tac::FuncDef) {
     writeln!(w, "{}:", pretty_fun_name(&fun.name));

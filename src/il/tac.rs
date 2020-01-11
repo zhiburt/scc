@@ -169,7 +169,9 @@ impl Generator {
             .symbols
             .iter()
             .map(|(var, ids)| {
-                ids.iter().map(|id| (id.id, var.clone())).collect::<Vec<_>>()
+                ids.iter()
+                    .map(|id| (id.id, var.clone()))
+                    .collect::<Vec<_>>()
             })
             .flatten()
             .collect::<HashMap<usize, String>>();
