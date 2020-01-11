@@ -7,24 +7,45 @@ pub fn pretty<W: Write>(mut w: W, fun: &tac::FuncDef) {
     writeln!(w, "{}:", pretty_fun_name(&fun.name));
     writeln!(w, "  BeginFunc {}", fun.frame_size);
 
-    for inst in &fun.instructions {
+    for tac::InstructionLine(inst, id) in &fun.instructions {
         match inst {
-            tac::Instruction::Op(id, op) => {
-                let id = id.as_ref().unwrap();
+            tac::Instruction::Alloc(tac::Const::Int(val)) => {
+                writeln!(
+                    w,
+                    "  {}: {}",
+                    pretty_id(&fun.vars, id.as_ref().unwrap()),
+                    val
+                )
+                .unwrap();
+            }
+            tac::Instruction::Assignment(id1, id2) => {
+                writeln!(
+                    w,
+                    "  {}: {}",
+                    pretty_id(&fun.vars, id1),
+                    pretty_id(&fun.vars, id2),
+                );
+            }
+            tac::Instruction::Call(call) => {
+                for p in call.params.iter() {
+                    writeln!(w, "  PushParam {}", pretty_id(&fun.vars, p));
+                }
+
+                writeln!(
+                    w,
+                    "  {}: LCall {}",
+                    pretty_id(&fun.vars, id.as_ref().unwrap()),
+                    pretty_fun_name(&call.name)
+                );
+                writeln!(w, "  PopParams {}", call.pop_size);
+            }
+            tac::Instruction::Op(op) => {
                 match op {
-                    tac::Op::Assignment(.., val) => {
-                        writeln!(
-                            w,
-                            "  {}: {}",
-                            pretty_id(&fun.vars, id),
-                            pretty_val(&fun.vars, val)
-                        );
-                    }
                     tac::Op::Op(t, v1, v2) => {
                         writeln!(
                             w,
                             "  {}: {} {} {}",
-                            pretty_id(&fun.vars, id),
+                            pretty_id(&fun.vars, id.as_ref().unwrap()),
                             pretty_id(&fun.vars, v1),
                             pretty_type(t),
                             pretty_id(&fun.vars, v2)
@@ -34,35 +55,22 @@ pub fn pretty<W: Write>(mut w: W, fun: &tac::FuncDef) {
                         writeln!(
                             w,
                             "  {}: {} {}",
-                            pretty_id(&fun.vars, id),
+                            pretty_id(&fun.vars, id.as_ref().unwrap()),
                             pretty_unary_op(op),
                             pretty_id(&fun.vars, v1),
                         );
                     }
-                    tac::Op::Call(call) => {
-                        for p in call.params.iter() {
-                            writeln!(w, "  PushParam {}", pretty_id(&fun.vars, p));
-                        }
-
-                        writeln!(
-                            w,
-                            "  {}: LCall {}",
-                            pretty_id(&fun.vars, id),
-                            pretty_fun_name(&call.name)
-                        );
-                        writeln!(w, "  PopParams {}", call.pop_size);
-                    }
                 };
             }
-            tac::Instruction::ControllOp(cop) => match cop {
-                tac::ControllOp::Branch(lb) => match lb {
-                    tac::LabelBranch::Label(label) => {
-                        writeln!(w, "{}:", pretty_label(label));
-                    }
-                    tac::LabelBranch::GOTO(label) => {
+            tac::Instruction::ControlOp(cop) => match cop {
+                tac::ControlOp::Label(label) => {
+                    writeln!(w, "{}:", pretty_label(label));
+                }
+                tac::ControlOp::Branch(lb) => match lb {
+                    tac::Branch::GOTO(label) => {
                         writeln!(w, "  Goto {}", pretty_label(label));
                     }
-                    tac::LabelBranch::IfGOTO(id, label) => {
+                    tac::Branch::IfGOTO(id, label) => {
                         writeln!(
                             w,
                             "  IfZ {} Goto {}",
@@ -71,13 +79,9 @@ pub fn pretty<W: Write>(mut w: W, fun: &tac::FuncDef) {
                         );
                     }
                 },
-                tac::ControllOp::Return(id) => {
-                    match id {
-                        Some(id) => writeln!(w, "  Return {}", pretty_id(&fun.vars, id)).unwrap(),
-                        None => writeln!(w, "  Return void").unwrap(),
-                    }
+                tac::ControlOp::Return(id) => {
+                    writeln!(w, "  Return {}", pretty_id(&fun.vars, id)).unwrap()
                 }
-                _ => unimplemented!(),
             },
         }
     }
