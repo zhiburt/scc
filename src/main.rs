@@ -39,6 +39,14 @@ fn main() {
             for f in &tac {
                 pretty_output::pretty_tac(std::io::stdout(), f);
             }
+            
+            println!("\n\n");
+
+            generator::tac_gen::write::<
+                _,
+                generator::tac_gen::GASM,
+                generator::tac_gen::DefaultFormatter,
+            >(std::io::stdout(), &tac);
         }
     }
 
