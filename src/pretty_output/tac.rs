@@ -70,11 +70,11 @@ pub fn pretty<W: Write>(mut w: W, fun: &tac::FuncDef) {
                     tac::Branch::GOTO(label) => {
                         writeln!(w, "  Goto {}", pretty_label(label));
                     }
-                    tac::Branch::IfGOTO(id, label) => {
+                    tac::Branch::IfGOTO(val, label) => {
                         writeln!(
                             w,
                             "  IfZ {} Goto {}",
-                            pretty_id(&fun.vars, id),
+                            pretty_val(&fun.vars, val),
                             pretty_label(label)
                         );
                     }

@@ -279,14 +279,14 @@ impl Generator {
             ast::Exp::BinOp(op, exp1, exp2) => {
                 if let ast::BinOp::And = op {
                     let end_label = self.uniq_label();
-                    let id1 = self.emit_expr(exp1).id().unwrap();
+                    let val1 = self.emit_expr(exp1);
                     let tmp_var = self.emit(Instruction::Alloc(Value::from(Const::Int(0)))).unwrap();
                     self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::IfGOTO(
-                        id1, end_label,
+                        val1, end_label,
                     ))));
-                    let id2 = self.emit_expr(exp2).id().unwrap();
+                    let val2 = self.emit_expr(exp2);
                     self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::IfGOTO(
-                        id2, end_label,
+                        val2, end_label,
                     ))));
                     let false_var = self.emit(Instruction::Alloc(Value::from(Const::Int(1)))).unwrap();
                     self.emit(Instruction::Assignment(tmp_var.clone(), Value::from(false_var)));
@@ -296,19 +296,19 @@ impl Generator {
                     let second_branch = self.uniq_label();
                     let false_branch = self.uniq_label();
                     let end_label = self.uniq_label();
-                    let id1 = self.emit_expr(exp1).id().unwrap();
+                    let val1 = self.emit_expr(exp1);
                     let tmp_var = self.emit(Instruction::Alloc(Value::from(Const::Int(1)))).unwrap();
                     self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::IfGOTO(
-                        id1,
+                        val1,
                         second_branch,
                     ))));
                     self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::GOTO(
                         end_label,
                     ))));
                     self.emit(Instruction::ControlOp(ControlOp::Label(second_branch)));
-                    let id2 = self.emit_expr(exp2).id().unwrap();
+                    let val2 = self.emit_expr(exp2);
                     self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::IfGOTO(
-                        id2,
+                        val2,
                         false_branch,
                     ))));
                     self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::GOTO(
@@ -341,9 +341,9 @@ impl Generator {
 
                 let tmp_id = self.alloc_tmp();
 
-                let cond_id = self.emit_expr(cond).id().unwrap();
+                let cond_val = self.emit_expr(cond);
                 self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::IfGOTO(
-                    cond_id, exp2_label,
+                    cond_val, exp2_label,
                 ))));
                 let exp_id = self.emit_expr(exp1);
                 self.emit(Instruction::Assignment(tmp_id.clone(), exp_id));
@@ -405,11 +405,11 @@ impl Generator {
                 if_block,
                 else_block,
             } => {
-                let cond_id = self.emit_expr(cond_expr).id().unwrap();
+                let cond_val = self.emit_expr(cond_expr);
                 let end_label = self.uniq_label();
 
                 self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::IfGOTO(
-                    cond_id, end_label,
+                    cond_val, end_label,
                 ))));
                 self.emit_statement(if_block);
                 if let Some(else_block) = else_block {
@@ -445,9 +445,9 @@ impl Generator {
                     .push_loop(LoopContext::new(begin_label, end_label));
 
                 self.emit(Instruction::ControlOp(ControlOp::Label(begin_label)));
-                let cond_id = self.emit_expr(exp).id().unwrap();
+                let cond_val = self.emit_expr(exp);
                 self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::IfGOTO(
-                    cond_id, end_label,
+                    cond_val, end_label,
                 ))));
 
                 self.start_scope();
@@ -474,9 +474,9 @@ impl Generator {
                 self.emit_statement(statement);
                 self.end_scope();
 
-                let cond_id = self.emit_expr(exp).id().unwrap();
+                let cond_val = self.emit_expr(exp);
                 self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::IfGOTO(
-                    cond_id, end_label,
+                    cond_val, end_label,
                 ))));
                 self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::GOTO(
                     begin_label,
@@ -502,9 +502,9 @@ impl Generator {
                 self.end_scope();
 
                 self.emit(Instruction::ControlOp(ControlOp::Label(begin_label)));
-                let cond_id = self.emit_expr(exp2).id().unwrap();
+                let cond_val = self.emit_expr(exp2);
                 self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::IfGOTO(
-                    cond_id, end_label,
+                    cond_val, end_label,
                 ))));
 
                 self.start_scope();
@@ -537,9 +537,9 @@ impl Generator {
                     self.emit_expr(exp);
                 }
                 self.emit(Instruction::ControlOp(ControlOp::Label(begin_label)));
-                let cond_id = self.emit_expr(exp2).id().unwrap();
+                let cond_val = self.emit_expr(exp2);
                 self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::IfGOTO(
-                    cond_id, end_label,
+                    cond_val, end_label,
                 ))));
 
                 self.start_scope();
@@ -829,7 +829,7 @@ pub enum EqualityOp {
 pub enum Branch {
     GOTO(Label),
     // might here can be Val?
-    IfGOTO(ID, Label),
+    IfGOTO(Value, Label),
 }
 
 #[derive(Debug)]
