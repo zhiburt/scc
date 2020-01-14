@@ -249,7 +249,7 @@ impl Generator {
             }
             ast::Exp::IncOrDec(name, op) => {
                 let var_id = self.recognize_var(name);
-                let one = self.emit(Instruction::Alloc(Const::Int(1))).unwrap();
+                let one = Value::Const(Const::Int(1));
 
                 let arithmetic_op = match op {
                     ast::IncOrDec::Inc(..) => TypeOp::Arithmetic(ArithmeticOp::Add),
@@ -262,14 +262,14 @@ impl Generator {
                         .emit(Instruction::Assignment(tmp_id, Value::from(var_id.clone())))
                         .unwrap();
                     let changed_id = self
-                        .emit(Instruction::Op(Op::Op(arithmetic_op, one, var_id.clone())))
+                        .emit(Instruction::Op(Op::Op(arithmetic_op, var_id.clone(), one)))
                         .unwrap();
                     self.emit(Instruction::Assignment(var_id, Value::from(changed_id)))
                         .unwrap();
                     Value::from(var_copy_id)
                 } else {
                     let changed_id = self
-                        .emit(Instruction::Op(Op::Op(arithmetic_op, one, var_id.clone())))
+                        .emit(Instruction::Op(Op::Op(arithmetic_op, var_id.clone(), one)))
                         .unwrap();
                     self.emit(Instruction::Assignment(
                         var_id,
@@ -324,8 +324,8 @@ impl Generator {
                     Value::from(tmp_var)
                 } else {
                     let id1 = self.emit_expr(exp1).id().unwrap();
-                    let id2 = self.emit_expr(exp2).id().unwrap();
-                    Value::from(self.emit(Instruction::Op(Op::Op(TypeOp::from(op), id1, id2)))
+                    let val = self.emit_expr(exp2);
+                    Value::from(self.emit(Instruction::Op(Op::Op(TypeOp::from(op), id1, val)))
                         .unwrap())
                 }
             }
@@ -363,9 +363,9 @@ impl Generator {
             ast::Exp::AssignOp(name, op, exp) => {
                 let id = self.recognize_var(name);
                 let op = assign_op_to_type_op(op);
-                let exp_id = self.emit_expr(exp).id().unwrap();
+                let val = self.emit_expr(exp);
                 let resp = self
-                    .emit(Instruction::Op(Op::Op(op, id.clone(), exp_id)))
+                    .emit(Instruction::Op(Op::Op(op, id.clone(), val)))
                     .unwrap();
                 self.emit(Instruction::Assignment(id, Value::from(resp.clone())));
                 Value::from(resp)
@@ -697,7 +697,7 @@ pub type Label = usize;
 #[derive(Debug)]
 pub enum Op {
     // TODO: it seems can be a Val
-    Op(TypeOp, ID, ID),
+    Op(TypeOp, ID, Value),
     Unary(UnOp, ID),
 }
 
