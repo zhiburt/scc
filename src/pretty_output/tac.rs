@@ -9,12 +9,12 @@ pub fn pretty<W: Write>(mut w: W, fun: &tac::FuncDef) {
 
     for tac::InstructionLine(inst, id) in &fun.instructions {
         match inst {
-            tac::Instruction::Alloc(tac::Const::Int(val)) => {
+            tac::Instruction::Alloc(val) => {
                 writeln!(
                     w,
                     "  {}: {}",
                     pretty_id(&fun.vars, id.as_ref().unwrap()),
-                    val
+                    pretty_val(&fun.vars, val),
                 )
                 .unwrap();
             }

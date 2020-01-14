@@ -257,16 +257,13 @@ impl Generator {
                 };
 
                 if op.is_postfix() {
-                    let tmp_id = self.emit(Instruction::Alloc(Const::Int(0))).unwrap();
-                    let var_copy_id = self
-                        .emit(Instruction::Assignment(tmp_id, Value::from(var_id.clone())))
-                        .unwrap();
+                    let var_copy = self.emit(Instruction::Alloc(Value::from(var_id.clone()))).unwrap();
                     let changed_id = self
                         .emit(Instruction::Op(Op::Op(arithmetic_op, Value::from(var_id.clone()), one)))
                         .unwrap();
                     self.emit(Instruction::Assignment(var_id, Value::from(changed_id)))
                         .unwrap();
-                    Value::from(var_copy_id)
+                    Value::from(var_copy)
                 } else {
                     let changed_id = self
                         .emit(Instruction::Op(Op::Op(arithmetic_op, Value::from(var_id.clone()), one)))
@@ -283,7 +280,7 @@ impl Generator {
                 if let ast::BinOp::And = op {
                     let end_label = self.uniq_label();
                     let id1 = self.emit_expr(exp1).id().unwrap();
-                    let tmp_var = self.emit(Instruction::Alloc(Const::Int(0))).unwrap();
+                    let tmp_var = self.emit(Instruction::Alloc(Value::from(Const::Int(0)))).unwrap();
                     self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::IfGOTO(
                         id1, end_label,
                     ))));
@@ -291,7 +288,7 @@ impl Generator {
                     self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::IfGOTO(
                         id2, end_label,
                     ))));
-                    let false_var = self.emit(Instruction::Alloc(Const::Int(1))).unwrap();
+                    let false_var = self.emit(Instruction::Alloc(Value::from(Const::Int(1)))).unwrap();
                     self.emit(Instruction::Assignment(tmp_var.clone(), Value::from(false_var)));
                     self.emit(Instruction::ControlOp(ControlOp::Label(end_label)));
                     Value::from(tmp_var)
@@ -300,7 +297,7 @@ impl Generator {
                     let false_branch = self.uniq_label();
                     let end_label = self.uniq_label();
                     let id1 = self.emit_expr(exp1).id().unwrap();
-                    let tmp_var = self.emit(Instruction::Alloc(Const::Int(1))).unwrap();
+                    let tmp_var = self.emit(Instruction::Alloc(Value::from(Const::Int(1)))).unwrap();
                     self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::IfGOTO(
                         id1,
                         second_branch,
@@ -318,7 +315,7 @@ impl Generator {
                         end_label,
                     ))));
                     self.emit(Instruction::ControlOp(ControlOp::Label(false_branch)));
-                    let false_var = self.emit(Instruction::Alloc(Const::Int(0))).unwrap();
+                    let false_var = self.emit(Instruction::Alloc(Value::from(Const::Int(0)))).unwrap();
                     self.emit(Instruction::Assignment(tmp_var.clone(), Value::from(false_var)));
                     self.emit(Instruction::ControlOp(ControlOp::Label(end_label)));
                     Value::from(tmp_var)
@@ -654,7 +651,7 @@ pub enum Instruction {
     //
     Assignment(ID, Value),
     // Notion: Can alloc be responsible not only for tmp variables?
-    Alloc(Const),
+    Alloc(Value),
     Op(Op),
     Call(Call),
     ControlOp(ControlOp),
