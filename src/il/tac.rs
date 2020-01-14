@@ -242,7 +242,7 @@ impl Generator {
                 let id = self
                     .emit(Instruction::Op(Op::Unary(
                         UnOp::from(op),
-                        val.id().unwrap(),
+                        val,
                     )))
                     .unwrap();
                 Value::from(id)
@@ -698,7 +698,7 @@ pub type Label = usize;
 pub enum Op {
     // TODO: it seems can be a Val
     Op(TypeOp, Value, Value),
-    Unary(UnOp, ID),
+    Unary(UnOp, Value),
 }
 
 #[derive(Debug)]

@@ -57,7 +57,7 @@ pub fn pretty<W: Write>(mut w: W, fun: &tac::FuncDef) {
                             "  {}: {} {}",
                             pretty_id(&fun.vars, id.as_ref().unwrap()),
                             pretty_unary_op(op),
-                            pretty_id(&fun.vars, v1),
+                            pretty_val(&fun.vars, v1),
                         );
                     }
                 };
