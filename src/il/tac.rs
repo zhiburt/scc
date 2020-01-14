@@ -209,9 +209,9 @@ impl Generator {
         id
     }
 
-    fn emit_expr(&mut self, exp: &ast::Exp) -> ID {
+    fn emit_expr(&mut self, exp: &ast::Exp) -> Value {
         match exp {
-            ast::Exp::Var(name) => self.recognize_var(name),
+            ast::Exp::Var(name) => Value::from(self.recognize_var(name)),
             ast::Exp::Const(ast::Const::Int(val)) => {
                 // TODO: might it should be changed since we whant to handle expresions like this
                 // in this manner.
@@ -219,24 +219,33 @@ impl Generator {
                 // x = 2 * a -> x := a * 2
                 //
                 // Without a temporary variable, but its deservers a major discussion
-                self.emit(Instruction::Alloc(Const::Int(*val as i32)))
-                    .unwrap()
+                Value::from(Const::Int(*val as i32))
             }
             ast::Exp::FuncCall(name, params) => {
                 // Notion: it might be useful if we don't work with IDs itself here,
                 // instead we could handle types which contains its size and id
-                let ids = params.iter().map(|exp| self.emit_expr(exp)).collect();
+                let ids = params
+                    .iter()
+                    .map(|exp| self.emit_expr(exp).id().unwrap())
+                    .collect();
 
                 let types_size = params.len() * 4;
 
-                self.emit(Instruction::Call(Call::new(&name, ids, types_size)))
-                    .unwrap()
+                let id = self
+                    .emit(Instruction::Call(Call::new(&name, ids, types_size)))
+                    .unwrap();
+                Value::from(id)
             }
             ast::Exp::UnOp(op, exp) => {
-                let exp_id = self.emit_expr(exp);
+                let val = self.emit_expr(exp);
                 // TODO: looks like here the problem with additional tmp variable
-                self.emit(Instruction::Op(Op::Unary(UnOp::from(op), exp_id)))
-                    .unwrap()
+                let id = self
+                    .emit(Instruction::Op(Op::Unary(
+                        UnOp::from(op),
+                        val.id().unwrap(),
+                    )))
+                    .unwrap();
+                Value::from(id)
             }
             ast::Exp::IncOrDec(name, op) => {
                 let var_id = self.recognize_var(name);
@@ -250,44 +259,47 @@ impl Generator {
                 if op.is_postfix() {
                     let tmp_id = self.emit(Instruction::Alloc(Const::Int(0))).unwrap();
                     let var_copy_id = self
-                        .emit(Instruction::Assignment(tmp_id, var_id.clone()))
+                        .emit(Instruction::Assignment(tmp_id, Value::from(var_id.clone())))
                         .unwrap();
                     let changed_id = self
                         .emit(Instruction::Op(Op::Op(arithmetic_op, one, var_id.clone())))
                         .unwrap();
-                    self.emit(Instruction::Assignment(var_id, changed_id))
+                    self.emit(Instruction::Assignment(var_id, Value::from(changed_id)))
                         .unwrap();
-                    var_copy_id
+                    Value::from(var_copy_id)
                 } else {
                     let changed_id = self
                         .emit(Instruction::Op(Op::Op(arithmetic_op, one, var_id.clone())))
                         .unwrap();
-                    self.emit(Instruction::Assignment(var_id, changed_id.clone()))
-                        .unwrap();
-                    changed_id
+                    self.emit(Instruction::Assignment(
+                        var_id,
+                        Value::from(changed_id.clone()),
+                    ))
+                    .unwrap();
+                    Value::from(changed_id)
                 }
             }
             ast::Exp::BinOp(op, exp1, exp2) => {
                 if let ast::BinOp::And = op {
                     let end_label = self.uniq_label();
-                    let id1 = self.emit_expr(exp1);
+                    let id1 = self.emit_expr(exp1).id().unwrap();
                     let tmp_var = self.emit(Instruction::Alloc(Const::Int(0))).unwrap();
                     self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::IfGOTO(
                         id1, end_label,
                     ))));
-                    let id2 = self.emit_expr(exp2);
+                    let id2 = self.emit_expr(exp2).id().unwrap();
                     self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::IfGOTO(
                         id2, end_label,
                     ))));
                     let false_var = self.emit(Instruction::Alloc(Const::Int(1))).unwrap();
-                    self.emit(Instruction::Assignment(tmp_var.clone(), false_var));
+                    self.emit(Instruction::Assignment(tmp_var.clone(), Value::from(false_var)));
                     self.emit(Instruction::ControlOp(ControlOp::Label(end_label)));
-                    tmp_var
+                    Value::from(tmp_var)
                 } else if let ast::BinOp::Or = op {
                     let second_branch = self.uniq_label();
                     let false_branch = self.uniq_label();
                     let end_label = self.uniq_label();
-                    let id1 = self.emit_expr(exp1);
+                    let id1 = self.emit_expr(exp1).id().unwrap();
                     let tmp_var = self.emit(Instruction::Alloc(Const::Int(1))).unwrap();
                     self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::IfGOTO(
                         id1,
@@ -297,7 +309,7 @@ impl Generator {
                         end_label,
                     ))));
                     self.emit(Instruction::ControlOp(ControlOp::Label(second_branch)));
-                    let id2 = self.emit_expr(exp2);
+                    let id2 = self.emit_expr(exp2).id().unwrap();
                     self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::IfGOTO(
                         id2,
                         false_branch,
@@ -307,20 +319,20 @@ impl Generator {
                     ))));
                     self.emit(Instruction::ControlOp(ControlOp::Label(false_branch)));
                     let false_var = self.emit(Instruction::Alloc(Const::Int(0))).unwrap();
-                    self.emit(Instruction::Assignment(tmp_var.clone(), false_var));
+                    self.emit(Instruction::Assignment(tmp_var.clone(), Value::from(false_var)));
                     self.emit(Instruction::ControlOp(ControlOp::Label(end_label)));
-                    tmp_var
+                    Value::from(tmp_var)
                 } else {
-                    let id1 = self.emit_expr(exp1);
-                    let id2 = self.emit_expr(exp2);
-                    self.emit(Instruction::Op(Op::Op(TypeOp::from(op), id1, id2)))
-                        .unwrap()
+                    let id1 = self.emit_expr(exp1).id().unwrap();
+                    let id2 = self.emit_expr(exp2).id().unwrap();
+                    Value::from(self.emit(Instruction::Op(Op::Op(TypeOp::from(op), id1, id2)))
+                        .unwrap())
                 }
             }
             ast::Exp::Assign(name, exp) => {
                 let var_id = self.recognize_var(name);
                 let exp_id = self.emit_expr(exp);
-                self.emit(Instruction::Assignment(var_id, exp_id)).unwrap()
+                Value::from(self.emit(Instruction::Assignment(var_id, Value::from(exp_id))).unwrap())
             }
             ast::Exp::CondExp(cond, exp1, exp2) => {
                 /*
@@ -332,7 +344,7 @@ impl Generator {
 
                 let tmp_id = self.alloc_tmp();
 
-                let cond_id = self.emit_expr(cond);
+                let cond_id = self.emit_expr(cond).id().unwrap();
                 self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::IfGOTO(
                     cond_id, exp2_label,
                 ))));
@@ -346,17 +358,17 @@ impl Generator {
                 self.emit(Instruction::Assignment(tmp_id.clone(), exp_id));
                 self.emit(Instruction::ControlOp(ControlOp::Label(end_label)));
 
-                tmp_id
+                Value::from(tmp_id)
             }
             ast::Exp::AssignOp(name, op, exp) => {
                 let id = self.recognize_var(name);
                 let op = assign_op_to_type_op(op);
-                let exp_id = self.emit_expr(exp);
+                let exp_id = self.emit_expr(exp).id().unwrap();
                 let resp = self
                     .emit(Instruction::Op(Op::Op(op, id.clone(), exp_id)))
                     .unwrap();
-                self.emit(Instruction::Assignment(id, resp.clone()));
-                resp
+                self.emit(Instruction::Assignment(id, Value::from(resp.clone())));
+                Value::from(resp)
             }
         }
     }
@@ -388,7 +400,7 @@ impl Generator {
                 }
             }
             ast::Statement::Return { exp } => {
-                let id = self.emit_expr(exp);
+                let id = self.emit_expr(exp).id().unwrap();
                 self.emit(Instruction::ControlOp(ControlOp::Return(id)));
             }
             ast::Statement::Conditional {
@@ -396,7 +408,7 @@ impl Generator {
                 if_block,
                 else_block,
             } => {
-                let cond_id = self.emit_expr(cond_expr);
+                let cond_id = self.emit_expr(cond_expr).id().unwrap();
                 let end_label = self.uniq_label();
 
                 self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::IfGOTO(
@@ -436,7 +448,7 @@ impl Generator {
                     .push_loop(LoopContext::new(begin_label, end_label));
 
                 self.emit(Instruction::ControlOp(ControlOp::Label(begin_label)));
-                let cond_id = self.emit_expr(exp);
+                let cond_id = self.emit_expr(exp).id().unwrap();
                 self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::IfGOTO(
                     cond_id, end_label,
                 ))));
@@ -465,7 +477,7 @@ impl Generator {
                 self.emit_statement(statement);
                 self.end_scope();
 
-                let cond_id = self.emit_expr(exp);
+                let cond_id = self.emit_expr(exp).id().unwrap();
                 self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::IfGOTO(
                     cond_id, end_label,
                 ))));
@@ -493,7 +505,7 @@ impl Generator {
                 self.end_scope();
 
                 self.emit(Instruction::ControlOp(ControlOp::Label(begin_label)));
-                let cond_id = self.emit_expr(exp2);
+                let cond_id = self.emit_expr(exp2).id().unwrap();
                 self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::IfGOTO(
                     cond_id, end_label,
                 ))));
@@ -528,7 +540,7 @@ impl Generator {
                     self.emit_expr(exp);
                 }
                 self.emit(Instruction::ControlOp(ControlOp::Label(begin_label)));
-                let cond_id = self.emit_expr(exp2);
+                let cond_id = self.emit_expr(exp2).id().unwrap();
                 self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::IfGOTO(
                     cond_id, end_label,
                 ))));
@@ -633,16 +645,14 @@ pub enum Instruction {
     // we would like to accomplish that since this operation is not represented by ID
     // it means that in the ID of this command will be the same as ID in parameter
     //
-    // TODO: it does not support assignment of const, and constants now and Call Itself
-    // the possible way is
-    //
     // #[derive(Debug)]
     // enum Exp {
     //     Id(ID),
     //     Call(Call),
     //     Op(Op),
     // }
-    Assignment(ID, ID),
+    //
+    Assignment(ID, Value),
     // Notion: Can alloc be responsible not only for tmp variables?
     Alloc(Const),
     Op(Op),
@@ -743,24 +753,29 @@ pub enum Const {
 }
 
 #[derive(Debug)]
-pub enum Val {
-    Var(ID),
+pub enum Value {
+    ID(ID),
     Const(Const),
 }
 
-impl Val {
-    fn to_var(self) -> Option<ID> {
+impl Value {
+    fn id(self) -> Option<ID> {
         match self {
-            Val::Var(id) => Some(id),
+            Value::ID(id) => Some(id),
             _ => None,
         }
     }
+}
 
-    fn to_const(self) -> Option<Const> {
-        match self {
-            Val::Const(c) => Some(c),
-            _ => None,
-        }
+impl From<Const> for Value {
+    fn from(c: Const) -> Self {
+        Value::Const(c)
+    }
+}
+
+impl From<ID> for Value {
+    fn from(id: ID) -> Self {
+        Value::ID(id)
     }
 }
 

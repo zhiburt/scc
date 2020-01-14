@@ -23,7 +23,7 @@ pub fn pretty<W: Write>(mut w: W, fun: &tac::FuncDef) {
                     w,
                     "  {}: {}",
                     pretty_id(&fun.vars, id1),
-                    pretty_id(&fun.vars, id2),
+                    pretty_val(&fun.vars, id2),
                 );
             }
             tac::Instruction::Call(call) => {
@@ -94,10 +94,10 @@ pub fn pretty_id(vars: &HashMap<usize, String>, id: &tac::ID) -> String {
     }
 }
 
-pub fn pretty_val(vars: &HashMap<usize, String>, v: &tac::Val) -> String {
+pub fn pretty_val(vars: &HashMap<usize, String>, v: &tac::Value) -> String {
     match v {
-        tac::Val::Var(id) => format!("{}", pretty_id(vars, id)),
-        tac::Val::Const(tac::Const::Int(val)) => format!("{}", val),
+        tac::Value::ID(id) => format!("{}", pretty_id(vars, id)),
+        tac::Value::Const(tac::Const::Int(val)) => format!("{}", val),
     }
 }
 
