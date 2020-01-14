@@ -400,8 +400,8 @@ impl Generator {
                 }
             }
             ast::Statement::Return { exp } => {
-                let id = self.emit_expr(exp).id().unwrap();
-                self.emit(Instruction::ControlOp(ControlOp::Return(id)));
+                let val = self.emit_expr(exp);
+                self.emit(Instruction::ControlOp(ControlOp::Return(val)));
             }
             ast::Statement::Conditional {
                 cond_expr,
@@ -742,7 +742,7 @@ impl TypeOp {
 pub enum ControlOp {
     Label(Label),
     Branch(Branch),
-    Return(ID),
+    Return(Value),
 }
 
 type BytesSize = usize;

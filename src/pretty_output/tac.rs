@@ -79,8 +79,8 @@ pub fn pretty<W: Write>(mut w: W, fun: &tac::FuncDef) {
                         );
                     }
                 },
-                tac::ControlOp::Return(id) => {
-                    writeln!(w, "  Return {}", pretty_id(&fun.vars, id)).unwrap()
+                tac::ControlOp::Return(value) => {
+                    writeln!(w, "  Return {}", pretty_val(&fun.vars, value)).unwrap()
                 }
             },
         }
