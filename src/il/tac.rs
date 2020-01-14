@@ -8,6 +8,7 @@ pub fn il(p: &ast::Program) -> Vec<FuncDef> {
         if let Some(func) = gen.parse(fun) {
             funcs.push(func);
         }
+        gen.clear_vars();
     }
 
     funcs
@@ -110,6 +111,13 @@ impl Context {
 
     fn loop_start(&self) -> Label {
         self.loop_ctx.last().as_ref().unwrap().begin
+    }
+
+    fn clear(&mut self) {
+        self.symbols.clear();
+        self.scopes.clear();
+        self.scopes.push(HashSet::new());
+        self.loop_ctx.clear();
     }
 }
 
@@ -591,6 +599,10 @@ impl Generator {
         let mut v = Vec::new();
         std::mem::swap(&mut self.instructions, &mut v);
         v
+    }
+
+    pub fn clear_vars(&mut self) {
+        self.context.clear();
     }
 
     fn alloc_tmp(&mut self) -> ID {
