@@ -28,7 +28,7 @@ pub fn pretty<W: Write>(mut w: W, fun: &tac::FuncDef) {
             }
             tac::Instruction::Call(call) => {
                 for p in call.params.iter() {
-                    writeln!(w, "  PushParam {}", pretty_id(&fun.vars, p));
+                    writeln!(w, "  PushParam {}", pretty_val(&fun.vars, p));
                 }
 
                 writeln!(

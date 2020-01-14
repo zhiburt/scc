@@ -224,15 +224,15 @@ impl Generator {
             ast::Exp::FuncCall(name, params) => {
                 // Notion: it might be useful if we don't work with IDs itself here,
                 // instead we could handle types which contains its size and id
-                let ids = params
+                let values = params
                     .iter()
-                    .map(|exp| self.emit_expr(exp).id().unwrap())
+                    .map(|exp| self.emit_expr(exp))
                     .collect();
 
                 let types_size = params.len() * 4;
 
                 let id = self
-                    .emit(Instruction::Call(Call::new(&name, ids, types_size)))
+                    .emit(Instruction::Call(Call::new(&name, values, types_size)))
                     .unwrap();
                 Value::from(id)
             }
@@ -835,13 +835,13 @@ pub enum Branch {
 #[derive(Debug)]
 pub struct Call {
     pub name: String,
-    pub params: Vec<ID>,
+    pub params: Vec<Value>,
     pub pop_size: BytesSize,
     pub tp: FnType,
 }
 
 impl Call {
-    fn new(name: &str, params: Vec<ID>, params_size: BytesSize) -> Self {
+    fn new(name: &str, params: Vec<Value>, params_size: BytesSize) -> Self {
         Call {
             name: name.to_owned(),
             tp: FnType::LCall,
