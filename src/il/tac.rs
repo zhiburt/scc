@@ -262,14 +262,14 @@ impl Generator {
                         .emit(Instruction::Assignment(tmp_id, Value::from(var_id.clone())))
                         .unwrap();
                     let changed_id = self
-                        .emit(Instruction::Op(Op::Op(arithmetic_op, var_id.clone(), one)))
+                        .emit(Instruction::Op(Op::Op(arithmetic_op, Value::from(var_id.clone()), one)))
                         .unwrap();
                     self.emit(Instruction::Assignment(var_id, Value::from(changed_id)))
                         .unwrap();
                     Value::from(var_copy_id)
                 } else {
                     let changed_id = self
-                        .emit(Instruction::Op(Op::Op(arithmetic_op, var_id.clone(), one)))
+                        .emit(Instruction::Op(Op::Op(arithmetic_op, Value::from(var_id.clone()), one)))
                         .unwrap();
                     self.emit(Instruction::Assignment(
                         var_id,
@@ -323,7 +323,7 @@ impl Generator {
                     self.emit(Instruction::ControlOp(ControlOp::Label(end_label)));
                     Value::from(tmp_var)
                 } else {
-                    let id1 = self.emit_expr(exp1).id().unwrap();
+                    let id1 = self.emit_expr(exp1);
                     let val = self.emit_expr(exp2);
                     Value::from(self.emit(Instruction::Op(Op::Op(TypeOp::from(op), id1, val)))
                         .unwrap())
@@ -365,7 +365,7 @@ impl Generator {
                 let op = assign_op_to_type_op(op);
                 let val = self.emit_expr(exp);
                 let resp = self
-                    .emit(Instruction::Op(Op::Op(op, id.clone(), val)))
+                    .emit(Instruction::Op(Op::Op(op, Value::from(id.clone()), val)))
                     .unwrap();
                 self.emit(Instruction::Assignment(id, Value::from(resp.clone())));
                 Value::from(resp)
@@ -697,7 +697,7 @@ pub type Label = usize;
 #[derive(Debug)]
 pub enum Op {
     // TODO: it seems can be a Val
-    Op(TypeOp, ID, Value),
+    Op(TypeOp, Value, Value),
     Unary(UnOp, ID),
 }
 
