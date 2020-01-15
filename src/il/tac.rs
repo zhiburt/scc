@@ -161,9 +161,10 @@ impl Generator {
 
         for p in func.parameters.iter() {
             /*
-                TODO: investigate whatever it should increase alloc counter or not
+                Don't allocate memory for parameters since
+                this memory was prepared by caller
             */
-            self.alloc_var(&p);
+            self.remember_var(&p);
         }
 
         let blocks = func.blocks.as_ref().unwrap();
@@ -612,6 +613,10 @@ impl Generator {
 
     fn alloc_var(&mut self, name: &str) -> ID {
         self.allocated += 1;
+        self.remember_var(name)
+    }
+
+    fn remember_var(&mut self, name: &str) -> ID {
         self.context.add_symbol(name)
     }
 
