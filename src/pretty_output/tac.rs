@@ -9,12 +9,12 @@ pub fn pretty<W: Write>(mut w: W, fun: &tac::FuncDef) {
 
     for tac::InstructionLine(inst, id) in &fun.instructions {
         match inst {
-            tac::Instruction::Alloc(tac::Const::Int(val)) => {
+            tac::Instruction::Alloc(val) => {
                 writeln!(
                     w,
                     "  {}: {}",
                     pretty_id(&fun.vars, id.as_ref().unwrap()),
-                    val
+                    pretty_val(&fun.vars, val),
                 )
                 .unwrap();
             }
@@ -23,12 +23,12 @@ pub fn pretty<W: Write>(mut w: W, fun: &tac::FuncDef) {
                     w,
                     "  {}: {}",
                     pretty_id(&fun.vars, id1),
-                    pretty_id(&fun.vars, id2),
+                    pretty_val(&fun.vars, id2),
                 );
             }
             tac::Instruction::Call(call) => {
                 for p in call.params.iter() {
-                    writeln!(w, "  PushParam {}", pretty_id(&fun.vars, p));
+                    writeln!(w, "  PushParam {}", pretty_val(&fun.vars, p));
                 }
 
                 writeln!(
@@ -46,9 +46,9 @@ pub fn pretty<W: Write>(mut w: W, fun: &tac::FuncDef) {
                             w,
                             "  {}: {} {} {}",
                             pretty_id(&fun.vars, id.as_ref().unwrap()),
-                            pretty_id(&fun.vars, v1),
+                            pretty_val(&fun.vars, v1),
                             pretty_type(t),
-                            pretty_id(&fun.vars, v2)
+                            pretty_val(&fun.vars, v2)
                         );
                     }
                     tac::Op::Unary(op, v1) => {
@@ -57,7 +57,7 @@ pub fn pretty<W: Write>(mut w: W, fun: &tac::FuncDef) {
                             "  {}: {} {}",
                             pretty_id(&fun.vars, id.as_ref().unwrap()),
                             pretty_unary_op(op),
-                            pretty_id(&fun.vars, v1),
+                            pretty_val(&fun.vars, v1),
                         );
                     }
                 };
@@ -70,17 +70,17 @@ pub fn pretty<W: Write>(mut w: W, fun: &tac::FuncDef) {
                     tac::Branch::GOTO(label) => {
                         writeln!(w, "  Goto {}", pretty_label(label));
                     }
-                    tac::Branch::IfGOTO(id, label) => {
+                    tac::Branch::IfGOTO(val, label) => {
                         writeln!(
                             w,
                             "  IfZ {} Goto {}",
-                            pretty_id(&fun.vars, id),
+                            pretty_val(&fun.vars, val),
                             pretty_label(label)
                         );
                     }
                 },
-                tac::ControlOp::Return(id) => {
-                    writeln!(w, "  Return {}", pretty_id(&fun.vars, id)).unwrap()
+                tac::ControlOp::Return(value) => {
+                    writeln!(w, "  Return {}", pretty_val(&fun.vars, value)).unwrap()
                 }
             },
         }
@@ -94,10 +94,10 @@ pub fn pretty_id(vars: &HashMap<usize, String>, id: &tac::ID) -> String {
     }
 }
 
-pub fn pretty_val(vars: &HashMap<usize, String>, v: &tac::Val) -> String {
+pub fn pretty_val(vars: &HashMap<usize, String>, v: &tac::Value) -> String {
     match v {
-        tac::Val::Var(id) => format!("{}", pretty_id(vars, id)),
-        tac::Val::Const(tac::Const::Int(val)) => format!("{}", val),
+        tac::Value::ID(id) => format!("{}", pretty_id(vars, id)),
+        tac::Value::Const(tac::Const::Int(val)) => format!("{}", val),
     }
 }
 
