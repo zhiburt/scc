@@ -247,4 +247,33 @@ mod tests {
         ]);
         assert_eq!(expected, instructions);
     }
+
+
+    #[test]
+    fn translate_operation_sum_const_and_var2() {
+        let mut translator = Translator::new();
+        let var = tac::InstructionLine(
+            tac::Instruction::Alloc(tac::Value::Const(tac::Const::Int(2))),
+            Some(tac::ID::new(1, tac::IDType::Var)),
+        );
+        let line = tac::InstructionLine(
+            tac::Instruction::Op(tac::Op::Op(
+                tac::TypeOp::Arithmetic(tac::ArithmeticOp::Add),
+                tac::Value::ID(var.1.clone().unwrap()),
+                tac::Value::Const(tac::Const::Int(3)),
+            )),
+            Some(tac::ID::new(0, tac::IDType::Temporary)),
+        );
+
+        translator.translate(var);
+        translator.translate(line);
+        let instructions = translator.instructions;
+
+        let expected = IList::from(vec![
+            AsmInstruction::Mov(Place::on_stack(4), Value::Const(2)),
+            AsmInstruction::Mov(Place::on_stack(8), Value::Const(3)),
+            AsmInstruction::Add(Place::on_stack(4), Value::Place(Place::on_stack(8))),
+        ]);
+        assert_eq!(expected, instructions);
+    }
 }
