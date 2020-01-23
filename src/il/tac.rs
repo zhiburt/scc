@@ -695,7 +695,7 @@ impl ID {
         }
     }
 
-    fn new(id: usize, tp: IDType) -> Self {
+    pub fn new(id: usize, tp: IDType) -> Self {
         ID { id, tp }
     }
 }
