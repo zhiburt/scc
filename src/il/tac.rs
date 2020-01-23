@@ -773,9 +773,16 @@ pub enum Value {
 }
 
 impl Value {
-    fn id(self) -> Option<ID> {
+    pub fn id(self) -> Option<ID> {
         match self {
             Value::ID(id) => Some(id),
+            _ => None,
+        }
+    }
+
+    pub fn constant(self) -> Option<Const> {
+        match self {
+            Value::Const(c) => Some(c),
             _ => None,
         }
     }

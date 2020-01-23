@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use crate::il::tac;
 
 pub struct Translator {
-    vars: HashMap<u32, u32>,
+    vars: HashMap<u64, Place>,
     registers: Vec<RegisterWithState>,
     instructions: IList,
     stack_index: u64,
@@ -26,14 +26,25 @@ impl Translator {
                 v1,
                 v2,
             )) => {
-                let p1 = self.allocation(v1);
-                let p2 = self.allocation(v2);
+                let p1 = self.alloc_const(v1);
+                let p2 = self.alloc_const(v2);
                 self.push_instruction(AsmInstruction::Add(p1, Value::Place(p2)));
+            }
+            tac::Instruction::Alloc(v) => {
+                let p = self.alloc_const(v);
+                self.remember(line.1.unwrap(), p);
+            }
+            tac::Instruction::Assignment(id, v) => {
+                let p = self.alloc_const(v);
+                self.remember(id, p);
             }
             tac::Instruction::ControlOp(tac::ControlOp::Return(v)) => {
                 self.push_instruction(AsmInstruction::Ret);
             }
-            _ => unimplemented!(),
+            _ => {
+                println!("{:?}", line.0);
+                unimplemented!()
+            }
         }
     }
 
@@ -41,16 +52,34 @@ impl Translator {
         self.instructions.push(i);
     }
 
-    fn allocation(&mut self, v: tac::Value) -> Place {
-        self.stack_index += 4;
-        let val = match v {
-            tac::Value::Const(tac::Const::Int(int)) => Value::Const(int as i64),
-            _ => unimplemented!(),
-        };
-        let place = Place::on_stack(self.stack_index);
-        self.push_instruction(AsmInstruction::Mov(place.clone(), val));
+    fn alloc_const(&mut self, v: tac::Value) -> Place {
+        match v {
+            tac::Value::Const(c) => {
+                let place = self.place_on_stack();
+                let v = match c {
+                    tac::Const::Int(int) => Value::Const(int as i64),
+                };
+                self.push_instruction(AsmInstruction::Mov(place.clone(), v));
+                place
+            }
+            tac::Value::ID(id) => {
+                self.look_up(&id).unwrap().clone()
+            }
+        }
+    }
 
+    fn place_on_stack(&mut self) -> Place {
+        self.stack_index += 4;
+        let place = Place::on_stack(self.stack_index);
         place
+    }
+
+    fn look_up(&self, id: &tac::ID) -> Option<&Place> {
+        self.vars.get(&(id.id as u64))
+    }
+
+    fn remember(&mut self, id: tac::ID, place: Place) {
+        self.vars.insert(id.id as u64, place);
     }
 
     fn free_register(&mut self) -> Option<&Register> {
@@ -96,7 +125,11 @@ impl std::ops::DerefMut for IList {
 
 impl PartialEq for IList {
     fn eq(&self, other: &Self) -> bool {
-        let matching = self.iter().zip(other.iter()).filter(|&(a, b)| a == b).count();
+        let matching = self
+            .iter()
+            .zip(other.iter())
+            .filter(|&(a, b)| a == b)
+            .count();
         matching == self.len() && matching == other.len()
     }
 }
@@ -182,8 +215,36 @@ mod tests {
         assert_eq!(expected, instructions);
     }
 
-    fn compare_vecs(a: Vec<&str>, b: Vec<String>) -> bool {
-        let matching = a.iter().zip(b.iter()).filter(|&(a, b)| a == b).count();
-        matching == a.len() && matching == b.len()
+    #[test]
+    fn translate_operation_sum_va1_and_var2() {
+        let mut translator = Translator::new();
+        let var1 = tac::InstructionLine(
+            tac::Instruction::Alloc(tac::Value::Const(tac::Const::Int(2))),
+            Some(tac::ID::new(0, tac::IDType::Var)),
+        );
+        let var2 = tac::InstructionLine(
+            tac::Instruction::Alloc(tac::Value::Const(tac::Const::Int(3))),
+            Some(tac::ID::new(1, tac::IDType::Var)),
+        );
+        let line = tac::InstructionLine(
+            tac::Instruction::Op(tac::Op::Op(
+                tac::TypeOp::Arithmetic(tac::ArithmeticOp::Add),
+                tac::Value::ID(var1.1.clone().unwrap()),
+                tac::Value::ID(var2.1.clone().unwrap()),
+            )),
+            Some(tac::ID::new(0, tac::IDType::Temporary)),
+        );
+
+        translator.translate(var1);
+        translator.translate(var2);
+        translator.translate(line);
+        let instructions = translator.instructions;
+
+        let expected = IList::from(vec![
+            AsmInstruction::Mov(Place::on_stack(4), Value::Const(2)),
+            AsmInstruction::Mov(Place::on_stack(8), Value::Const(3)),
+            AsmInstruction::Add(Place::on_stack(4), Value::Place(Place::on_stack(8))),
+        ]);
+        assert_eq!(expected, instructions);
     }
 }
