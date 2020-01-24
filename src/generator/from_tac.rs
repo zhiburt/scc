@@ -26,9 +26,19 @@ impl Translator {
                 v1,
                 v2,
             )) => {
+                // TODO: I guess that if we implement some allocation algorithm
+                // here we could save the often used variable to register or whatever,
+                //
+                // let p2 = self.alloc_const(v2);
+                //
+                // NOTION: Might it is not so well that we rid the initialization each variable in tac/3ac
+                // since I am not sure that on the analyse stage it will be simple to handle the structures we have now
+                //
+                // It'd better for now to allocate all variables in a similar manner
                 let p1 = self.alloc_const(v1);
                 let p2 = self.alloc_const(v2);
-                self.push_instruction(AsmInstruction::Add(p1, Value::Place(p2)));
+                self.push_instruction(AsmInstruction::Add(p1.clone(), Value::Place(p2)));
+                self.remember(line.1.unwrap(), Place::InRegister("eax".to_owned()));
             }
             tac::Instruction::Alloc(v) => {
                 let p = self.alloc_const(v);
@@ -273,6 +283,45 @@ mod tests {
             AsmInstruction::Mov(Place::on_stack(4), Value::Const(2)),
             AsmInstruction::Mov(Place::on_stack(8), Value::Const(3)),
             AsmInstruction::Add(Place::on_stack(4), Value::Place(Place::on_stack(8))),
+        ]);
+        assert_eq!(expected, instructions);
+    }
+
+    #[test]
+    fn translate_operation_sum_const_and_const_and_var2() {
+        let mut translator = Translator::new();
+        let var = tac::InstructionLine(
+            tac::Instruction::Alloc(tac::Value::Const(tac::Const::Int(2))),
+            Some(tac::ID::new(1, tac::IDType::Var)),
+        );
+        let first_sum = tac::InstructionLine(
+            tac::Instruction::Op(tac::Op::Op(
+                tac::TypeOp::Arithmetic(tac::ArithmeticOp::Add),
+                tac::Value::ID(var.1.clone().unwrap()),
+                tac::Value::Const(tac::Const::Int(3)),
+            )),
+            Some(tac::ID::new(0, tac::IDType::Temporary)),
+        );
+        let second_sum = tac::InstructionLine(
+            tac::Instruction::Op(tac::Op::Op(
+                tac::TypeOp::Arithmetic(tac::ArithmeticOp::Add),
+                tac::Value::ID(first_sum.1.clone().unwrap()),
+                tac::Value::Const(tac::Const::Int(4)),
+            )),
+            Some(tac::ID::new(1, tac::IDType::Temporary)),
+        );
+
+        translator.translate(var);
+        translator.translate(first_sum);
+        translator.translate(second_sum);
+        let instructions = translator.instructions;
+
+        let expected = IList::from(vec![
+            AsmInstruction::Mov(Place::on_stack(4), Value::Const(2)),
+            AsmInstruction::Mov(Place::on_stack(8), Value::Const(3)),
+            AsmInstruction::Add(Place::on_stack(4), Value::Place(Place::on_stack(8))),
+            AsmInstruction::Mov(Place::on_stack(12), Value::Const(4)),
+            AsmInstruction::Add(Place::InRegister("eax".to_owned()), Value::Place(Place::on_stack(12))),
         ]);
         assert_eq!(expected, instructions);
     }
