@@ -325,4 +325,83 @@ mod tests {
         ]);
         assert_eq!(expected, instructions);
     }
+
+    #[test]
+    fn translate_operation_sum_const_three_times() {
+        let mut translator = Translator::new();
+        let first_sum = tac::InstructionLine(
+            tac::Instruction::Op(tac::Op::Op(
+                tac::TypeOp::Arithmetic(tac::ArithmeticOp::Add),
+                tac::Value::Const(tac::Const::Int(2)),
+                tac::Value::Const(tac::Const::Int(3)),
+            )),
+            Some(tac::ID::new(0, tac::IDType::Temporary)),
+        );
+        let second_sum = tac::InstructionLine(
+            tac::Instruction::Op(tac::Op::Op(
+                tac::TypeOp::Arithmetic(tac::ArithmeticOp::Add),
+                tac::Value::ID(first_sum.1.clone().unwrap()),
+                tac::Value::Const(tac::Const::Int(4)),
+            )),
+            Some(tac::ID::new(1, tac::IDType::Temporary)),
+        );
+
+        translator.translate(first_sum);
+        translator.translate(second_sum);
+        let instructions = translator.instructions;
+
+        let expected = IList::from(vec![
+            AsmInstruction::Mov(Place::on_stack(4), Value::Const(2)),
+            AsmInstruction::Mov(Place::on_stack(8), Value::Const(3)),
+            AsmInstruction::Add(Place::on_stack(4), Value::Place(Place::on_stack(8))),
+            AsmInstruction::Mov(Place::on_stack(12), Value::Const(4)),
+            AsmInstruction::Add(Place::InRegister("eax".to_owned()), Value::Place(Place::on_stack(12))),
+        ]);
+        assert_eq!(expected, instructions);
+    }
+
+    #[test]
+    fn translate_operation_sum_const_four_times() {
+        let mut translator = Translator::new();
+        let first_sum = tac::InstructionLine(
+            tac::Instruction::Op(tac::Op::Op(
+                tac::TypeOp::Arithmetic(tac::ArithmeticOp::Add),
+                tac::Value::Const(tac::Const::Int(2)),
+                tac::Value::Const(tac::Const::Int(3)),
+            )),
+            Some(tac::ID::new(0, tac::IDType::Temporary)),
+        );
+        let second_sum = tac::InstructionLine(
+            tac::Instruction::Op(tac::Op::Op(
+                tac::TypeOp::Arithmetic(tac::ArithmeticOp::Add),
+                tac::Value::ID(first_sum.1.clone().unwrap()),
+                tac::Value::Const(tac::Const::Int(4)),
+            )),
+            Some(tac::ID::new(1, tac::IDType::Temporary)),
+        );
+        let third_sum = tac::InstructionLine(
+            tac::Instruction::Op(tac::Op::Op(
+                tac::TypeOp::Arithmetic(tac::ArithmeticOp::Add),
+                tac::Value::ID(second_sum.1.clone().unwrap()),
+                tac::Value::Const(tac::Const::Int(5)),
+            )),
+            Some(tac::ID::new(1, tac::IDType::Temporary)),
+        );
+
+        translator.translate(first_sum);
+        translator.translate(second_sum);
+        translator.translate(third_sum);
+        let instructions = translator.instructions;
+
+        let expected = IList::from(vec![
+            AsmInstruction::Mov(Place::on_stack(4), Value::Const(2)),
+            AsmInstruction::Mov(Place::on_stack(8), Value::Const(3)),
+            AsmInstruction::Add(Place::on_stack(4), Value::Place(Place::on_stack(8))),
+            AsmInstruction::Mov(Place::on_stack(12), Value::Const(4)),
+            AsmInstruction::Add(Place::InRegister("eax".to_owned()), Value::Place(Place::on_stack(12))),
+            AsmInstruction::Mov(Place::on_stack(16), Value::Const(5)),
+            AsmInstruction::Add(Place::InRegister("eax".to_owned()), Value::Place(Place::on_stack(16))),
+        ]);
+        assert_eq!(expected, instructions);
+    }
 }
