@@ -1,6 +1,26 @@
 use std::collections::HashMap;
 
 use crate::il::tac;
+use super::syntax::{AsmInstruction, Place, Value, Register, IList};
+
+pub fn gen(func: tac::FuncDef) -> IList {
+    let mut translator = Translator::new();
+    for instruction in func.instructions {
+        translator.translate(instruction);
+    }
+
+    let mut asm = IList::new();
+    asm.push(AsmInstruction::Metadata(format!(".globl {}", func.name)));
+    asm.push(AsmInstruction::Label(func.name));
+    
+    asm.push(AsmInstruction::Push(Value::Place(Place::Register("rbp".to_owned()))));
+    asm.push(AsmInstruction::Mov(Place::Register("rbp".to_owned()), Value::Place(Place::Register("rsp".to_owned()))));
+
+    asm.extend(translator.instructions);
+    asm.push(AsmInstruction::Pop(Place::Register("rbp".to_owned())));
+    
+    asm
+}
 
 pub struct Translator {
     vars: HashMap<u64, Place>,
@@ -114,72 +134,10 @@ impl Translator {
     }
 }
 
-#[derive(Debug)]
-pub struct IList(Vec<AsmInstruction>);
-
-impl IList {
-    pub fn new() -> Self {
-        IList(Vec::new())
-    }
-}
-
-impl From<Vec<AsmInstruction>> for IList {
-    fn from(l: Vec<AsmInstruction>) -> Self {
-        IList(l)
-    }
-}
-
-impl std::ops::Deref for IList {
-    type Target = Vec<AsmInstruction>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl std::ops::DerefMut for IList {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
-impl PartialEq for IList {
-    fn eq(&self, other: &Self) -> bool {
-        let matching = self
-            .iter()
-            .zip(other.iter())
-            .filter(|&(a, b)| a == b)
-            .count();
-        matching == self.len() && matching == other.len()
-    }
-}
-
-#[derive(PartialEq, Eq, Debug)]
-pub enum AsmInstruction {
-    Metadata(String),
-    Mov(Place, Value),
-    Add(Place, Value),
-    Ret,
-}
-
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub enum Place {
-    Stack(u64),
-    Register(Register),
-}
-
-#[derive(PartialEq, Eq, Debug)]
-pub enum Value {
-    Const(i64),
-    Place(Place),
-}
-
 enum RegisterState {
     Free,
     Used,
 }
-
-type Register = String;
 
 struct RegisterWithState(Register, RegisterState);
 
