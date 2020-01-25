@@ -38,7 +38,7 @@ impl Translator {
                 let p1 = self.alloc_const(v1);
                 let p2 = self.alloc_const(v2);
                 self.push_instruction(AsmInstruction::Add(p1.clone(), Value::Place(p2)));
-                self.remember(line.1.unwrap(), Place::InRegister("eax".to_owned()));
+                self.remember(line.1.unwrap(), Place::Register("eax".to_owned()));
             }
             tac::Instruction::Alloc(v) => {
                 let p = self.alloc_const(v);
@@ -55,7 +55,7 @@ impl Translator {
                             tac::Value::ID(id) => Value::Place(self.look_up(&id).unwrap().clone()),
                             tac::Value::Const(tac::Const::Int(int)) => Value::Const(int as i64),
                         };
-                        self.push_instruction(AsmInstruction::Mov(Place::InRegister("eax".to_owned()), value));
+                        self.push_instruction(AsmInstruction::Mov(Place::Register("eax".to_owned()), value));
                         self.push_instruction(AsmInstruction::Ret);
                     }
                     _ => unimplemented!(),
@@ -90,7 +90,7 @@ impl Translator {
 
     fn place_on_stack(&mut self) -> Place {
         self.stack_index += 4;
-        let place = Place::on_stack(self.stack_index);
+        let place = Place::Stack(self.stack_index);
         place
     }
 
@@ -164,14 +164,8 @@ pub enum AsmInstruction {
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Place {
-    OnStack(u64),
-    InRegister(Register),
-}
-
-impl Place {
-    fn on_stack(offset: u64) -> Self {
-        Place::OnStack(offset)
-    }
+    Stack(u64),
+    Register(Register),
 }
 
 #[derive(PartialEq, Eq, Debug)]
@@ -228,9 +222,9 @@ mod tests {
         let instructions = translator.instructions;
 
         let expected = IList::from(vec![
-            AsmInstruction::Mov(Place::on_stack(4), Value::Const(2)),
-            AsmInstruction::Mov(Place::on_stack(8), Value::Const(3)),
-            AsmInstruction::Add(Place::on_stack(4), Value::Place(Place::on_stack(8))),
+            AsmInstruction::Mov(Place::Stack(4), Value::Const(2)),
+            AsmInstruction::Mov(Place::Stack(8), Value::Const(3)),
+            AsmInstruction::Add(Place::Stack(4), Value::Place(Place::Stack(8))),
         ]);
         assert_eq!(expected, instructions);
     }
@@ -261,9 +255,9 @@ mod tests {
         let instructions = translator.instructions;
 
         let expected = IList::from(vec![
-            AsmInstruction::Mov(Place::on_stack(4), Value::Const(2)),
-            AsmInstruction::Mov(Place::on_stack(8), Value::Const(3)),
-            AsmInstruction::Add(Place::on_stack(4), Value::Place(Place::on_stack(8))),
+            AsmInstruction::Mov(Place::Stack(4), Value::Const(2)),
+            AsmInstruction::Mov(Place::Stack(8), Value::Const(3)),
+            AsmInstruction::Add(Place::Stack(4), Value::Place(Place::Stack(8))),
         ]);
         assert_eq!(expected, instructions);
     }
@@ -290,9 +284,9 @@ mod tests {
         let instructions = translator.instructions;
 
         let expected = IList::from(vec![
-            AsmInstruction::Mov(Place::on_stack(4), Value::Const(2)),
-            AsmInstruction::Mov(Place::on_stack(8), Value::Const(3)),
-            AsmInstruction::Add(Place::on_stack(4), Value::Place(Place::on_stack(8))),
+            AsmInstruction::Mov(Place::Stack(4), Value::Const(2)),
+            AsmInstruction::Mov(Place::Stack(8), Value::Const(3)),
+            AsmInstruction::Add(Place::Stack(4), Value::Place(Place::Stack(8))),
         ]);
         assert_eq!(expected, instructions);
     }
@@ -327,11 +321,11 @@ mod tests {
         let instructions = translator.instructions;
 
         let expected = IList::from(vec![
-            AsmInstruction::Mov(Place::on_stack(4), Value::Const(2)),
-            AsmInstruction::Mov(Place::on_stack(8), Value::Const(3)),
-            AsmInstruction::Add(Place::on_stack(4), Value::Place(Place::on_stack(8))),
-            AsmInstruction::Mov(Place::on_stack(12), Value::Const(4)),
-            AsmInstruction::Add(Place::InRegister("eax".to_owned()), Value::Place(Place::on_stack(12))),
+            AsmInstruction::Mov(Place::Stack(4), Value::Const(2)),
+            AsmInstruction::Mov(Place::Stack(8), Value::Const(3)),
+            AsmInstruction::Add(Place::Stack(4), Value::Place(Place::Stack(8))),
+            AsmInstruction::Mov(Place::Stack(12), Value::Const(4)),
+            AsmInstruction::Add(Place::Register("eax".to_owned()), Value::Place(Place::Stack(12))),
         ]);
         assert_eq!(expected, instructions);
     }
@@ -361,11 +355,11 @@ mod tests {
         let instructions = translator.instructions;
 
         let expected = IList::from(vec![
-            AsmInstruction::Mov(Place::on_stack(4), Value::Const(2)),
-            AsmInstruction::Mov(Place::on_stack(8), Value::Const(3)),
-            AsmInstruction::Add(Place::on_stack(4), Value::Place(Place::on_stack(8))),
-            AsmInstruction::Mov(Place::on_stack(12), Value::Const(4)),
-            AsmInstruction::Add(Place::InRegister("eax".to_owned()), Value::Place(Place::on_stack(12))),
+            AsmInstruction::Mov(Place::Stack(4), Value::Const(2)),
+            AsmInstruction::Mov(Place::Stack(8), Value::Const(3)),
+            AsmInstruction::Add(Place::Stack(4), Value::Place(Place::Stack(8))),
+            AsmInstruction::Mov(Place::Stack(12), Value::Const(4)),
+            AsmInstruction::Add(Place::Register("eax".to_owned()), Value::Place(Place::Stack(12))),
         ]);
         assert_eq!(expected, instructions);
     }
@@ -404,13 +398,13 @@ mod tests {
         let instructions = translator.instructions;
 
         let expected = IList::from(vec![
-            AsmInstruction::Mov(Place::on_stack(4), Value::Const(2)),
-            AsmInstruction::Mov(Place::on_stack(8), Value::Const(3)),
-            AsmInstruction::Add(Place::on_stack(4), Value::Place(Place::on_stack(8))),
-            AsmInstruction::Mov(Place::on_stack(12), Value::Const(4)),
-            AsmInstruction::Add(Place::InRegister("eax".to_owned()), Value::Place(Place::on_stack(12))),
-            AsmInstruction::Mov(Place::on_stack(16), Value::Const(5)),
-            AsmInstruction::Add(Place::InRegister("eax".to_owned()), Value::Place(Place::on_stack(16))),
+            AsmInstruction::Mov(Place::Stack(4), Value::Const(2)),
+            AsmInstruction::Mov(Place::Stack(8), Value::Const(3)),
+            AsmInstruction::Add(Place::Stack(4), Value::Place(Place::Stack(8))),
+            AsmInstruction::Mov(Place::Stack(12), Value::Const(4)),
+            AsmInstruction::Add(Place::Register("eax".to_owned()), Value::Place(Place::Stack(12))),
+            AsmInstruction::Mov(Place::Stack(16), Value::Const(5)),
+            AsmInstruction::Add(Place::Register("eax".to_owned()), Value::Place(Place::Stack(16))),
         ]);
         assert_eq!(expected, instructions);
     }
@@ -432,8 +426,8 @@ mod tests {
         let instructions = translator.instructions;
 
         let expected = IList::from(vec![
-            AsmInstruction::Mov(Place::on_stack(4), Value::Const(1)),
-            AsmInstruction::Mov(Place::InRegister("eax".to_owned()), Value::Place(Place::on_stack(4))),
+            AsmInstruction::Mov(Place::Stack(4), Value::Const(1)),
+            AsmInstruction::Mov(Place::Register("eax".to_owned()), Value::Place(Place::Stack(4))),
             AsmInstruction::Ret,
         ]);
         assert_eq!(expected, instructions);
