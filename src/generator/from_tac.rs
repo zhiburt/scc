@@ -48,8 +48,18 @@ impl Translator {
                 let p = self.alloc_const(v);
                 self.remember(id, p);
             }
-            tac::Instruction::ControlOp(tac::ControlOp::Return(v)) => {
-                self.push_instruction(AsmInstruction::Ret);
+            tac::Instruction::ControlOp(op) => {
+                match op {
+                    tac::ControlOp::Return(v) => {
+                        let value = match v {
+                            tac::Value::ID(id) => Value::Place(self.look_up(&id).unwrap().clone()),
+                            tac::Value::Const(tac::Const::Int(int)) => Value::Const(int as i64),
+                        };
+                        self.push_instruction(AsmInstruction::Mov(Place::InRegister("eax".to_owned()), value));
+                        self.push_instruction(AsmInstruction::Ret);
+                    }
+                    _ => unimplemented!(),
+                }
             }
             _ => {
                 println!("{:?}", line.0);
@@ -401,6 +411,30 @@ mod tests {
             AsmInstruction::Add(Place::InRegister("eax".to_owned()), Value::Place(Place::on_stack(12))),
             AsmInstruction::Mov(Place::on_stack(16), Value::Const(5)),
             AsmInstruction::Add(Place::InRegister("eax".to_owned()), Value::Place(Place::on_stack(16))),
+        ]);
+        assert_eq!(expected, instructions);
+    }
+
+    #[test]
+    fn translate_operation_return() {
+        let mut translator = Translator::new();
+        let assign = tac::InstructionLine(
+            tac::Instruction::Assignment(tac::ID::new(0, tac::IDType::Var), tac::Value::Const(tac::Const::Int(1))),
+            Some(tac::ID::new(0, tac::IDType::Var)),
+        );
+        let ret = tac::InstructionLine(
+            tac::Instruction::ControlOp(tac::ControlOp::Return(tac::Value::ID(assign.1.clone().unwrap()))),
+            None,
+        );
+
+        translator.translate(assign);
+        translator.translate(ret);
+        let instructions = translator.instructions;
+
+        let expected = IList::from(vec![
+            AsmInstruction::Mov(Place::on_stack(4), Value::Const(1)),
+            AsmInstruction::Mov(Place::InRegister("eax".to_owned()), Value::Place(Place::on_stack(4))),
+            AsmInstruction::Ret,
         ]);
         assert_eq!(expected, instructions);
     }
