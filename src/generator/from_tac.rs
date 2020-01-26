@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::il::tac;
-use super::syntax::{AsmInstruction, Place, Value, Register, IList};
+use super::syntax::{self, AsmInstruction, Place, Value, Register, IList};
 
 pub fn gen(func: tac::FuncDef) -> IList {
     let mut translator = Translator::new();
@@ -13,11 +13,15 @@ pub fn gen(func: tac::FuncDef) -> IList {
     asm.push(AsmInstruction::Metadata(format!(".globl {}", func.name)));
     asm.push(AsmInstruction::Label(func.name));
     
-    asm.push(AsmInstruction::Push(Value::Place(Place::Register("rbp".to_owned()))));
-    asm.push(AsmInstruction::Mov(Place::Register("rbp".to_owned()), Value::Place(Place::Register("rsp".to_owned()))));
+    asm.push(AsmInstruction::Push(Value::Place(Place::Register(syntax::X64Memory::address_previous_frame()))));
+    asm.push(AsmInstruction::Mov(
+        Place::Register(syntax::X64Memory::address_previous_frame()),
+        Value::Place(Place::Register(syntax::X64Memory::address_current_frame())),
+    ));
 
     asm.extend(translator.instructions);
-    asm.push(AsmInstruction::Pop(Place::Register("rbp".to_owned())));
+    asm.push(AsmInstruction::Pop(Place::Register(syntax::X64Memory::address_previous_frame())));
+    asm.push(AsmInstruction::Ret);
     
     asm
 }
@@ -57,8 +61,9 @@ impl Translator {
                 // It'd better for now to allocate all variables in a similar manner
                 let p1 = self.alloc_const(v1);
                 let p2 = self.alloc_const(v2);
-                self.push_instruction(AsmInstruction::Add(p1.clone(), Value::Place(p2)));
-                self.remember(line.1.unwrap(), Place::Register("eax".to_owned()));
+                let instruction = AsmInstruction::Add(p1.clone(), Value::Place(p2));
+                self.remember(line.1.unwrap(), Place::Register(syntax::X64Memory::result_in(&instruction).unwrap()));
+                self.push_instruction(instruction);
             }
             tac::Instruction::Alloc(v) => {
                 let p = self.alloc_const(v);
@@ -75,8 +80,11 @@ impl Translator {
                             tac::Value::ID(id) => Value::Place(self.look_up(&id).unwrap().clone()),
                             tac::Value::Const(tac::Const::Int(int)) => Value::Const(int as i64),
                         };
-                        self.push_instruction(AsmInstruction::Mov(Place::Register("eax".to_owned()), value));
-                        self.push_instruction(AsmInstruction::Ret);
+                        // TODO: we not always need to move data to return register
+                        // for example when we operate with int
+                        // we can move it to `eax`
+                        self.push_instruction(AsmInstruction::Mov(Place::Register(syntax::X64Memory::return_register()), value));
+                        // TODO: here we should handle multiply returns by label
                     }
                     _ => unimplemented!(),
                 }
@@ -283,7 +291,7 @@ mod tests {
             AsmInstruction::Mov(Place::Stack(8), Value::Const(3)),
             AsmInstruction::Add(Place::Stack(4), Value::Place(Place::Stack(8))),
             AsmInstruction::Mov(Place::Stack(12), Value::Const(4)),
-            AsmInstruction::Add(Place::Register("eax".to_owned()), Value::Place(Place::Stack(12))),
+            AsmInstruction::Add(Place::Register("eax"), Value::Place(Place::Stack(12))),
         ]);
         assert_eq!(expected, instructions);
     }
@@ -317,7 +325,7 @@ mod tests {
             AsmInstruction::Mov(Place::Stack(8), Value::Const(3)),
             AsmInstruction::Add(Place::Stack(4), Value::Place(Place::Stack(8))),
             AsmInstruction::Mov(Place::Stack(12), Value::Const(4)),
-            AsmInstruction::Add(Place::Register("eax".to_owned()), Value::Place(Place::Stack(12))),
+            AsmInstruction::Add(Place::Register("eax"), Value::Place(Place::Stack(12))),
         ]);
         assert_eq!(expected, instructions);
     }
@@ -360,9 +368,9 @@ mod tests {
             AsmInstruction::Mov(Place::Stack(8), Value::Const(3)),
             AsmInstruction::Add(Place::Stack(4), Value::Place(Place::Stack(8))),
             AsmInstruction::Mov(Place::Stack(12), Value::Const(4)),
-            AsmInstruction::Add(Place::Register("eax".to_owned()), Value::Place(Place::Stack(12))),
+            AsmInstruction::Add(Place::Register("eax"), Value::Place(Place::Stack(12))),
             AsmInstruction::Mov(Place::Stack(16), Value::Const(5)),
-            AsmInstruction::Add(Place::Register("eax".to_owned()), Value::Place(Place::Stack(16))),
+            AsmInstruction::Add(Place::Register("eax"), Value::Place(Place::Stack(16))),
         ]);
         assert_eq!(expected, instructions);
     }
@@ -385,7 +393,7 @@ mod tests {
 
         let expected = IList::from(vec![
             AsmInstruction::Mov(Place::Stack(4), Value::Const(1)),
-            AsmInstruction::Mov(Place::Register("eax".to_owned()), Value::Place(Place::Stack(4))),
+            AsmInstruction::Mov(Place::Register("eax"), Value::Place(Place::Stack(4))),
             AsmInstruction::Ret,
         ]);
         assert_eq!(expected, instructions);
