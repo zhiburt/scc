@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
+use super::syntax::{self, AsmInstruction, IList, Params, Place, Register, Value};
 use crate::il::tac;
-use super::syntax::{self, AsmInstruction, Place, Value, Register, IList};
 
 pub fn gen(func: tac::FuncDef) -> IList {
     let mut translator = Translator::new();
@@ -12,17 +12,23 @@ pub fn gen(func: tac::FuncDef) -> IList {
     let mut asm = IList::new();
     asm.push(AsmInstruction::Metadata(format!(".globl {}", func.name)));
     asm.push(AsmInstruction::Label(func.name));
-    
-    asm.push(AsmInstruction::Push(Value::Place(Place::Register(syntax::X64Memory::address_previous_frame()))));
+
+    asm.push(AsmInstruction::Push(Value::Place(Place::Register(
+        syntax::X64Memory::address_previous_frame(),
+    ))));
     asm.push(AsmInstruction::Mov(
-        Place::Register(syntax::X64Memory::address_previous_frame()),
-        Value::Place(Place::Register(syntax::X64Memory::address_current_frame())),
+        Params::new(
+            Place::Register(syntax::X64Memory::address_previous_frame()),
+            Value::Place(Place::Register(syntax::X64Memory::address_current_frame())),
+        )
+        .unwrap(),
     ));
 
     asm.extend(translator.instructions);
-    asm.push(AsmInstruction::Pop(Place::Register(syntax::X64Memory::address_previous_frame())));
+    asm.push(AsmInstruction::Pop(Place::Register(
+        syntax::X64Memory::address_previous_frame(),
+    )));
     asm.push(AsmInstruction::Ret);
-    
     asm
 }
 
@@ -60,9 +66,35 @@ impl Translator {
                 //
                 // It'd better for now to allocate all variables in a similar manner
                 let p1 = self.alloc_const(v1);
-                let p2 = self.alloc_const(v2);
-                let instruction = AsmInstruction::Add(p1.clone(), Value::Place(p2));
-                self.remember(line.1.unwrap(), Place::Register(syntax::X64Memory::result_in(&instruction).unwrap()));
+                let p2 = match v2 {
+                    tac::Value::Const(tac::Const::Int(int)) => Value::Const(int as i64),
+                    tac::Value::ID(id) => Value::Place(self.look_up(&id).unwrap().clone()),
+                };
+                let params = Params::new(p1.clone(), p2.clone()).unwrap_or_else(|| {
+                    self.push_instruction(AsmInstruction::Mov(
+                        Params::new(
+                            Place::Register(syntax::X64Memory::result_of(
+                                syntax::OpType::Add,
+                                syntax::Type::Doubleword,
+                            )),
+                            Value::Place(p1),
+                        )
+                        .unwrap(),
+                    ));
+                    Params::new(
+                        p2.as_place().unwrap(),
+                        Value::Place(Place::Register(syntax::X64Memory::result_of(
+                            syntax::OpType::Add,
+                            syntax::Type::Doubleword,
+                        ))),
+                    )
+                    .unwrap()
+                });
+                let instruction = AsmInstruction::Add(params);
+                self.remember(
+                    line.1.unwrap(),
+                    Place::Register(syntax::X64Memory::result_in(&instruction).unwrap()),
+                );
                 self.push_instruction(instruction);
             }
             tac::Instruction::Alloc(v) => {
@@ -80,11 +112,25 @@ impl Translator {
                             tac::Value::ID(id) => Value::Place(self.look_up(&id).unwrap().clone()),
                             tac::Value::Const(tac::Const::Int(int)) => Value::Const(int as i64),
                         };
-                        // TODO: we not always need to move data to return register
-                        // for example when we operate with int
-                        // we can move it to `eax`
-                        self.push_instruction(AsmInstruction::Mov(Place::Register(syntax::X64Memory::return_register()), value));
-                        // TODO: here we should handle multiply returns by label
+                        let ret_register = syntax::X64Memory::return_register(&value);
+                        // we ignore move to return register when its already there
+                        match value {
+                            Value::Place(Place::Stack(..)) | Value::Const(..) => {
+                                self.push_instruction(AsmInstruction::Mov(
+                                    Params::new(Place::Register(ret_register), value).unwrap(),
+                                ));
+                            }
+                            Value::Place(Place::Register(reg)) if ret_register != reg => {
+                                // TODO: we not always need to move data to return register
+                                // for example when we operate with int
+                                // we can move it to `eax`
+                                self.push_instruction(AsmInstruction::Mov(
+                                    Params::new(Place::Register(ret_register), value).unwrap(),
+                                ));
+                                // TODO: here we should handle multiply returns by label
+                            }
+                            _ => (),
+                        }
                     }
                     _ => unimplemented!(),
                 }
@@ -107,12 +153,10 @@ impl Translator {
                 let v = match c {
                     tac::Const::Int(int) => Value::Const(int as i64),
                 };
-                self.push_instruction(AsmInstruction::Mov(place.clone(), v));
+                self.push_instruction(AsmInstruction::Mov(Params::new(place.clone(), v).unwrap()));
                 place
             }
-            tac::Value::ID(id) => {
-                self.look_up(&id).unwrap().clone()
-            }
+            tac::Value::ID(id) => self.look_up(&id).unwrap().clone(),
         }
     }
 
@@ -188,9 +232,8 @@ mod tests {
         let instructions = translator.instructions;
 
         let expected = IList::from(vec![
-            AsmInstruction::Mov(Place::Stack(4), Value::Const(2)),
-            AsmInstruction::Mov(Place::Stack(8), Value::Const(3)),
-            AsmInstruction::Add(Place::Stack(4), Value::Place(Place::Stack(8))),
+            AsmInstruction::Mov(Params::new(Place::Stack(4), Value::Const(2)).unwrap()),
+            AsmInstruction::Add(Params::new(Place::Stack(4), Value::Const(3)).unwrap()),
         ]);
         assert_eq!(expected, instructions);
     }
@@ -221,13 +264,13 @@ mod tests {
         let instructions = translator.instructions;
 
         let expected = IList::from(vec![
-            AsmInstruction::Mov(Place::Stack(4), Value::Const(2)),
-            AsmInstruction::Mov(Place::Stack(8), Value::Const(3)),
-            AsmInstruction::Add(Place::Stack(4), Value::Place(Place::Stack(8))),
+            AsmInstruction::Mov(Params::new(Place::Stack(4), Value::Const(2)).unwrap()),
+            AsmInstruction::Mov(Params::new(Place::Stack(8), Value::Const(3)).unwrap()),
+            AsmInstruction::Mov(Params::new(Place::Register("eax"), Value::Place(Place::Stack(4))).unwrap()),
+            AsmInstruction::Add(Params::new(Place::Stack(8), Value::Place(Place::Register("eax"))).unwrap()),
         ]);
         assert_eq!(expected, instructions);
     }
-
 
     #[test]
     fn translate_operation_sum_const_and_var2() {
@@ -250,9 +293,8 @@ mod tests {
         let instructions = translator.instructions;
 
         let expected = IList::from(vec![
-            AsmInstruction::Mov(Place::Stack(4), Value::Const(2)),
-            AsmInstruction::Mov(Place::Stack(8), Value::Const(3)),
-            AsmInstruction::Add(Place::Stack(4), Value::Place(Place::Stack(8))),
+            AsmInstruction::Mov(Params::new(Place::Stack(4), Value::Const(2)).unwrap()),
+            AsmInstruction::Add(Params::new(Place::Stack(4), Value::Const(3)).unwrap()),
         ]);
         assert_eq!(expected, instructions);
     }
@@ -287,11 +329,9 @@ mod tests {
         let instructions = translator.instructions;
 
         let expected = IList::from(vec![
-            AsmInstruction::Mov(Place::Stack(4), Value::Const(2)),
-            AsmInstruction::Mov(Place::Stack(8), Value::Const(3)),
-            AsmInstruction::Add(Place::Stack(4), Value::Place(Place::Stack(8))),
-            AsmInstruction::Mov(Place::Stack(12), Value::Const(4)),
-            AsmInstruction::Add(Place::Register("eax"), Value::Place(Place::Stack(12))),
+            AsmInstruction::Mov(Params::new(Place::Stack(4), Value::Const(2)).unwrap()),
+            AsmInstruction::Add(Params::new(Place::Stack(4), Value::Const(3)).unwrap()),
+            AsmInstruction::Add(Params::new(Place::Register("eax"), Value::Const(4)).unwrap()),
         ]);
         assert_eq!(expected, instructions);
     }
@@ -321,11 +361,9 @@ mod tests {
         let instructions = translator.instructions;
 
         let expected = IList::from(vec![
-            AsmInstruction::Mov(Place::Stack(4), Value::Const(2)),
-            AsmInstruction::Mov(Place::Stack(8), Value::Const(3)),
-            AsmInstruction::Add(Place::Stack(4), Value::Place(Place::Stack(8))),
-            AsmInstruction::Mov(Place::Stack(12), Value::Const(4)),
-            AsmInstruction::Add(Place::Register("eax"), Value::Place(Place::Stack(12))),
+            AsmInstruction::Mov(Params::new(Place::Stack(4), Value::Const(2)).unwrap()),
+            AsmInstruction::Add(Params::new(Place::Stack(4), Value::Const(3)).unwrap()),
+            AsmInstruction::Add(Params::new(Place::Register("eax"), Value::Const(4)).unwrap()),
         ]);
         assert_eq!(expected, instructions);
     }
@@ -364,13 +402,10 @@ mod tests {
         let instructions = translator.instructions;
 
         let expected = IList::from(vec![
-            AsmInstruction::Mov(Place::Stack(4), Value::Const(2)),
-            AsmInstruction::Mov(Place::Stack(8), Value::Const(3)),
-            AsmInstruction::Add(Place::Stack(4), Value::Place(Place::Stack(8))),
-            AsmInstruction::Mov(Place::Stack(12), Value::Const(4)),
-            AsmInstruction::Add(Place::Register("eax"), Value::Place(Place::Stack(12))),
-            AsmInstruction::Mov(Place::Stack(16), Value::Const(5)),
-            AsmInstruction::Add(Place::Register("eax"), Value::Place(Place::Stack(16))),
+            AsmInstruction::Mov(Params::new(Place::Stack(4), Value::Const(2)).unwrap()),
+            AsmInstruction::Add(Params::new(Place::Stack(4), Value::Const(3)).unwrap()),
+            AsmInstruction::Add(Params::new(Place::Register("eax"), Value::Const(4)).unwrap()),
+            AsmInstruction::Add(Params::new(Place::Register("eax"), Value::Const(5)).unwrap()),
         ]);
         assert_eq!(expected, instructions);
     }
@@ -379,11 +414,16 @@ mod tests {
     fn translate_operation_return() {
         let mut translator = Translator::new();
         let assign = tac::InstructionLine(
-            tac::Instruction::Assignment(tac::ID::new(0, tac::IDType::Var), tac::Value::Const(tac::Const::Int(1))),
+            tac::Instruction::Assignment(
+                tac::ID::new(0, tac::IDType::Var),
+                tac::Value::Const(tac::Const::Int(1)),
+            ),
             Some(tac::ID::new(0, tac::IDType::Var)),
         );
         let ret = tac::InstructionLine(
-            tac::Instruction::ControlOp(tac::ControlOp::Return(tac::Value::ID(assign.1.clone().unwrap()))),
+            tac::Instruction::ControlOp(tac::ControlOp::Return(tac::Value::ID(
+                assign.1.clone().unwrap(),
+            ))),
             None,
         );
 
@@ -392,9 +432,8 @@ mod tests {
         let instructions = translator.instructions;
 
         let expected = IList::from(vec![
-            AsmInstruction::Mov(Place::Stack(4), Value::Const(1)),
-            AsmInstruction::Mov(Place::Register("eax"), Value::Place(Place::Stack(4))),
-            AsmInstruction::Ret,
+            AsmInstruction::Mov(Params::new(Place::Stack(4), Value::Const(1)).unwrap()),
+            AsmInstruction::Mov(Params::new(Place::Register("eax"), Value::Place(Place::Stack(4))).unwrap()),
         ]);
         assert_eq!(expected, instructions);
     }

@@ -1,6 +1,6 @@
 use std::io;
 
-use super::syntax::{self, IList, AsmInstruction, Place, Value};
+use super::syntax::{self, IList, AsmInstruction, Place, Value, Params};
 
 pub fn format<W: io::Write>(mut w: W, asm: IList) -> io::Result<()> {
     for i in asm.iter() {
@@ -12,15 +12,10 @@ pub fn format<W: io::Write>(mut w: W, asm: IList) -> io::Result<()> {
 
 fn format_instruction(i: &AsmInstruction) -> String {
     match i {
-        AsmInstruction::Add(p, v) => format!("    add {}, {}", format_place(p), format_value(v)),
-        AsmInstruction::Mov(p, v) => {
-            let suffix = match syntax::X64Memory::value_type(v) {
-                syntax::Type::Doubleword => "l",
-                syntax::Type::Quadword => "q",
-                _ => unimplemented!(),
-            };
-
-            format!("    mov{} {}, {}", suffix, format_value(v), format_place(p))
+        AsmInstruction::Add(args) => format!("    add{} {}, {}", suffix(args), format_place(args.place()), format_value(args.value())),
+        AsmInstruction::Mov(args) => {
+            let suffix = suffix(args);
+            format!("    mov{} {}, {}", suffix, format_value(args.value()), format_place(args.place()))
         }
         AsmInstruction::Ret => "    ret".to_string(),
         AsmInstruction::Label(label) => format!("{}:", label),
@@ -41,5 +36,13 @@ fn format_value(v: &Value) -> String {
     match v {
         Value::Place(p) => format_place(p),
         Value::Const(int) => format!("${}", int)
+    }
+}
+
+fn suffix(args: &Params) -> String {
+    match syntax::X64Memory::size(args.place(), args.value()) {
+        syntax::Type::Doubleword => "l".to_owned(),
+        syntax::Type::Quadword => "q".to_owned(),
+        _ => unimplemented!(),
     }
 }
