@@ -431,4 +431,23 @@ mod tests {
         ]);
         assert_eq!(expected, instructions);
     }
+
+    #[test]
+    fn translate_operation_return_const() {
+        let mut translator = Translator::new();
+        let ret = tac::InstructionLine(
+            tac::Instruction::ControlOp(tac::ControlOp::Return(tac::Value::Const(tac::Const::Int(1)))),
+            None,
+        );
+
+        translator.translate(ret);
+        let instructions = translator.instructions;
+
+        let expected = IList::from(vec![
+            AsmInstruction::Mov(
+                Params::new(Place::Register("eax"), Value::Const(1, syntax::Type::Doubleword)).unwrap(),
+            ),
+        ]);
+        assert_eq!(expected, instructions);
+    }
 }
