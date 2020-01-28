@@ -56,23 +56,30 @@ impl Translator {
                 v1,
                 v2,
             )) => {
-                // TODO: I guess that if we implement some allocation algorithm
-                // here we could save the often used variable to register or whatever,
+                // We could return a place of this id
+                // but as we decided to follow the style of clang and gcc compilations
+                // we move the operand to add register before.
                 //
-                // let p2 = self.alloc_const(v2);
+                // Instead of `addl    -8(%rbp), $2` we make two instructions
+                // `movl    -8(%rbp), %eax`
+                // `addl    $2, %eax`
                 //
-                // NOTION: Might it is not so well that we rid the initialization each variable in tac/3ac
-                // since I am not sure that on the analyse stage it will be simple to handle the structures we have now
+                // In detail earlier we got this result for this expression `a + 1` where `a` is declared variable
                 //
-                // It'd better for now to allocate all variables in a similar manner
-                let p1 = self.alloc_const(v1);
-                let p2 = match v2 {
-                    tac::Value::Const(tac::Const::Int(int)) => Value::Const(int as i64, syntax::Type::Doubleword),
-                    tac::Value::ID(id) => Value::Place(self.look_up(&id).unwrap().clone()),
-                };
+                // AsmInstruction::Mov(Params::new(Place::Stack(4, syntax::Type::Doubleword), Value::Const(2, syntax::Type::Doubleword)).unwrap()),
+                // AsmInstruction::Add(Params::new(Place::Stack(4, syntax::Type::Doubleword), Value::Const(3, syntax::Type::Doubleword)).unwrap()),
+                // 
+                // But now we get this
+                // 
+                // AsmInstruction::Mov(Params::new(Place::Stack(4, syntax::Type::Doubleword), Value::Const(2, syntax::Type::Doubleword)).unwrap()),
+                // AsmInstruction::Mov(Params::new(Place::Register("eax"), Value::Place(Place::Stack(4, syntax::Type::Doubleword))).unwrap()),
+                // AsmInstruction::Add(Params::new(Place::Register("eax"), Value::Const(3, syntax::Type::Doubleword)).unwrap()),
+                //
+                // Certainly, I can not say which variate is better.
+                let p2 = self.to_value(v2);
+                let p1 = self.alloc_on(v1, Place::Register(syntax::X64Memory::result_of(syntax::OpType::Add, &p2)));
                 let params = Params::new(p1.clone(), p2.clone()).unwrap_or_else(|| {
-                    let add_place =
-                        Place::Register(syntax::X64Memory::result_of(syntax::OpType::Add, &p2));
+                    let add_place = Place::Register(syntax::X64Memory::result_of(syntax::OpType::Add, &Value::Place(p1.clone())));
                     self.push_instruction(AsmInstruction::Mov(
                         Params::new(add_place.clone(), Value::Place(p1)).unwrap(),
                     ));
@@ -86,7 +93,7 @@ impl Translator {
                 self.push_instruction(instruction);
             }
             tac::Instruction::Alloc(v) => {
-                let p = self.alloc_const(v);
+                let p = self.alloc_value(v);
                 self.remember(line.1.unwrap(), p);
             }
             tac::Instruction::Assignment(id, v) => {
@@ -134,35 +141,31 @@ impl Translator {
         self.instructions.push(i);
     }
 
-    fn alloc_const(&mut self, v: tac::Value) -> Place {
+    fn to_value(&self, v: tac::Value) -> Value {
         match v {
-            tac::Value::Const(c) => {
-                let place = self.place_on_stack();
-                let v = match c {
-                    tac::Const::Int(int) => Value::Const(int as i64, syntax::Type::Doubleword),
-                };
-                self.push_instruction(AsmInstruction::Mov(Params::new(place.clone(), v).unwrap()));
-                place
-            }
-            tac::Value::ID(id) => self.look_up(&id).unwrap().clone(),
+            tac::Value::Const(tac::Const::Int(int)) => Value::Const(int as i64, syntax::Type::Doubleword),
+            tac::Value::ID(id) => Value::Place(self.look_up(&id).unwrap().clone()),
         }
     }
 
     fn alloc_value(&mut self, v: tac::Value) -> Place {
         let place = self.place_on_stack();
+        self.alloc_on(v, place)
+    }
+
+    fn alloc_on(&mut self, v: tac::Value, place: Place) -> Place {
         match v {
-            tac::Value::Const(c) => {
-                let v = match c {
-                    tac::Const::Int(int) => Value::Const(int as i64, syntax::Type::Doubleword),
-                };
-                self.push_instruction(AsmInstruction::Mov(Params::new(place.clone(), v).unwrap()));
+            tac::Value::Const(tac::Const::Int(int)) => {
+                self.push_instruction(AsmInstruction::Mov(Params::new(place.clone(), Value::Const(int as i64, syntax::Type::Doubleword)).unwrap()));
                 place
-            }
+            },
             tac::Value::ID(id) => {
-                let p = self.look_up(&id).unwrap().clone();
-                self.push_instruction(AsmInstruction::Mov(Params::new(place.clone(), Value::Place(p)).unwrap()));
+                let allocated = self.look_up(&id).unwrap().clone();
+                if place != allocated {
+                    self.push_instruction(AsmInstruction::Mov(Params::new(place.clone(), Value::Place(allocated)).unwrap()));
+                }
                 place
-            }
+            },
         }
     }
 
@@ -223,7 +226,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn translate_operation_sum_2_and_3() {
+    fn translate_operation_sum_const_and_const() {
         let mut translator = Translator::new();
         let line = tac::InstructionLine(
             tac::Instruction::Op(tac::Op::Op(
@@ -238,14 +241,14 @@ mod tests {
         let instructions = translator.instructions;
 
         let expected = IList::from(vec![
-            AsmInstruction::Mov(Params::new(Place::Stack(4, syntax::Type::Doubleword), Value::Const(2, syntax::Type::Doubleword)).unwrap()),
-            AsmInstruction::Add(Params::new(Place::Stack(4, syntax::Type::Doubleword), Value::Const(3, syntax::Type::Doubleword)).unwrap()),
+            AsmInstruction::Mov(Params::new(Place::Register("eax"), Value::Const(2, syntax::Type::Doubleword)).unwrap()),
+            AsmInstruction::Add(Params::new(Place::Register("eax"), Value::Const(3, syntax::Type::Doubleword)).unwrap()),
         ]);
         assert_eq!(expected, instructions);
     }
 
     #[test]
-    fn translate_operation_sum_va1_and_var2() {
+    fn translate_operation_sum_var_and_var() {
         let mut translator = Translator::new();
         let var1 = tac::InstructionLine(
             tac::Instruction::Alloc(tac::Value::Const(tac::Const::Int(2))),
@@ -272,18 +275,14 @@ mod tests {
         let expected = IList::from(vec![
             AsmInstruction::Mov(Params::new(Place::Stack(4, syntax::Type::Doubleword), Value::Const(2, syntax::Type::Doubleword)).unwrap()),
             AsmInstruction::Mov(Params::new(Place::Stack(8, syntax::Type::Doubleword), Value::Const(3, syntax::Type::Doubleword)).unwrap()),
-            AsmInstruction::Mov(
-                Params::new(Place::Register("eax"), Value::Place(Place::Stack(4, syntax::Type::Doubleword))).unwrap(),
-            ),
-            AsmInstruction::Add(
-                Params::new(Place::Stack(8, syntax::Type::Doubleword), Value::Place(Place::Register("eax"))).unwrap(),
-            ),
+            AsmInstruction::Mov(Params::new(Place::Register("eax"), Value::Place(Place::Stack(4, syntax::Type::Doubleword))).unwrap()),
+            AsmInstruction::Add(Params::new(Place::Register("eax"), Value::Place(Place::Stack(8, syntax::Type::Doubleword))).unwrap()),
         ]);
         assert_eq!(expected, instructions);
     }
 
     #[test]
-    fn translate_operation_sum_const_and_var2() {
+    fn translate_operation_sum_var_and_const() {
         let mut translator = Translator::new();
         let var = tac::InstructionLine(
             tac::Instruction::Alloc(tac::Value::Const(tac::Const::Int(2))),
@@ -304,13 +303,14 @@ mod tests {
 
         let expected = IList::from(vec![
             AsmInstruction::Mov(Params::new(Place::Stack(4, syntax::Type::Doubleword), Value::Const(2, syntax::Type::Doubleword)).unwrap()),
-            AsmInstruction::Add(Params::new(Place::Stack(4, syntax::Type::Doubleword), Value::Const(3, syntax::Type::Doubleword)).unwrap()),
+            AsmInstruction::Mov(Params::new(Place::Register("eax"), Value::Place(Place::Stack(4, syntax::Type::Doubleword))).unwrap()),
+            AsmInstruction::Add(Params::new(Place::Register("eax"), Value::Const(3, syntax::Type::Doubleword)).unwrap()),
         ]);
         assert_eq!(expected, instructions);
     }
 
     #[test]
-    fn translate_operation_sum_const_and_const_and_var2() {
+    fn translate_operation_sum_var_and_const_and_const() {
         let mut translator = Translator::new();
         let var = tac::InstructionLine(
             tac::Instruction::Alloc(tac::Value::Const(tac::Const::Int(2))),
@@ -340,7 +340,8 @@ mod tests {
 
         let expected = IList::from(vec![
             AsmInstruction::Mov(Params::new(Place::Stack(4, syntax::Type::Doubleword), Value::Const(2, syntax::Type::Doubleword)).unwrap()),
-            AsmInstruction::Add(Params::new(Place::Stack(4, syntax::Type::Doubleword), Value::Const(3, syntax::Type::Doubleword)).unwrap()),
+            AsmInstruction::Mov(Params::new(Place::Register("eax"), Value::Place(Place::Stack(4, syntax::Type::Doubleword))).unwrap()),
+            AsmInstruction::Add(Params::new(Place::Register("eax"), Value::Const(3, syntax::Type::Doubleword)).unwrap()),
             AsmInstruction::Add(Params::new(Place::Register("eax"), Value::Const(4, syntax::Type::Doubleword)).unwrap()),
         ]);
         assert_eq!(expected, instructions);
@@ -371,8 +372,8 @@ mod tests {
         let instructions = translator.instructions;
 
         let expected = IList::from(vec![
-            AsmInstruction::Mov(Params::new(Place::Stack(4, syntax::Type::Doubleword), Value::Const(2, syntax::Type::Doubleword)).unwrap()),
-            AsmInstruction::Add(Params::new(Place::Stack(4, syntax::Type::Doubleword), Value::Const(3, syntax::Type::Doubleword)).unwrap()),
+            AsmInstruction::Mov(Params::new(Place::Register("eax"), Value::Const(2, syntax::Type::Doubleword)).unwrap()),
+            AsmInstruction::Add(Params::new(Place::Register("eax"), Value::Const(3, syntax::Type::Doubleword)).unwrap()),
             AsmInstruction::Add(Params::new(Place::Register("eax"), Value::Const(4, syntax::Type::Doubleword)).unwrap()),
         ]);
         assert_eq!(expected, instructions);
@@ -412,8 +413,8 @@ mod tests {
         let instructions = translator.instructions;
 
         let expected = IList::from(vec![
-            AsmInstruction::Mov(Params::new(Place::Stack(4, syntax::Type::Doubleword), Value::Const(2, syntax::Type::Doubleword)).unwrap()),
-            AsmInstruction::Add(Params::new(Place::Stack(4, syntax::Type::Doubleword), Value::Const(3, syntax::Type::Doubleword)).unwrap()),
+            AsmInstruction::Mov(Params::new(Place::Register("eax"), Value::Const(2, syntax::Type::Doubleword)).unwrap()),
+            AsmInstruction::Add(Params::new(Place::Register("eax"), Value::Const(3, syntax::Type::Doubleword)).unwrap()),
             AsmInstruction::Add(Params::new(Place::Register("eax"), Value::Const(4, syntax::Type::Doubleword)).unwrap()),
             AsmInstruction::Add(Params::new(Place::Register("eax"), Value::Const(5, syntax::Type::Doubleword)).unwrap()),
         ]);
@@ -494,7 +495,8 @@ mod tests {
 
         let expected = IList::from(vec![
             AsmInstruction::Mov(Params::new(Place::Stack(4, syntax::Type::Doubleword), Value::Const(1, syntax::Type::Doubleword)).unwrap()),
-            AsmInstruction::Add(Params::new(Place::Stack(4, syntax::Type::Doubleword), Value::Const(2, syntax::Type::Doubleword)).unwrap()),
+            AsmInstruction::Mov(Params::new(Place::Register("eax"), Value::Place(Place::Stack(4, syntax::Type::Doubleword))).unwrap()),
+            AsmInstruction::Add(Params::new(Place::Register("eax"), Value::Const(2, syntax::Type::Doubleword)).unwrap()),
             AsmInstruction::Mov(Params::new(Place::Stack(8, syntax::Type::Doubleword), Value::Place(Place::Register("eax"))).unwrap()),
         ]);
         assert_eq!(expected, instructions);
