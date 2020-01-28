@@ -501,4 +501,42 @@ mod tests {
         ]);
         assert_eq!(expected, instructions);
     }
+
+    #[test]
+    fn translate_operation_assign_var_sum_var_and_var() {
+        let mut translator = Translator::new();
+        let var1 = tac::InstructionLine(
+            tac::Instruction::Alloc(tac::Value::Const(tac::Const::Int(1))),
+            Some(tac::ID::new(0, tac::IDType::Var)),
+        );
+        let var2 = tac::InstructionLine(
+            tac::Instruction::Alloc(tac::Value::Const(tac::Const::Int(2))),
+            Some(tac::ID::new(1, tac::IDType::Var)),
+        );
+        let sum = tac::InstructionLine(
+            tac::Instruction::Op(tac::Op::Op(
+                tac::TypeOp::Arithmetic(tac::ArithmeticOp::Add), tac::Value::ID(var1.1.clone().unwrap()), tac::Value::ID(var2.1.clone().unwrap())
+            )),
+            Some(tac::ID::new(0, tac::IDType::Temporary)),
+        );
+        let var3 = tac::InstructionLine(
+            tac::Instruction::Assignment(tac::ID::new(1, tac::IDType::Var), tac::Value::ID(sum.1.clone().unwrap())),
+            Some(tac::ID::new(2, tac::IDType::Var)),
+        );
+
+        translator.translate(var1);
+        translator.translate(var2);
+        translator.translate(sum);
+        translator.translate(var3);
+        let instructions = translator.instructions;
+
+        let expected = IList::from(vec![
+            AsmInstruction::Mov(Params::new(Place::Stack(4, syntax::Type::Doubleword), Value::Const(1, syntax::Type::Doubleword)).unwrap()),
+            AsmInstruction::Mov(Params::new(Place::Stack(8, syntax::Type::Doubleword), Value::Const(2, syntax::Type::Doubleword)).unwrap()),
+            AsmInstruction::Mov(Params::new(Place::Register("eax"), Value::Place(Place::Stack(4, syntax::Type::Doubleword))).unwrap()),
+            AsmInstruction::Add(Params::new(Place::Register("eax"), Value::Place(Place::Stack(8, syntax::Type::Doubleword))).unwrap()),
+            AsmInstruction::Mov(Params::new(Place::Stack(12, syntax::Type::Doubleword), Value::Place(Place::Register("eax"))).unwrap()),
+        ]);
+        assert_eq!(expected, instructions);
+    }
 }
