@@ -12,7 +12,7 @@ pub fn format<W: io::Write>(mut w: W, asm: IList) -> io::Result<()> {
 
 fn format_instruction(i: &AsmInstruction) -> String {
     match i {
-        AsmInstruction::Add(args) => format!("    add{} {}, {}", suffix(args), format_place(args.place()), format_value(args.value())),
+        AsmInstruction::Add(args) => format!("    add{} {}, {}", suffix(args), format_value(args.value()), format_place(args.place())),
         AsmInstruction::Mov(args) => {
             let suffix = suffix(args);
             format!("    mov{} {}, {}", suffix, format_value(args.value()), format_place(args.place()))
