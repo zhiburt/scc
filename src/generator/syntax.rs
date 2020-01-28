@@ -37,7 +37,7 @@ impl Params {
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Value {
-    Const(i64),
+    Const(i64, Type),
     Place(Place),
 }
 
@@ -52,7 +52,7 @@ impl Value {
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Place {
-    Stack(u64),
+    Stack(u64, Type),
     Register(Register),
 }
 
@@ -102,7 +102,7 @@ impl PartialEq for IList {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Type {
     Byte,
     Word,
@@ -142,9 +142,9 @@ impl X64Memory {
         }
     }
 
-    pub fn result_of(o: OpType, t: Type) -> Register {
+    pub fn result_of(o: OpType, v: &Value) -> Register {
         match o {
-            OpType::Add => match t {
+            OpType::Add => match X64Memory::value_type(v) {
                 Type::Doubleword => "eax",
                 Type::Quadword => "rax",
                 _ => unimplemented!(),
@@ -168,35 +168,18 @@ impl X64Memory {
         }
     }
 
-    pub fn size(p: &Place, v: &Value) -> Type {
-        if let Value::Place(Place::Stack(..)) = v {
-            X64Memory::place_type(p)
-        } else {
-            X64Memory::value_type(v)
-        }
-    }
-
     pub fn value_type(v: &Value) -> Type {
         match v {
             // TODO: at least now it is OK according the fact we support one type
             // but in the nearest it might be managed to be changed
-            Value::Const(..) => Type::Doubleword,
-            Value::Place(p) => match p {
-                Place::Stack(..) => Type::Quadword,
-                Place::Register(reg) => {
-                    if X64Memory::is_main_register(reg) {
-                        Type::Quadword
-                    } else {
-                        Type::Doubleword
-                    }
-                }
-            },
+            Value::Const(.., t) => t.clone(),
+            Value::Place(p) => X64Memory::place_type(p),
         }
     }
 
-    pub fn place_type(p: &Place) -> Type {
+    fn place_type(p: &Place) -> Type {
         match p {
-            Place::Stack(..) => Type::Quadword,
+            Place::Stack(.., t) => t.clone(),
             Place::Register(reg) => {
                 if X64Memory::is_main_register(reg) {
                     Type::Quadword

@@ -28,19 +28,19 @@ fn format_instruction(i: &AsmInstruction) -> String {
 fn format_place(p: &Place) -> String {
     match p {
         Place::Register(reg) => format!("%{}", reg),
-        Place::Stack(offset) => format!("-{}(%rbp)", offset)
+        Place::Stack(offset, t) => format!("-{}(%rbp)", offset)
     }
 }
 
 fn format_value(v: &Value) -> String {
     match v {
         Value::Place(p) => format_place(p),
-        Value::Const(int) => format!("${}", int)
+        Value::Const(int, t) => format!("${}", int)
     }
 }
 
 fn suffix(args: &Params) -> String {
-    match syntax::X64Memory::size(args.place(), args.value()) {
+    match syntax::X64Memory::value_type(args.value()) {
         syntax::Type::Doubleword => "l".to_owned(),
         syntax::Type::Quadword => "q".to_owned(),
         _ => unimplemented!(),
