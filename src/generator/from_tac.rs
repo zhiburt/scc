@@ -154,18 +154,13 @@ impl Translator {
     }
 
     fn alloc_on(&mut self, v: tac::Value, place: Place) -> Place {
+        let v = self.to_value(v);
         match v {
-            tac::Value::Const(tac::Const::Int(int)) => {
-                self.push_instruction(AsmInstruction::Mov(Params::new(place.clone(), Value::Const(int as i64, syntax::Type::Doubleword)).unwrap()));
+            Value::Place(ref p) if *p == place => place,
+            _ => {
+                self.push_instruction(AsmInstruction::Mov(Params::new(place.clone(), v).unwrap()));
                 place
-            },
-            tac::Value::ID(id) => {
-                let allocated = self.look_up(&id).unwrap().clone();
-                if place != allocated {
-                    self.push_instruction(AsmInstruction::Mov(Params::new(place.clone(), Value::Place(allocated)).unwrap()));
-                }
-                place
-            },
+            }
         }
     }
 
