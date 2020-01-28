@@ -90,7 +90,7 @@ impl Translator {
                 self.remember(line.1.unwrap(), p);
             }
             tac::Instruction::Assignment(id, v) => {
-                let p = self.alloc_const(v);
+                let p = self.alloc_value(v);
                 self.remember(id, p);
             }
             tac::Instruction::ControlOp(op) => {
@@ -145,6 +145,24 @@ impl Translator {
                 place
             }
             tac::Value::ID(id) => self.look_up(&id).unwrap().clone(),
+        }
+    }
+
+    fn alloc_value(&mut self, v: tac::Value) -> Place {
+        let place = self.place_on_stack();
+        match v {
+            tac::Value::Const(c) => {
+                let v = match c {
+                    tac::Const::Int(int) => Value::Const(int as i64, syntax::Type::Doubleword),
+                };
+                self.push_instruction(AsmInstruction::Mov(Params::new(place.clone(), v).unwrap()));
+                place
+            }
+            tac::Value::ID(id) => {
+                let p = self.look_up(&id).unwrap().clone();
+                self.push_instruction(AsmInstruction::Mov(Params::new(place.clone(), Value::Place(p)).unwrap()));
+                place
+            }
         }
     }
 
@@ -447,6 +465,37 @@ mod tests {
             AsmInstruction::Mov(
                 Params::new(Place::Register("eax"), Value::Const(1, syntax::Type::Doubleword)).unwrap(),
             ),
+        ]);
+        assert_eq!(expected, instructions);
+    }
+
+    #[test]
+    fn translate_operation_assign_var_sum_var_and_const() {
+        let mut translator = Translator::new();
+        let var = tac::InstructionLine(
+            tac::Instruction::Alloc(tac::Value::Const(tac::Const::Int(1))),
+            Some(tac::ID::new(0, tac::IDType::Var)),
+        );
+        let sum = tac::InstructionLine(
+            tac::Instruction::Op(tac::Op::Op(
+                tac::TypeOp::Arithmetic(tac::ArithmeticOp::Add), tac::Value::ID(var.1.clone().unwrap()), tac::Value::Const(tac::Const::Int(2))
+            )),
+            Some(tac::ID::new(0, tac::IDType::Temporary)),
+        );
+        let var2 = tac::InstructionLine(
+            tac::Instruction::Assignment(tac::ID::new(1, tac::IDType::Var), tac::Value::ID(sum.1.clone().unwrap())),
+            Some(tac::ID::new(1, tac::IDType::Var)),
+        );
+
+        translator.translate(var);
+        translator.translate(sum);
+        translator.translate(var2);
+        let instructions = translator.instructions;
+
+        let expected = IList::from(vec![
+            AsmInstruction::Mov(Params::new(Place::Stack(4, syntax::Type::Doubleword), Value::Const(1, syntax::Type::Doubleword)).unwrap()),
+            AsmInstruction::Add(Params::new(Place::Stack(4, syntax::Type::Doubleword), Value::Const(2, syntax::Type::Doubleword)).unwrap()),
+            AsmInstruction::Mov(Params::new(Place::Stack(8, syntax::Type::Doubleword), Value::Place(Place::Register("eax"))).unwrap()),
         ]);
         assert_eq!(expected, instructions);
     }
