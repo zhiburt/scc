@@ -52,7 +52,7 @@ impl Translator {
     pub fn translate(&mut self, line: tac::InstructionLine) {
         match line.0 {
             tac::Instruction::Op(tac::Op::Op(
-                tac::TypeOp::Arithmetic(tac::ArithmeticOp::Add),
+                tac::TypeOp::Arithmetic(operation_type),
                 v1,
                 v2,
             )) => {
@@ -77,18 +77,18 @@ impl Translator {
                 //
                 // Certainly, I can not say which variate is better.
                 let p2 = self.to_value(v2);
-                let p1 = self.alloc_on(v1, Place::Register(syntax::X64Memory::result_of(syntax::OpType::Add, &p2)));
+                let result_place = Place::Register(syntax::X64Memory::result_of(syntax::OpType::Add, &p2));
+                let p1 = self.alloc_on(v1, result_place.clone());
                 let params = Params::new(p1.clone(), p2.clone()).unwrap_or_else(|| {
-                    let add_place = Place::Register(syntax::X64Memory::result_of(syntax::OpType::Add, &Value::Place(p1.clone())));
                     self.push_instruction(AsmInstruction::Mov(
-                        Params::new(add_place.clone(), Value::Place(p1)).unwrap(),
+                        Params::new(result_place.clone(), Value::Place(p1)).unwrap(),
                     ));
-                    Params::new(p2.as_place().unwrap(), Value::Place(add_place)).unwrap()
+                    Params::new(p2.as_place().unwrap(), Value::Place(result_place.clone())).unwrap()
                 });
-                let instruction = AsmInstruction::Add(params);
+                let instruction = map_arithmetic_op_to_asm(operation_type, params);
                 self.remember(
                     line.1.unwrap(),
-                    Place::Register(syntax::X64Memory::result_in(&instruction).unwrap()),
+                    result_place,
                 );
                 self.push_instruction(instruction);
             }
@@ -187,6 +187,16 @@ impl Translator {
             }
             None => None,
         }
+    }
+}
+
+fn map_arithmetic_op_to_asm(op: tac::ArithmeticOp, params: Params) -> AsmInstruction {
+    match op {
+        tac::ArithmeticOp::Add => AsmInstruction::Add(params),
+        tac::ArithmeticOp::Sub => AsmInstruction::Sub(params),
+        tac::ArithmeticOp::Mul => AsmInstruction::Mul(params),
+        tac::ArithmeticOp::Div => AsmInstruction::Div(params),
+        tac::ArithmeticOp::Mod => AsmInstruction::Mod(params),
     }
 }
 
