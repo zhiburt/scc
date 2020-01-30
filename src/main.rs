@@ -42,10 +42,9 @@ fn main() {
 
             println!();
 
-            for f in tac {
-                let asm = generator::from_tac::gen(f);
-                generator::formatter::format(std::io::stdout().lock(), asm).unwrap();
-            }
+            // for f in tac {
+            //     println!("{}", generator::from_tac::gen(f));
+            // }
         }
     }
 
