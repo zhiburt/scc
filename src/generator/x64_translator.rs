@@ -27,7 +27,7 @@ pub enum AsmValue {
     Place(Place),
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(PartialEq, Eq, Clone)]
 pub struct Register(usize);
 
 use std::iter::FromIterator;
@@ -36,22 +36,9 @@ impl Register {
     // Since nowadays we don't use others registers the are not support them yet
     const REGISTERS: &'static [&'static str] = &[
         "", "", // to be able to provide size by index (see method `size`)
-        "rax", "eax",
-        "rbx", "ebx",
-        "rcx", "ecx",
-        "rdx", "edx",
-        "rsi", "esi",
-        "rdi", "edi",
-        "rbp", "ebp",
-        "rsp", "esp",
-        "r8", "r8d",
-        "r9", "r9d",
-        "r10", "r10d",
-        "r11", "r11d",
-        "r12", "r12d",
-        "r13", "r13d",
-        "r14", "r14d",
-        "r15", "r15d",
+        "rax", "eax", "rbx", "ebx", "rcx", "ecx", "rdx", "edx", "rsi", "esi", "rdi", "edi", "rbp",
+        "ebp", "rsp", "esp", "r8", "r8d", "r9", "r9d", "r10", "r10d", "r11", "r11d", "r12", "r12d",
+        "r13", "r13d", "r14", "r14d", "r15", "r15d",
     ];
 
     fn new(reg_str: &'static str) -> Register {
@@ -69,15 +56,15 @@ impl Register {
         }
     }
 
-    fn cast(&self, size: Type) -> Register {
+    fn cast(&self, size: &Type) -> Register {
         let self_size = self.size();
-        if self_size == size {
+        if self_size == *size {
             return self.clone();
         }
 
         match self_size {
-            Type::Quadword if size == Type::Doubleword => Register(self.0 + 1),
-            Type::Doubleword if size == Type::Quadword => Register(self.0 - 1),
+            Type::Quadword if *size == Type::Doubleword => Register(self.0 + 1),
+            Type::Doubleword if *size == Type::Quadword => Register(self.0 - 1),
             _ => unimplemented!(),
         }
     }
@@ -95,6 +82,12 @@ impl Register {
 impl std::fmt::Display for Register {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", Register::REGISTERS[self.0])
+    }
+}
+
+impl std::fmt::Debug for Register {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "\"{}\"", self)
     }
 }
 
@@ -139,16 +132,16 @@ impl Translator for X64Backend {
     fn save(&mut self, id: Id, t: Type, value: Option<Value>) {}
 
     fn add(&mut self, id: Id, t: Type, a: Value, b: Value) {
-        let first = self.const_or_allocated(t.clone(), a);
-        // TODO: the shoce of eax, rax etc should be better
-        let second = self.copy_on(t, b, Place::Register("eax".into()));
+        let first = self.const_or_allocated(t.clone(), b);
+        let add_register = Place::Register(Register::new("rax").cast(&t));
+        let second = self.copy_on(t, a, add_register);
         self.push_asm(AsmX32::Add(second, first));
     }
 
     fn ret(&mut self, t: Type, v: Value) {
         let value = self.const_or_allocated(t, v);
         let size = X64Backend::value_size(&value);
-        let return_reg = Register::new("rax").cast(size);
+        let return_reg = Register::new("rax").cast(&size);
         match value {
             AsmValue::Place(Place::Register(ref reg)) if *reg == return_reg => (),
             _ => {
@@ -205,7 +198,7 @@ impl X64Backend {
         match v {
             AsmValue::Const(.., t) => t.clone(),
             AsmValue::Place(Place::Stack(.., t)) => t.clone(),
-            AsmValue::Place(Place::Register(reg)) => unimplemented!(),
+            AsmValue::Place(Place::Register(reg)) => reg.size(),
         }
     }
 }
@@ -239,6 +232,49 @@ mod translator_tests {
                 Place::Register("rax".into()),
                 AsmValue::Const(10, Type::Quadword)
             )],
+            asm
+        )
+    }
+
+    #[test]
+    fn add_const_to_const() {
+        let mut trans = X64Backend::new();
+        trans.add(0, Type::Doubleword, Value::Const(10), Value::Const(20));
+        let asm = trans.asm;
+
+        assert_eq!(
+            vec![
+                AsmX32::Mov(
+                    Place::Register("eax".into()),
+                    AsmValue::Const(10, Type::Doubleword)
+                ),
+                AsmX32::Add(
+                    Place::Register("eax".into()),
+                    AsmValue::Const(20, Type::Doubleword)
+                )
+            ],
+            asm
+        )
+    }
+
+
+    #[test]
+    fn add_const_to_const_quadword() {
+        let mut trans = X64Backend::new();
+        trans.add(0, Type::Quadword, Value::Const(10), Value::Const(20));
+        let asm = trans.asm;
+
+        assert_eq!(
+            vec![
+                AsmX32::Mov(
+                    Place::Register("rax".into()),
+                    AsmValue::Const(10, Type::Quadword)
+                ),
+                AsmX32::Add(
+                    Place::Register("rax".into()),
+                    AsmValue::Const(20, Type::Quadword)
+                )
+            ],
             asm
         )
     }
