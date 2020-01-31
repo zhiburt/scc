@@ -20,11 +20,29 @@ pub enum Place {
     Register(Register),
 }
 
+impl Place {
+    pub fn size(&self) -> Type {
+        match self {
+            Place::Register(reg) => reg.size(),
+            Place::Stack(.., t) => t.clone(),
+        }
+    }
+}
+
 // TODO: after move rename to Value
 #[derive(Debug, PartialEq, Eq)]
 pub enum AsmValue {
     Const(i64, Type),
     Place(Place),
+}
+
+impl AsmValue {
+    pub fn size(&self) -> Type {
+        match self {
+            AsmValue::Const(.., t) => t.clone(),
+            AsmValue::Place(p) => p.size(),
+        }
+    }
 }
 
 #[derive(PartialEq, Eq, Clone)]
@@ -46,7 +64,7 @@ impl Register {
         Register(index)
     }
 
-    fn size(&self) -> Type {
+    pub fn size(&self) -> Type {
         if self.0 % 2 == 0 {
             Type::Quadword
         } else if self.0 % 3 == 0 {
