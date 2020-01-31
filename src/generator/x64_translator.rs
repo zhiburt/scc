@@ -127,6 +127,7 @@ impl Translator for X64Backend {
 
     fn func_end(&mut self) {
         self.push_asm(AsmX32::Pop(Place::Register("rbp".into())));
+        self.push_asm(AsmX32::Ret);
     }
 
     fn save(&mut self, id: Id, t: Type, value: Option<Value>) {}
@@ -135,6 +136,7 @@ impl Translator for X64Backend {
         let first = self.const_or_allocated(t.clone(), b);
         let add_register = Place::Register(Register::new("rax").cast(&t));
         let second = self.copy_on(t, a, add_register);
+        self.save_place(id, &second);
         self.push_asm(AsmX32::Add(second, first));
     }
 
@@ -154,6 +156,7 @@ impl Translator for X64Backend {
         let mut buf = String::new();
         for i in &self.asm {
             buf += &super::syntax::GASMx64::to_string(i);
+            buf += "\n";
         }
         buf
     }
@@ -186,12 +189,16 @@ impl X64Backend {
     fn const_or_allocated(&self, t: Type, v: Value) -> AsmValue {
         match v {
             Value::Const(int) => AsmValue::Const(int, t),
-            Value::Ref(id) => AsmValue::Place(self.place(id).unwrap().clone()),
+            Value::Ref(id) => AsmValue::Place(self.place(&id).unwrap().clone()),
         }
     }
 
-    fn place(&self, id: Id) -> Option<&Place> {
-        self.memory.get(&id)
+    fn place(&self, id: &Id) -> Option<&Place> {
+        self.memory.get(id)
+    }
+
+    fn save_place(&mut self, id: Id, place: &Place) {
+        self.memory.insert(id, place.clone());
     }
 
     fn value_size(v: &AsmValue) -> Type {

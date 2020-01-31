@@ -6,10 +6,14 @@ pub struct GASMx64;
 impl GASMx64 {
     pub fn to_string(asm: &AsmX32) -> String {
         match asm {
+            AsmX32::Label(label) => format!("{}:", label),
             AsmX32::Metadata(data) => format!("  {}", data),
+            AsmX32::Mov(p, v) => format!("  mov {}, {}", format_value(&v), format_place(&p)),
+            AsmX32::Add(p, v) => format!("  add {}, {}", format_value(&v), format_place(&p)),
+            AsmX32::Push(v) => format!("  push {}", format_value(&v)),
+            AsmX32::Pop(p) => format!("  pop {}", format_place(&p)),
             AsmX32::Ret => format!("  ret"),
-            AsmX32::Mov(p, v) => format!("  mov ${}, ${}", format_place(&p), format_value(&v)),
-            _ => unimplemented!(),
+            _ => { println!("{:?}", asm); unimplemented!() },
         }
     }
 }
