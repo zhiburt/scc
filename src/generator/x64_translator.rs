@@ -59,7 +59,7 @@ impl Register {
         "r13", "r13d", "r14", "r14d", "r15", "r15d",
     ];
 
-    fn new(reg_str: &'static str) -> Register {
+    pub fn new(reg_str: &'static str) -> Register {
         let index = Register::reg_index(reg_str).unwrap();
         Register(index)
     }

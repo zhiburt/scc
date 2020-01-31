@@ -42,3 +42,21 @@ fn suffix(t: &Type) -> &'static str {
         _ => unimplemented!(),
     }
 }
+
+mod tests {
+    use super::*;
+    use super::x64_translator::{Place, AsmValue, Register};
+
+    #[test]
+    fn suffix() {
+        let full_double = AsmX32::Add(Place::Register(Register::new("eax")), AsmValue::Const(1, Type::Doubleword));
+        let full_quad = AsmX32::Add(Place::Register(Register::new("rax")), AsmValue::Const(2, Type::Quadword));
+        let const_quad = AsmX32::Add(Place::Register(Register::new("eax")), AsmValue::Const(3, Type::Quadword));
+        let place_quad = AsmX32::Add(Place::Register(Register::new("rax")), AsmValue::Const(4, Type::Doubleword));
+        
+        assert_eq!("  addl $1, %eax", GASMx64::to_string(&full_double));
+        assert_eq!("  addq $2, %rax", GASMx64::to_string(&full_quad));
+        assert_eq!("  addq $3, %eax", GASMx64::to_string(&const_quad));
+        assert_eq!("  addl $4, %rax", GASMx64::to_string(&place_quad));
+    }
+}
