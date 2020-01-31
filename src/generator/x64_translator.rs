@@ -213,10 +213,15 @@ impl X64Backend {
         self.copy_value_on(value, p)
     }
 
-    fn copy_value_on(&mut self, value: AsmValue, p: Place) -> Place {
-        // TODO: might the check on the same value on the same place
-        self.push_asm(AsmX32::Mov(p.clone(), value));
-        p
+    fn copy_value_on(&mut self, value: AsmValue, place: Place) -> Place {
+        if let AsmValue::Place(p) = &value {
+            if *p == place {
+                return place;
+            }
+        }
+
+        self.push_asm(AsmX32::Mov(place.clone(), value));
+        place
     }
 
     fn alloc(&mut self, t: &Type) -> Place {
@@ -359,6 +364,37 @@ mod translator_tests {
                 AsmX32::Add(
                     Place::Register("eax".into()),
                     AsmValue::Place(Place::Stack(8, Type::Doubleword)),
+                )
+            ],
+            asm
+        );
+    }
+
+    #[test]
+    fn add_var_add_var_3_times() {
+        let mut trans = X64Backend::new();
+        trans.save(0, Type::Doubleword, Some(Value::Const(10)));
+        trans.add(1, Type::Doubleword, Value::Ref(0), Value::Ref(0));
+        trans.add(2, Type::Doubleword, Value::Ref(1), Value::Ref(0));
+        let asm = trans.asm;
+
+        assert_eq!(
+            vec![
+                AsmX32::Mov(
+                    Place::Stack(4, Type::Doubleword),
+                    AsmValue::Const(10, Type::Doubleword)
+                ),
+                AsmX32::Mov(
+                    Place::Register("eax".into()),
+                    AsmValue::Place(Place::Stack(4, Type::Doubleword)),
+                ),
+                AsmX32::Add(
+                    Place::Register("eax".into()),
+                    AsmValue::Place(Place::Stack(4, Type::Doubleword)),
+                ),
+                AsmX32::Add(
+                    Place::Register("eax".into()),
+                    AsmValue::Place(Place::Stack(4, Type::Doubleword)),
                 )
             ],
             asm
