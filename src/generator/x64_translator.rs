@@ -1,6 +1,5 @@
-
+use super::translator::{Id, Translator, Type, Value};
 use std::collections::HashMap;
-use super::translator::{Translator, Type, Value, Id};
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum AsmX32 {
@@ -28,10 +27,82 @@ pub enum AsmValue {
     Place(Place),
 }
 
-// TODO: might it's better to provide it by enum?
-//
-// TODO: we should create big map <key: register, value: size>
-pub type Register = &'static str;
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct Register(usize);
+
+use std::iter::FromIterator;
+
+impl Register {
+    // Since nowadays we don't use others registers the are not support them yet
+    const REGISTERS: &'static [&'static str] = &[
+        "", "", // to be able to provide size by index (see method `size`)
+        "rax", "eax",
+        "rbx", "ebx",
+        "rcx", "ecx",
+        "rdx", "edx",
+        "rsi", "esi",
+        "rdi", "edi",
+        "rbp", "ebp",
+        "rsp", "esp",
+        "r8", "r8d",
+        "r9", "r9d",
+        "r10", "r10d",
+        "r11", "r11d",
+        "r12", "r12d",
+        "r13", "r13d",
+        "r14", "r14d",
+        "r15", "r15d",
+    ];
+
+    fn new(reg_str: &'static str) -> Register {
+        let index = Register::reg_index(reg_str).unwrap();
+        Register(index)
+    }
+
+    fn size(&self) -> Type {
+        if self.0 % 2 == 0 {
+            Type::Quadword
+        } else if self.0 % 3 == 0 {
+            Type::Doubleword
+        } else {
+            unimplemented!()
+        }
+    }
+
+    fn cast(&self, size: Type) -> Register {
+        let self_size = self.size();
+        if self_size == size {
+            return self.clone();
+        }
+
+        match self_size {
+            Type::Quadword if size == Type::Doubleword => Register(self.0 + 1),
+            Type::Doubleword if size == Type::Quadword => Register(self.0 - 1),
+            _ => unimplemented!(),
+        }
+    }
+
+    fn reg_index(reg: &str) -> Option<usize> {
+        for (i, r) in Register::REGISTERS.iter().enumerate() {
+            if r == &reg {
+                return Some(i);
+            }
+        }
+        None
+    }
+}
+
+impl std::fmt::Display for Register {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", Register::REGISTERS[self.0])
+    }
+}
+
+impl Into<Register> for &'static str {
+    fn into(self) -> Register {
+        Register::new(self)
+    }
+}
 
 pub struct X64Backend {
     stack_index: u64,
@@ -54,34 +125,35 @@ impl Translator for X64Backend {
         self.push_asm(AsmX32::Metadata(format!(".globl {}", name)));
         self.push_asm(AsmX32::Label(name.to_owned()));
 
-        self.push_asm(AsmX32::Push(AsmValue::Place(Place::Register("rbp"))));
-        self.push_asm(AsmX32::Mov(Place::Register("rbp"), AsmValue::Place(Place::Register("rsp"))));
+        self.push_asm(AsmX32::Push(AsmValue::Place(Place::Register("rbp".into()))));
+        self.push_asm(AsmX32::Mov(
+            Place::Register("rbp".into()),
+            AsmValue::Place(Place::Register("rsp".into())),
+        ));
     }
 
     fn func_end(&mut self) {
-        self.push_asm(AsmX32::Pop(Place::Register("rbp")));
+        self.push_asm(AsmX32::Pop(Place::Register("rbp".into())));
     }
 
-    fn save(&mut self, id: Id, t: Type, value: Option<Value>) {
-        
-    }
+    fn save(&mut self, id: Id, t: Type, value: Option<Value>) {}
 
     fn add(&mut self, id: Id, t: Type, a: Value, b: Value) {
         let first = self.const_or_allocated(t.clone(), a);
-        // TODO: the shoce of eax, rax etc should be better 
-        let second = self.copy_on(t, b, Place::Register("eax"));
+        // TODO: the shoce of eax, rax etc should be better
+        let second = self.copy_on(t, b, Place::Register("eax".into()));
         self.push_asm(AsmX32::Add(second, first));
     }
 
     fn ret(&mut self, t: Type, v: Value) {
         let value = self.const_or_allocated(t, v);
         let size = X64Backend::value_size(&value);
-        let return_reg = X64Backend::register_by_size("rax", size);
+        let return_reg = Register::new("rax").cast(size);
         match value {
-            AsmValue::Place(Place::Register(reg)) if reg == return_reg => (),
+            AsmValue::Place(Place::Register(ref reg)) if *reg == return_reg => (),
             _ => {
                 self.push_asm(AsmX32::Mov(Place::Register(return_reg), value));
-            },
+            }
         }
     }
 
@@ -90,7 +162,6 @@ impl Translator for X64Backend {
         for i in &self.asm {
             buf += &super::syntax::GASMx64::to_string(i);
         }
-    
         buf
     }
 }
@@ -122,7 +193,7 @@ impl X64Backend {
     fn const_or_allocated(&self, t: Type, v: Value) -> AsmValue {
         match v {
             Value::Const(int) => AsmValue::Const(int, t),
-            Value::Ref(id) => AsmValue::Place(self.place(id).unwrap().clone())
+            Value::Ref(id) => AsmValue::Place(self.place(id).unwrap().clone()),
         }
     }
 
@@ -137,37 +208,54 @@ impl X64Backend {
             AsmValue::Place(Place::Register(reg)) => unimplemented!(),
         }
     }
-
-    // TODO: reimplement it;
-    fn register_by_size(r: Register, t: Type) -> Register {
-        match r {
-            "rax" if t == Type::Doubleword => "eax",
-            "rax" if t == Type::Quadword => "rax",
-            _ => unimplemented!(),
-        }
-    }
 }
 
-mod tests {
+mod translator_tests {
     use super::*;
 
     #[test]
     fn return_doubleword() {
         let mut trans = X64Backend::new();
-        
         trans.ret(Type::Doubleword, Value::Const(10));
         let asm = trans.asm;
 
-        assert_eq!(vec![AsmX32::Mov(Place::Register("eax"), AsmValue::Const(10, Type::Doubleword))], asm)
+        assert_eq!(
+            vec![AsmX32::Mov(
+                Place::Register("eax".into()),
+                AsmValue::Const(10, Type::Doubleword)
+            )],
+            asm
+        )
     }
 
     #[test]
     fn return_quadword() {
         let mut trans = X64Backend::new();
-        
         trans.ret(Type::Quadword, Value::Const(10));
         let asm = trans.asm;
 
-        assert_eq!(vec![AsmX32::Mov(Place::Register("rax"), AsmValue::Const(10, Type::Quadword))], asm)
+        assert_eq!(
+            vec![AsmX32::Mov(
+                Place::Register("rax".into()),
+                AsmValue::Const(10, Type::Quadword)
+            )],
+            asm
+        )
+    }
+}
+
+mod register_tests {
+    use super::*;
+
+    #[test]
+    fn register_size() {
+        assert_eq!(Register::new("rax").size(), Type::Quadword);
+        assert_eq!(Register::new("eax").size(), Type::Doubleword);
+    }
+
+    #[test]
+    #[should_panic]
+    fn wrong_construction() {
+        Register::new("not_supported_register");
     }
 }
