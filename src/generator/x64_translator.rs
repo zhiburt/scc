@@ -130,7 +130,11 @@ impl Translator for X64Backend {
         self.push_asm(AsmX32::Ret);
     }
 
-    fn save(&mut self, id: Id, t: Type, value: Option<Value>) {}
+    fn save(&mut self, id: Id, t: Type, value: Option<Value>) {
+        let place = self.alloc(&t);
+        self.save_place(id, &place);
+        self.copy_on(t, value.unwrap(), place); 
+    }
 
     fn add(&mut self, id: Id, t: Type, a: Value, b: Value) {
         let first = self.const_or_allocated(t.clone(), b);
@@ -174,16 +178,15 @@ impl X64Backend {
         p
     }
 
-    fn alloc(&mut self, t: Type) -> Place {
-        let size = match &t {
+    fn alloc(&mut self, t: &Type) -> Place {
+        let size = match t {
             Type::Doubleword => 4,
-            Type::Quadword => 8,
             _ => unimplemented!(),
         };
 
         self.stack_index += size;
 
-        Place::Stack(self.stack_index, t)
+        Place::Stack(self.stack_index, t.clone())
     }
 
     fn const_or_allocated(&self, t: Type, v: Value) -> AsmValue {
@@ -264,6 +267,31 @@ mod translator_tests {
         )
     }
 
+    #[test]
+    fn assign_var_then_add_const() {
+        let mut trans = X64Backend::new();
+        trans.save(0, Type::Doubleword, Some(Value::Const(10)));
+        trans.add(1, Type::Doubleword, Value::Ref(0), Value::Const(20));
+        let asm = trans.asm;
+
+        assert_eq!(
+            vec![
+                AsmX32::Mov(
+                    Place::Stack(4, Type::Doubleword),
+                    AsmValue::Const(10, Type::Doubleword)
+                ),
+                AsmX32::Mov(
+                    Place::Register("eax".into()),
+                    AsmValue::Place(Place::Stack(4, Type::Doubleword)),
+                ),
+                AsmX32::Add(
+                    Place::Register("eax".into()),
+                    AsmValue::Const(20, Type::Doubleword)
+                )
+            ],
+            asm
+        );
+    }
 
     #[test]
     fn add_const_to_const_quadword() {

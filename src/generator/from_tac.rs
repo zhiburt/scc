@@ -46,7 +46,13 @@ fn translate(translator: &mut impl Translator, line: tac::InstructionLine) {
                 Some(parse_value(v)),
             );
         }
-        tac::Instruction::Assignment(id, v) => {}
+        tac::Instruction::Assignment(id, v) => {
+            translator.save(
+                parse_id(line.1.unwrap()),
+                Type::Doubleword,
+                Some(parse_value(v)),
+            );
+        }
         tac::Instruction::ControlOp(op) => match op {
             tac::ControlOp::Return(v) => translator.ret(Type::Doubleword, parse_value(v)),
             _ => unimplemented!(),
