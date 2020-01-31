@@ -402,6 +402,37 @@ mod translator_tests {
     }
 
     #[test]
+    fn add_var_and_var_then_add_the_result_and_itself() {
+        let mut trans = X64Backend::new();
+        trans.save(0, Type::Doubleword, Some(Value::Const(10)));
+        trans.add(1, Type::Doubleword, Value::Ref(0), Value::Ref(0));
+        trans.add(2, Type::Doubleword, Value::Ref(1), Value::Ref(1));
+        let asm = trans.asm;
+
+        assert_eq!(
+            vec![
+                AsmX32::Mov(
+                    Place::Stack(4, Type::Doubleword),
+                    AsmValue::Const(10, Type::Doubleword)
+                ),
+                AsmX32::Mov(
+                    Place::Register("eax".into()),
+                    AsmValue::Place(Place::Stack(4, Type::Doubleword)),
+                ),
+                AsmX32::Add(
+                    Place::Register("eax".into()),
+                    AsmValue::Place(Place::Stack(4, Type::Doubleword)),
+                ),
+                AsmX32::Add(
+                    Place::Register("eax".into()),
+                    AsmValue::Place(Place::Register("eax".into())),
+                )
+            ],
+            asm
+        );
+    }
+
+    #[test]
     fn add_const_to_const_quadword() {
         let mut trans = X64Backend::new();
         trans.add(0, Type::Quadword, Value::Const(10), Value::Const(20));
