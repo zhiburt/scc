@@ -43,6 +43,13 @@ impl AsmValue {
             AsmValue::Place(p) => p.size(),
         }
     }
+
+    pub fn is_place(&self) -> bool {
+        match self {
+            AsmValue::Place(..) => true,
+            _ => false,
+        }
+    }
 }
 
 #[derive(PartialEq, Eq, Clone)]
@@ -149,9 +156,21 @@ impl Translator for X64Backend {
     }
 
     fn save(&mut self, id: Id, t: Type, value: Option<Value>) {
-        let place = self.alloc(&t);
-        self.save_place(id, &place);
-        self.copy_on(t, value.unwrap(), place); 
+        if let Some(place) = self.place(&id) {
+            let place = place.clone();
+            let value = self.const_or_allocated(t.clone(), value.unwrap());
+            if value.is_place() {
+                let register = Place::Register(Register::new("rax").cast(&t));
+                let reg_place = self.copy_value_on(value, register);
+                self.copy_value_on(AsmValue::Place(reg_place), place);
+            } else {
+                self.copy_value_on(value, place);
+            }
+        } else {
+            let place = self.alloc(&t);
+            self.save_place(id, &place);
+            self.copy_on(t, value.unwrap(), place);
+        }
     }
 
     fn add(&mut self, id: Id, t: Type, a: Value, b: Value) {
@@ -191,6 +210,10 @@ impl X64Backend {
 
     fn copy_on(&mut self, t: Type, v: Value, p: Place) -> Place {
         let value = self.const_or_allocated(t, v);
+        self.copy_value_on(value, p)
+    }
+
+    fn copy_value_on(&mut self, value: AsmValue, p: Place) -> Place {
         // TODO: might the check on the same value on the same place
         self.push_asm(AsmX32::Mov(p.clone(), value));
         p
@@ -361,6 +384,59 @@ mod translator_tests {
             ],
             asm
         )
+    }
+
+    #[test]
+    fn assign_var_to_var() {
+        let mut trans = X64Backend::new();
+        trans.save(0, Type::Doubleword, Some(Value::Const(10)));
+        trans.save(1, Type::Doubleword, Some(Value::Const(20)));
+        trans.save(0, Type::Doubleword, Some(Value::Ref(1)));
+        let asm = trans.asm;
+
+        assert_eq!(
+            vec![
+                AsmX32::Mov(
+                    Place::Stack(4, Type::Doubleword),
+                    AsmValue::Const(10, Type::Doubleword)
+                ),
+                AsmX32::Mov(
+                    Place::Stack(8, Type::Doubleword),
+                    AsmValue::Const(20, Type::Doubleword)
+                ),
+                AsmX32::Mov(
+                    Place::Register("eax".into()),
+                    AsmValue::Place(Place::Stack(8, Type::Doubleword)),
+                ),
+                AsmX32::Mov(
+                    Place::Stack(4, Type::Doubleword),
+                    AsmValue::Place(Place::Register("eax".into())),
+                ),
+            ],
+            asm
+        );
+    }
+
+    #[test]
+    fn assign_var_to_const_after_initialization() {
+        let mut trans = X64Backend::new();
+        trans.save(0, Type::Doubleword, Some(Value::Const(10)));
+        trans.save(0, Type::Doubleword, Some(Value::Const(20)));
+        let asm = trans.asm;
+
+        assert_eq!(
+            vec![
+                AsmX32::Mov(
+                    Place::Stack(4, Type::Doubleword),
+                    AsmValue::Const(10, Type::Doubleword)
+                ),
+                AsmX32::Mov(
+                    Place::Stack(4, Type::Doubleword),
+                    AsmValue::Const(20, Type::Doubleword),
+                ),
+            ],
+            asm
+        );
     }
 }
 
