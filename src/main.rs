@@ -43,7 +43,11 @@ fn main() {
             println!();
 
             for f in tac {
-                println!("{}\n", generator::from_tac::Transit::new(generator::x64_translator::X64Backend::new()).gen(f));
+                println!(
+                    "{}\n",
+                    generator::from_tac::Transit::new(generator::x64_translator::X64Backend::new())
+                        .gen(f)
+                );
             }
         }
     }

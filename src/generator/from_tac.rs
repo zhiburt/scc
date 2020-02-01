@@ -55,6 +55,7 @@ fn translate(translator: &mut impl Translator, line: tac::InstructionLine) {
         }
         tac::Instruction::ControlOp(op) => match op {
             tac::ControlOp::Return(v) => translator.ret(Type::Doubleword, parse_value(v)),
+            tac::ControlOp::Label(index) => translator.label(index),
             _ => unimplemented!(),
         },
         _ => {

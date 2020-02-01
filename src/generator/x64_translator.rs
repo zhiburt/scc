@@ -155,6 +155,10 @@ impl Translator for X64Backend {
         self.push_asm(AsmX32::Ret);
     }
 
+    fn label(&mut self, label_index: usize) {
+        self.push_asm(AsmX32::Label(format!("L_{}", label_index)));
+    }
+
     fn save(&mut self, id: Id, t: Type, value: Option<Value>) {
         if let Some(place) = self.place(&id) {
             let place = place.clone();
@@ -504,6 +508,16 @@ mod translator_tests {
             ],
             asm
         );
+    }
+
+    #[test]
+    fn label_creation() {
+        let mut trans = X64Backend::new();
+        trans.label(0);
+
+        let asm = trans.asm;
+
+        assert_eq!(vec![AsmX32::Label("L_0".to_owned())], asm)
     }
 }
 
