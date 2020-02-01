@@ -5,6 +5,7 @@ use std::collections::HashMap;
 pub enum AsmX32 {
     Metadata(String),
     Label(String),
+    Goto(String),
     Mov(Place, AsmValue),
     Add(Place, AsmValue),
     Push(AsmValue),
@@ -155,8 +156,13 @@ impl Translator for X64Backend {
         self.push_asm(AsmX32::Ret);
     }
 
-    fn label(&mut self, label_index: usize) {
-        self.push_asm(AsmX32::Label(format!("L_{}", label_index)));
+    fn label(&mut self, label: usize) {
+        self.push_asm(AsmX32::Label(format!("L_{}", label)));
+    }
+
+    // TODO: should we handle situation when there are not such type of label?
+    fn goto(&mut self, label: usize) {
+        self.push_asm(AsmX32::Goto(format!("L_{}", label)));
     }
 
     fn save(&mut self, id: Id, t: Type, value: Option<Value>) {
@@ -518,6 +524,16 @@ mod translator_tests {
         let asm = trans.asm;
 
         assert_eq!(vec![AsmX32::Label("L_0".to_owned())], asm)
+    }
+
+    #[test]
+    fn goto_creation() {
+        let mut trans = X64Backend::new();
+        trans.goto(0);
+
+        let asm = trans.asm;
+
+        assert_eq!(vec![AsmX32::Goto("L_0".to_owned())], asm)
     }
 }
 

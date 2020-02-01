@@ -56,6 +56,12 @@ fn translate(translator: &mut impl Translator, line: tac::InstructionLine) {
         tac::Instruction::ControlOp(op) => match op {
             tac::ControlOp::Return(v) => translator.ret(Type::Doubleword, parse_value(v)),
             tac::ControlOp::Label(index) => translator.label(index),
+            tac::ControlOp::Branch(branch) => match branch {
+                tac::Branch::GOTO(label) => {
+                    translator.goto(label);
+                }
+                _ => unimplemented!(),
+            },
             _ => unimplemented!(),
         },
         _ => {
