@@ -28,7 +28,8 @@ pub trait Translator {
     fn func_end(&mut self);
     // TODO: might better supply &str instead of usize?
     fn label(&mut self, label: usize);
-    fn goto(&mut self, label: usize);
+    fn jump(&mut self, label: usize);
+    fn if_goto(&mut self, t: Type, value: Value, label: usize);
     fn save(&mut self, id: Id, t: Type, value: Option<Value>);
     // TODO: investigate the same type
     fn add(&mut self, id: Id, t: Type, a: Value, b: Value);

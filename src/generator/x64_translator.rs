@@ -5,9 +5,12 @@ use std::collections::HashMap;
 pub enum AsmX32 {
     Metadata(String),
     Label(String),
-    Goto(String),
     Mov(Place, AsmValue),
     Add(Place, AsmValue),
+    Jmp(String),
+    Je(String),
+    Jne(String),
+    Cmp(Place, AsmValue),
     Push(AsmValue),
     Pop(Place),
     Ret,
@@ -48,6 +51,13 @@ impl AsmValue {
     pub fn is_place(&self) -> bool {
         match self {
             AsmValue::Place(..) => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_const(&self) -> bool {
+        match self {
+            AsmValue::Const(..) => true,
             _ => false,
         }
     }
@@ -157,12 +167,26 @@ impl Translator for X64Backend {
     }
 
     fn label(&mut self, label: usize) {
-        self.push_asm(AsmX32::Label(format!("L_{}", label)));
+        self.push_asm(AsmX32::Label(format!(".L_{}", label)));
     }
 
     // TODO: should we handle situation when there are not such type of label?
-    fn goto(&mut self, label: usize) {
-        self.push_asm(AsmX32::Goto(format!("L_{}", label)));
+    fn jump(&mut self, label: usize) {
+        self.push_asm(AsmX32::Jmp(format!(".L_{}", label)));
+    }
+
+    fn if_goto(&mut self, t: Type, value: Value, label: usize) {
+        let value = self.const_or_allocated(t.clone(), value);
+        let place = match value {
+            AsmValue::Place(place) => place,
+            AsmValue::Const(..) => {
+                let space = self.alloc(&t);
+                self.copy_value_on(value, space)
+            }
+        };
+
+        self.push_asm(AsmX32::Cmp(place, AsmValue::Const(0, t)));
+        self.push_asm(AsmX32::Je(format!(".L_{}", label)));
     }
 
     fn save(&mut self, id: Id, t: Type, value: Option<Value>) {
@@ -523,17 +547,64 @@ mod translator_tests {
 
         let asm = trans.asm;
 
-        assert_eq!(vec![AsmX32::Label("L_0".to_owned())], asm)
+        assert_eq!(vec![AsmX32::Label(".L_0".to_owned())], asm)
     }
 
     #[test]
     fn goto_creation() {
         let mut trans = X64Backend::new();
-        trans.goto(0);
+        trans.jump(0);
 
         let asm = trans.asm;
 
-        assert_eq!(vec![AsmX32::Goto("L_0".to_owned())], asm)
+        assert_eq!(vec![AsmX32::Jmp(".L_0".to_owned())], asm)
+    }
+
+    #[test]
+    fn if_constant() {
+        let mut trans = X64Backend::new();
+        trans.if_goto(Type::Doubleword, Value::Const(1), 0);
+
+        let asm = trans.asm;
+
+        assert_eq!(
+            vec![
+                AsmX32::Mov(
+                    Place::Stack(4, Type::Doubleword),
+                    AsmValue::Const(1, Type::Doubleword)
+                ),
+                AsmX32::Cmp(
+                    Place::Stack(4, Type::Doubleword),
+                    AsmValue::Const(0, Type::Doubleword)
+                ),
+                AsmX32::Je(".L_0".to_owned()),
+            ],
+            asm
+        );
+    }
+
+    #[test]
+    fn if_place() {
+        let mut trans = X64Backend::new();
+        trans.save(0, Type::Doubleword, Some(Value::Const(1)));
+        trans.if_goto(Type::Doubleword, Value::Ref(0), 0);
+
+        let asm = trans.asm;
+
+        assert_eq!(
+            vec![
+                AsmX32::Mov(
+                    Place::Stack(4, Type::Doubleword),
+                    AsmValue::Const(1, Type::Doubleword)
+                ),
+                AsmX32::Cmp(
+                    Place::Stack(4, Type::Doubleword),
+                    AsmValue::Const(0, Type::Doubleword)
+                ),
+                AsmX32::Je(".L_0".to_owned()),
+            ],
+            asm
+        );
     }
 }
 
