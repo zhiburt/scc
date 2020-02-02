@@ -23,6 +23,12 @@ impl GASMx64 {
                 format_value(&v),
                 format_place(&p)
             ),
+            AsmX32::Sub(p, v) => format!(
+                "  sub{} {}, {}",
+                suffix(&v.size()),
+                format_value(&v),
+                format_place(&p)
+            ),
             AsmX32::Push(v) => format!("  push{} {}", suffix(&v.size()), format_value(&v)),
             AsmX32::Pop(p) => format!("  pop{} {}", suffix(&p.size()), format_place(&p)),
             AsmX32::Cmp(p, v) => format!(

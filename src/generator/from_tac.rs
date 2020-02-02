@@ -27,18 +27,24 @@ impl<T: Translator> Transit<T> {
 
 fn translate(translator: &mut impl Translator, line: tac::InstructionLine) {
     match line.0 {
-        tac::Instruction::Op(tac::Op::Op(
-            tac::TypeOp::Arithmetic(tac::ArithmeticOp::Add),
-            v1,
-            v2,
-        )) => {
-            translator.add(
-                parse_id(line.1.unwrap()),
-                Type::Doubleword,
-                parse_value(v1),
-                parse_value(v2),
-            );
-        }
+        tac::Instruction::Op(tac::Op::Op(op, v1, v2)) => match op {
+            tac::TypeOp::Arithmetic(op) => match op {
+                tac::ArithmeticOp::Add => translator.add(
+                    parse_id(line.1.unwrap()),
+                    Type::Doubleword,
+                    parse_value(v1),
+                    parse_value(v2),
+                ),
+                tac::ArithmeticOp::Sub => translator.sub(
+                    parse_id(line.1.unwrap()),
+                    Type::Doubleword,
+                    parse_value(v1),
+                    parse_value(v2),
+                ),
+                _ => unimplemented!(),
+            },
+            _ => unimplemented!(),
+        },
         tac::Instruction::Alloc(v) => {
             translator.save(
                 parse_id(line.1.unwrap()),
@@ -64,7 +70,6 @@ fn translate(translator: &mut impl Translator, line: tac::InstructionLine) {
                     translator.if_goto(Type::Doubleword, parse_value(v), label);
                 }
             },
-            _ => unimplemented!(),
         },
         _ => {
             println!("{:?}", line.0);
