@@ -8,6 +8,7 @@ pub enum AsmX32 {
     Mov(Place, AsmValue),
     Add(Place, AsmValue),
     Sub(Place, AsmValue),
+    Mul(Place, AsmValue),
     Jmp(String),
     Je(String),
     Jne(String),
@@ -222,6 +223,14 @@ impl Translator for X64Backend {
         let second = self.copy_on(t, a, add_register);
         self.save_place(id, &second);
         self.push_asm(AsmX32::Sub(second, first));
+    }
+
+    fn mul(&mut self, id: Id, t: Type, a: Value, b: Value) {
+        let first = self.const_or_allocated(t.clone(), b);
+        let add_register = Place::Register(Register::new("rax").cast(&t));
+        let second = self.copy_on(t, a, add_register);
+        self.save_place(id, &second);
+        self.push_asm(AsmX32::Mul(second, first));
     }
 
     fn ret(&mut self, t: Type, v: Value) {
@@ -549,7 +558,7 @@ mod translator_tests {
     }
 
     #[test]
-    fn sub_var_add_var_3_times() {
+    fn sub_var_and_var_3_times() {
         let mut trans = X64Backend::new();
         trans.save(0, Type::Doubleword, Some(Value::Const(10)));
         trans.sub(1, Type::Doubleword, Value::Ref(0), Value::Ref(0));
@@ -625,6 +634,167 @@ mod translator_tests {
                 AsmX32::Sub(
                     Place::Register("rax".into()),
                     AsmValue::Const(10, Type::Quadword)
+                )
+            ],
+            asm
+        )
+    }
+
+    #[test]
+    fn mul_const_to_const() {
+        let mut trans = X64Backend::new();
+        trans.mul(0, Type::Doubleword, Value::Const(10), Value::Const(20));
+        let asm = trans.asm;
+
+        assert_eq!(
+            vec![
+                AsmX32::Mov(
+                    Place::Register("eax".into()),
+                    AsmValue::Const(10, Type::Doubleword)
+                ),
+                AsmX32::Mul(
+                    Place::Register("eax".into()),
+                    AsmValue::Const(20, Type::Doubleword)
+                )
+            ],
+            asm
+        )
+    }
+
+    #[test]
+    fn assign_var_then_mul_const() {
+        let mut trans = X64Backend::new();
+        trans.save(0, Type::Doubleword, Some(Value::Const(10)));
+        trans.mul(1, Type::Doubleword, Value::Ref(0), Value::Const(20));
+        let asm = trans.asm;
+
+        assert_eq!(
+            vec![
+                AsmX32::Mov(
+                    Place::Stack(4, Type::Doubleword),
+                    AsmValue::Const(10, Type::Doubleword)
+                ),
+                AsmX32::Mov(
+                    Place::Register("eax".into()),
+                    AsmValue::Place(Place::Stack(4, Type::Doubleword)),
+                ),
+                AsmX32::Mul(
+                    Place::Register("eax".into()),
+                    AsmValue::Const(20, Type::Doubleword)
+                )
+            ],
+            asm
+        );
+    }
+
+    #[test]
+    fn mul_var_and_var() {
+        let mut trans = X64Backend::new();
+        trans.save(0, Type::Doubleword, Some(Value::Const(10)));
+        trans.save(1, Type::Doubleword, Some(Value::Const(20)));
+        trans.mul(1, Type::Doubleword, Value::Ref(0), Value::Ref(1));
+        let asm = trans.asm;
+
+        assert_eq!(
+            vec![
+                AsmX32::Mov(
+                    Place::Stack(4, Type::Doubleword),
+                    AsmValue::Const(10, Type::Doubleword)
+                ),
+                AsmX32::Mov(
+                    Place::Stack(8, Type::Doubleword),
+                    AsmValue::Const(20, Type::Doubleword)
+                ),
+                AsmX32::Mov(
+                    Place::Register("eax".into()),
+                    AsmValue::Place(Place::Stack(4, Type::Doubleword)),
+                ),
+                AsmX32::Mul(
+                    Place::Register("eax".into()),
+                    AsmValue::Place(Place::Stack(8, Type::Doubleword)),
+                )
+            ],
+            asm
+        );
+    }
+
+    #[test]
+    fn mul_var_mul_var_3_times() {
+        let mut trans = X64Backend::new();
+        trans.save(0, Type::Doubleword, Some(Value::Const(10)));
+        trans.mul(1, Type::Doubleword, Value::Ref(0), Value::Ref(0));
+        trans.mul(2, Type::Doubleword, Value::Ref(1), Value::Ref(0));
+        let asm = trans.asm;
+
+        assert_eq!(
+            vec![
+                AsmX32::Mov(
+                    Place::Stack(4, Type::Doubleword),
+                    AsmValue::Const(10, Type::Doubleword)
+                ),
+                AsmX32::Mov(
+                    Place::Register("eax".into()),
+                    AsmValue::Place(Place::Stack(4, Type::Doubleword)),
+                ),
+                AsmX32::Mul(
+                    Place::Register("eax".into()),
+                    AsmValue::Place(Place::Stack(4, Type::Doubleword)),
+                ),
+                AsmX32::Mul(
+                    Place::Register("eax".into()),
+                    AsmValue::Place(Place::Stack(4, Type::Doubleword)),
+                )
+            ],
+            asm
+        );
+    }
+
+    #[test]
+    fn mul_var_and_var_then_mul_the_result_and_itself() {
+        let mut trans = X64Backend::new();
+        trans.save(0, Type::Doubleword, Some(Value::Const(10)));
+        trans.mul(1, Type::Doubleword, Value::Ref(0), Value::Ref(0));
+        trans.mul(2, Type::Doubleword, Value::Ref(1), Value::Ref(1));
+        let asm = trans.asm;
+
+        assert_eq!(
+            vec![
+                AsmX32::Mov(
+                    Place::Stack(4, Type::Doubleword),
+                    AsmValue::Const(10, Type::Doubleword)
+                ),
+                AsmX32::Mov(
+                    Place::Register("eax".into()),
+                    AsmValue::Place(Place::Stack(4, Type::Doubleword)),
+                ),
+                AsmX32::Mul(
+                    Place::Register("eax".into()),
+                    AsmValue::Place(Place::Stack(4, Type::Doubleword)),
+                ),
+                AsmX32::Mul(
+                    Place::Register("eax".into()),
+                    AsmValue::Place(Place::Register("eax".into())),
+                )
+            ],
+            asm
+        );
+    }
+
+    #[test]
+    fn mul_const_to_const_quadword() {
+        let mut trans = X64Backend::new();
+        trans.mul(0, Type::Quadword, Value::Const(10), Value::Const(20));
+        let asm = trans.asm;
+
+        assert_eq!(
+            vec![
+                AsmX32::Mov(
+                    Place::Register("rax".into()),
+                    AsmValue::Const(10, Type::Quadword)
+                ),
+                AsmX32::Mul(
+                    Place::Register("rax".into()),
+                    AsmValue::Const(20, Type::Quadword)
                 )
             ],
             asm
