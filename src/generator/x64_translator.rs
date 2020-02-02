@@ -68,32 +68,44 @@ impl AsmValue {
 }
 
 #[derive(PartialEq, Eq, Clone)]
-pub struct Register(usize);
+pub struct Register {
+    table_index: usize,
+    reg_pos: usize,
+}
 
 use std::iter::FromIterator;
 
 impl Register {
     // Since nowadays we don't use others registers the are not support them yet
-    const REGISTERS: &'static [&'static str] = &[
-        "", "", // to be able to provide size by index (see method `size`)
-        "rax", "eax", "rbx", "ebx", "rcx", "ecx", "rdx", "edx", "rsi", "esi", "rdi", "edi", "rbp",
-        "ebp", "rsp", "esp", "r8", "r8d", "r9", "r9d", "r10", "r10d", "r11", "r11d", "r12", "r12d",
-        "r13", "r13d", "r14", "r14d", "r15", "r15d",
+    const REGISTERS: &'static [&'static [&'static str]] = &[
+        &["rax", "eax"],
+        &["rbx", "ebx"],
+        &["rcx", "ecx"],
+        &["rdx", "edx"],
+        &["rsi", "esi"],
+        &["rdi", "edi"],
+        &["rbp", "ebp"],
+        &["rsp", "esp"],
+        &["r8", "r8d"],
+        &["r9", "r9d"],
+        &["r10", "r10d"],
+        &["r11", "r11d"],
+        &["r12", "r12d"],
+        &["r13", "r13d"],
+        &["r14", "r14d"],
+        &["r15", "r15d"],
     ];
 
     pub fn new(reg_str: &'static str) -> Register {
-        let index = Register::reg_index(reg_str).unwrap();
-        Register(index)
+        let (table_index, reg_pos) = Register::reg_index(reg_str).unwrap();
+        Register{ table_index, reg_pos }
     }
 
     pub fn size(&self) -> Type {
-        println!("{}", self.0);
-        if self.0 % 2 == 0 {
-            Type::Quadword
-        } else if self.0 % 3 == 0 {
-            Type::Doubleword
-        } else {
-            unimplemented!()
+        match self.reg_pos {
+            0 => Type::Quadword,
+            1 => Type::Doubleword,
+            _ => unimplemented!(),
         }
     }
 
@@ -103,17 +115,20 @@ impl Register {
             return self.clone();
         }
 
+        let mut new_register = self.clone();
         match self_size {
-            Type::Quadword if *size == Type::Doubleword => Register(self.0 + 1),
-            Type::Doubleword if *size == Type::Quadword => Register(self.0 - 1),
+            Type::Quadword if *size == Type::Doubleword => new_register.reg_pos += 1,
+            Type::Doubleword if *size == Type::Quadword => new_register.reg_pos -= 1,
             _ => unimplemented!(),
         }
+
+        new_register
     }
 
-    fn reg_index(reg: &str) -> Option<usize> {
+    fn reg_index(reg: &str) -> Option<(usize, usize)> {
         for (i, r) in Register::REGISTERS.iter().enumerate() {
-            if r == &reg {
-                return Some(i);
+            if let Some(index) = r.iter().position(|r| r == &reg) {
+                return Some((i, index));
             }
         }
         None
@@ -122,7 +137,7 @@ impl Register {
 
 impl std::fmt::Display for Register {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", Register::REGISTERS[self.0])
+        write!(f, "{}", Register::REGISTERS[self.table_index][self.reg_pos])
     }
 }
 
