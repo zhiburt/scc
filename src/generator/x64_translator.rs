@@ -262,6 +262,7 @@ impl Translator for X64Backend {
         let divisor_place = match second {
             AsmValue::Place(place) => place,
             AsmValue::Const(..) => {
+                // TODO: why do we use rcx directly why not any of others registers?
                 let remain_register = Place::Register(Register::new("rcx").cast(&t));
                 self.copy_value_on(second, remain_register.clone())
             }
@@ -269,6 +270,11 @@ impl Translator for X64Backend {
 
         self.save_place(id, &first);
         self.push_asm(AsmX32::Div(divisor_place));
+    }
+
+    fn div_reminder(&mut self, id: Id, t: Type, a: Value, b: Value) {
+        self.div(id, t.clone(), a, b);
+        self.push_asm(AsmX32::Mov(Place::Register(Register::new("rax").cast(&t)), AsmValue::Place(Place::Register(Register::new("rdx").cast(&t)))));
     }
 
     fn ret(&mut self, t: Type, v: Value) {
@@ -1007,6 +1013,211 @@ mod translator_tests {
                 AsmX32::Div(
                     Place::Register("rcx".into()),
                 )
+            ],
+            asm
+        )
+    }
+
+    #[test]
+    fn mod_const_to_const() {
+        let mut trans = X64Backend::new();
+        trans.div_reminder(0, Type::Doubleword, Value::Const(10), Value::Const(20));
+        let asm = trans.asm;
+
+        assert_eq!(
+            vec![
+                AsmX32::Mov(
+                    Place::Register("eax".into()),
+                    AsmValue::Const(10, Type::Doubleword)
+                ),
+                AsmX32::Convert(Type::Doubleword),
+                AsmX32::Mov(
+                    Place::Register("ecx".into()),
+                    AsmValue::Const(20, Type::Doubleword),
+                ),
+                AsmX32::Div(
+                    Place::Register("ecx".into()),
+                ),
+                AsmX32::Mov(
+                    Place::Register("eax".into()),
+                    AsmValue::Place(Place::Register("edx".into())),
+                ),
+            ],
+            asm
+        )
+    }
+
+    #[test]
+    fn assign_var_then_mod_const() {
+        let mut trans = X64Backend::new();
+        trans.save(0, Type::Doubleword, Some(Value::Const(10)));
+        trans.div_reminder(1, Type::Doubleword, Value::Ref(0), Value::Const(20));
+        let asm = trans.asm;
+
+        assert_eq!(
+            vec![
+                AsmX32::Mov(
+                    Place::Stack(4, Type::Doubleword),
+                    AsmValue::Const(10, Type::Doubleword)
+                ),
+                AsmX32::Mov(
+                    Place::Register("eax".into()),
+                    AsmValue::Place(Place::Stack(4, Type::Doubleword)),
+                ),
+                AsmX32::Convert(Type::Doubleword),
+                AsmX32::Mov(
+                    Place::Register("ecx".into()),
+                    AsmValue::Const(20, Type::Doubleword),
+                ),
+                AsmX32::Div(
+                    Place::Register("ecx".into()),
+                ),
+                AsmX32::Mov(
+                    Place::Register("eax".into()),
+                    AsmValue::Place(Place::Register("edx".into())),
+                ),
+            ],
+            asm
+        );
+    }
+
+    #[test]
+    fn mod_var_and_var() {
+        let mut trans = X64Backend::new();
+        trans.save(0, Type::Doubleword, Some(Value::Const(10)));
+        trans.save(1, Type::Doubleword, Some(Value::Const(20)));
+        trans.div_reminder(1, Type::Doubleword, Value::Ref(0), Value::Ref(1));
+        let asm = trans.asm;
+
+        assert_eq!(
+            vec![
+                AsmX32::Mov(
+                    Place::Stack(4, Type::Doubleword),
+                    AsmValue::Const(10, Type::Doubleword)
+                ),
+                AsmX32::Mov(
+                    Place::Stack(8, Type::Doubleword),
+                    AsmValue::Const(20, Type::Doubleword)
+                ),
+                AsmX32::Mov(
+                    Place::Register("eax".into()),
+                    AsmValue::Place(Place::Stack(4, Type::Doubleword)),
+                ),
+                AsmX32::Convert(Type::Doubleword),
+                AsmX32::Div(
+                    Place::Stack(8, Type::Doubleword),
+                ),
+                AsmX32::Mov(
+                    Place::Register("eax".into()),
+                    AsmValue::Place(Place::Register("edx".into())),
+                ),
+            ],
+            asm
+        );
+    }
+
+    #[test]
+    fn mod_var_and_var_3_times() {
+        let mut trans = X64Backend::new();
+        trans.save(0, Type::Doubleword, Some(Value::Const(10)));
+        trans.div_reminder(1, Type::Doubleword, Value::Ref(0), Value::Ref(0));
+        trans.div_reminder(2, Type::Doubleword, Value::Ref(1), Value::Ref(0));
+        let asm = trans.asm;
+
+        assert_eq!(
+            vec![
+                AsmX32::Mov(
+                    Place::Stack(4, Type::Doubleword),
+                    AsmValue::Const(10, Type::Doubleword)
+                ),
+                AsmX32::Mov(
+                    Place::Register("eax".into()),
+                    AsmValue::Place(Place::Stack(4, Type::Doubleword)),
+                ),
+                AsmX32::Convert(Type::Doubleword),
+                AsmX32::Div(
+                    Place::Stack(4, Type::Doubleword),
+                ),
+                AsmX32::Mov(
+                    Place::Register("eax".into()),
+                    AsmValue::Place(Place::Register("edx".into())),
+                ),
+                AsmX32::Convert(Type::Doubleword),
+                AsmX32::Div(
+                    Place::Stack(4, Type::Doubleword),
+                ),
+                AsmX32::Mov(
+                    Place::Register("eax".into()),
+                    AsmValue::Place(Place::Register("edx".into())),
+                ),
+            ],
+            asm
+        );
+    }
+
+    #[test]
+    fn mod_var_and_var_then_mod_the_result_and_itself() {
+        let mut trans = X64Backend::new();
+        trans.save(0, Type::Doubleword, Some(Value::Const(10)));
+        trans.div_reminder(1, Type::Doubleword, Value::Ref(0), Value::Ref(0));
+        trans.div_reminder(2, Type::Doubleword, Value::Ref(1), Value::Ref(1));
+        let asm = trans.asm;
+
+        assert_eq!(
+            vec![
+                AsmX32::Mov(
+                    Place::Stack(4, Type::Doubleword),
+                    AsmValue::Const(10, Type::Doubleword)
+                ),
+                AsmX32::Mov(
+                    Place::Register("eax".into()),
+                    AsmValue::Place(Place::Stack(4, Type::Doubleword)),
+                ),
+                AsmX32::Convert(Type::Doubleword),
+                AsmX32::Div(
+                    Place::Stack(4, Type::Doubleword),
+                ),
+                AsmX32::Mov(
+                    Place::Register("eax".into()),
+                    AsmValue::Place(Place::Register("edx".into())),
+                ),
+                AsmX32::Convert(Type::Doubleword),
+                AsmX32::Div(
+                    Place::Register("eax".into()),
+                ),
+                AsmX32::Mov(
+                    Place::Register("eax".into()),
+                    AsmValue::Place(Place::Register("edx".into())),
+                ),
+            ],
+            asm
+        );
+    }
+
+    #[test]
+    fn mod_const_to_const_quadword() {
+        let mut trans = X64Backend::new();
+        trans.div_reminder(0, Type::Quadword, Value::Const(10), Value::Const(20));
+        let asm = trans.asm;
+
+        assert_eq!(
+            vec![
+                AsmX32::Mov(
+                    Place::Register("rax".into()),
+                    AsmValue::Const(10, Type::Quadword),
+                ),
+                AsmX32::Convert(Type::Quadword),
+                AsmX32::Mov(
+                    Place::Register("rcx".into()),
+                    AsmValue::Const(20, Type::Quadword),
+                ),
+                AsmX32::Div(
+                    Place::Register("rcx".into()),
+                ),
+                AsmX32::Mov(
+                    Place::Register("rax".into()),
+                    AsmValue::Place(Place::Register("rdx".into())),
+                ),
             ],
             asm
         )
