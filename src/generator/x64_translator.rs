@@ -9,6 +9,8 @@ pub enum AsmX32 {
     Add(Place, AsmValue),
     Sub(Place, AsmValue),
     Mul(Place, AsmValue),
+    Div(Place),
+    Convert(Type),
     Jmp(String),
     Je(String),
     Jne(String),
@@ -85,6 +87,7 @@ impl Register {
     }
 
     pub fn size(&self) -> Type {
+        println!("{}", self.0);
         if self.0 % 2 == 0 {
             Type::Quadword
         } else if self.0 % 3 == 0 {
@@ -231,6 +234,26 @@ impl Translator for X64Backend {
         let second = self.copy_on(t, a, add_register);
         self.save_place(id, &second);
         self.push_asm(AsmX32::Mul(second, first));
+    }
+
+    fn div(&mut self, id: Id, t: Type, a: Value, b: Value) {
+        let sub_register = Place::Register(Register::new("rax").cast(&t));
+        let first = self.copy_on(t.clone(), a, sub_register);
+        // To be comparable with clang, it does this operation
+        // before possible move of constant
+        self.push_asm(AsmX32::Convert(t.clone()));
+
+        let second = self.const_or_allocated(t.clone(), b);
+        let divisor_place = match second {
+            AsmValue::Place(place) => place,
+            AsmValue::Const(..) => {
+                let remain_register = Place::Register(Register::new("rcx").cast(&t));
+                self.copy_value_on(second, remain_register.clone())
+            }
+        };
+
+        self.save_place(id, &first);
+        self.push_asm(AsmX32::Div(divisor_place));
     }
 
     fn ret(&mut self, t: Type, v: Value) {
@@ -795,6 +818,179 @@ mod translator_tests {
                 AsmX32::Mul(
                     Place::Register("rax".into()),
                     AsmValue::Const(20, Type::Quadword)
+                )
+            ],
+            asm
+        )
+    }
+
+    #[test]
+    fn div_const_to_const() {
+        let mut trans = X64Backend::new();
+        trans.div(0, Type::Doubleword, Value::Const(20), Value::Const(10));
+        let asm = trans.asm;
+
+        assert_eq!(
+            vec![
+                AsmX32::Mov(
+                    Place::Register("eax".into()),
+                    AsmValue::Const(20, Type::Doubleword)
+                ),
+                AsmX32::Convert(Type::Doubleword),
+                AsmX32::Mov(
+                    Place::Register("ecx".into()),
+                    AsmValue::Const(10, Type::Doubleword)
+                ),
+                AsmX32::Div(
+                    Place::Register("ecx".into()),
+                )
+            ],
+            asm
+        )
+    }
+
+    #[test]
+    fn assign_var_then_div_const() {
+        let mut trans = X64Backend::new();
+        trans.save(0, Type::Doubleword, Some(Value::Const(20)));
+        trans.div(1, Type::Doubleword, Value::Ref(0), Value::Const(10));
+        let asm = trans.asm;
+
+        assert_eq!(
+            vec![
+                AsmX32::Mov(
+                    Place::Stack(4, Type::Doubleword),
+                    AsmValue::Const(20, Type::Doubleword)
+                ),
+                AsmX32::Mov(
+                    Place::Register("eax".into()),
+                    AsmValue::Place(Place::Stack(4, Type::Doubleword)),
+                ),
+                AsmX32::Convert(Type::Doubleword),
+                AsmX32::Mov(
+                    Place::Register("ecx".into()),
+                    AsmValue::Const(10, Type::Doubleword),
+                ),    
+                AsmX32::Div(
+                    Place::Register("ecx".into()),
+                )
+            ],
+            asm
+        );
+    }
+
+    #[test]
+    fn div_var_and_var() {
+        let mut trans = X64Backend::new();
+        trans.save(0, Type::Doubleword, Some(Value::Const(20)));
+        trans.save(1, Type::Doubleword, Some(Value::Const(10)));
+        trans.div(1, Type::Doubleword, Value::Ref(0), Value::Ref(1));
+        let asm = trans.asm;
+
+        assert_eq!(
+            vec![
+                AsmX32::Mov(
+                    Place::Stack(4, Type::Doubleword),
+                    AsmValue::Const(20, Type::Doubleword)
+                ),
+                AsmX32::Mov(
+                    Place::Stack(8, Type::Doubleword),
+                    AsmValue::Const(10, Type::Doubleword)
+                ),
+                AsmX32::Mov(
+                    Place::Register("eax".into()),
+                    AsmValue::Place(Place::Stack(4, Type::Doubleword)),
+                ),
+                AsmX32::Convert(Type::Doubleword),
+                AsmX32::Div(
+                    Place::Stack(8, Type::Doubleword),
+                )
+            ],
+            asm
+        );
+    }
+
+    #[test]
+    fn div_var_div_var_3_times() {
+        let mut trans = X64Backend::new();
+        trans.save(0, Type::Doubleword, Some(Value::Const(10)));
+        trans.div(1, Type::Doubleword, Value::Ref(0), Value::Ref(0));
+        trans.div(2, Type::Doubleword, Value::Ref(1), Value::Ref(0));
+        let asm = trans.asm;
+
+        assert_eq!(
+            vec![
+                AsmX32::Mov(
+                    Place::Stack(4, Type::Doubleword),
+                    AsmValue::Const(10, Type::Doubleword)
+                ),
+                AsmX32::Mov(
+                    Place::Register("eax".into()),
+                    AsmValue::Place(Place::Stack(4, Type::Doubleword)),
+                ),
+                AsmX32::Convert(Type::Doubleword),
+                AsmX32::Div(
+                    Place::Stack(4, Type::Doubleword),
+                ),
+                AsmX32::Convert(Type::Doubleword),
+                AsmX32::Div(
+                    Place::Stack(4, Type::Doubleword),
+                )
+            ],
+            asm
+        );
+    }
+
+    #[test]
+    fn div_var_and_var_then_div_the_result_and_itself() {
+        let mut trans = X64Backend::new();
+        trans.save(0, Type::Doubleword, Some(Value::Const(10)));
+        trans.div(1, Type::Doubleword, Value::Ref(0), Value::Ref(0));
+        trans.div(2, Type::Doubleword, Value::Ref(1), Value::Ref(1));
+        let asm = trans.asm;
+
+        assert_eq!(
+            vec![
+                AsmX32::Mov(
+                    Place::Stack(4, Type::Doubleword),
+                    AsmValue::Const(10, Type::Doubleword)
+                ),
+                AsmX32::Mov(
+                    Place::Register("eax".into()),
+                    AsmValue::Place(Place::Stack(4, Type::Doubleword)),
+                ),
+                AsmX32::Convert(Type::Doubleword),
+                AsmX32::Div(
+                    Place::Stack(4, Type::Doubleword),
+                ),
+                AsmX32::Convert(Type::Doubleword),
+                AsmX32::Div(
+                    Place::Register("eax".into()),
+                )
+            ],
+            asm
+        );
+    }
+
+    #[test]
+    fn div_const_to_const_quadword() {
+        let mut trans = X64Backend::new();
+        trans.div(0, Type::Quadword, Value::Const(20), Value::Const(10));
+        let asm = trans.asm;
+
+        assert_eq!(
+            vec![
+                AsmX32::Mov(
+                    Place::Register("rax".into()),
+                    AsmValue::Const(20, Type::Quadword),
+                ),
+                AsmX32::Convert(Type::Quadword),
+                AsmX32::Mov(
+                    Place::Register("rcx".into()),
+                    AsmValue::Const(10, Type::Quadword),
+                ),
+                AsmX32::Div(
+                    Place::Register("rcx".into()),
                 )
             ],
             asm
