@@ -5,15 +5,18 @@ use std::collections::HashMap;
 pub enum AsmX32 {
     Metadata(String),
     Label(String),
+    Mov(Place, AsmValue),
+    Movzx(Place, AsmValue),
     And(Place, AsmValue),
     Or(Place, AsmValue),
     Xor(Place, AsmValue),
-    Mov(Place, AsmValue),
     Add(Place, AsmValue),
     Sub(Place, AsmValue),
     Mul(Place, AsmValue),
     Div(Place),
     Convert(Type),
+    Set(Place),
+    Setn(Place),
     Jmp(String),
     Je(String),
     Jne(String),
@@ -81,7 +84,7 @@ use std::iter::FromIterator;
 impl Register {
     // Since nowadays we don't use others registers the are not support them yet
     const REGISTERS: &'static [&'static [&'static str]] = &[
-        &["rax", "eax"],
+        &["rax", "eax", "ax", "al"],
         &["rbx", "ebx"],
         &["rcx", "ecx"],
         &["rdx", "edx"],
@@ -108,6 +111,7 @@ impl Register {
         match self.reg_pos {
             0 => Type::Quadword,
             1 => Type::Doubleword,
+            3 => Type::Byte,
             _ => unimplemented!(),
         }
     }
@@ -302,6 +306,26 @@ impl Translator for X64Backend {
         let second = self.copy_on(t, a, add_register);
         self.save_place(id, &second);
         self.push_asm(AsmX32::Xor(second, first));
+    }
+
+    fn eq(&mut self, id: Id, t: Type, a: Value, b: Value) {
+        let first = self.const_or_allocated(t.clone(), b);
+        let add_register = Place::Register(Register::new("rax").cast(&t));
+        let second = self.copy_on(t, a, add_register);
+        self.save_place(id, &second);
+        self.push_asm(AsmX32::Cmp(second, first));
+        self.push_asm(AsmX32::Set(Place::Register("al".into())));
+        self.push_asm(AsmX32::Movzx(Place::Register("eax".into()), AsmValue::Place(Place::Register("al".into()))));
+    }
+
+    fn not_eq(&mut self, id: Id, t: Type, a: Value, b: Value) {
+        let first = self.const_or_allocated(t.clone(), b);
+        let add_register = Place::Register(Register::new("rax").cast(&t));
+        let second = self.copy_on(t, a, add_register);
+        self.save_place(id, &second);
+        self.push_asm(AsmX32::Cmp(second, first));
+        self.push_asm(AsmX32::Setn(Place::Register("al".into())));
+        self.push_asm(AsmX32::Movzx(Place::Register("eax".into()), AsmValue::Place(Place::Register("al".into()))));
     }
 
     fn ret(&mut self, t: Type, v: Value) {
@@ -1728,6 +1752,120 @@ mod translator_tests {
                     Place::Register("rax".into()),
                     AsmValue::Place(Place::Register("rdx".into())),
                 ),
+            ],
+            asm
+        )
+    }
+
+    #[test]
+    fn equal_operation() {
+        let mut trans = X64Backend::new();
+        trans.save(0, Type::Doubleword, Some(Value::Const(10)));
+        trans.eq(0, Type::Doubleword, Value::Ref(0), Value::Const(20));
+        let asm = trans.asm;
+
+        assert_eq!(
+            vec![
+                AsmX32::Mov(
+                    Place::Stack(4, Type::Doubleword),
+                    AsmValue::Const(10, Type::Doubleword),
+                ),
+                AsmX32::Mov(
+                    Place::Register(Register::new("eax")),
+                    AsmValue::Place(Place::Stack(4, Type::Doubleword))
+                ),
+                AsmX32::Cmp(
+                    Place::Register(Register::new("eax")),
+                    AsmValue::Const(20, Type::Doubleword)
+                ),
+                AsmX32::Set(Place::Register(Register::new("al"))),
+                AsmX32::Movzx(
+                    Place::Register(Register::new("eax")),
+                    AsmValue::Place(Place::Register(Register::new("al")))
+                )
+            ],
+            asm
+        )
+    }
+
+    #[test]
+    fn equal_operation_consts() {
+        let mut trans = X64Backend::new();
+        trans.eq(0, Type::Doubleword, Value::Const(10), Value::Const(20));
+        let asm = trans.asm;
+
+        assert_eq!(
+            vec![
+                AsmX32::Mov(
+                    Place::Register(Register::new("eax")),
+                    AsmValue::Const(10, Type::Doubleword)
+                ),
+                AsmX32::Cmp(
+                    Place::Register(Register::new("eax")),
+                    AsmValue::Const(20, Type::Doubleword)
+                ),
+                AsmX32::Set(Place::Register(Register::new("al"))),
+                AsmX32::Movzx(
+                    Place::Register(Register::new("eax")),
+                    AsmValue::Place(Place::Register(Register::new("al")))
+                )
+            ],
+            asm
+        )
+    }
+
+    #[test]
+    fn not_equal_operation() {
+        let mut trans = X64Backend::new();
+        trans.save(0, Type::Doubleword, Some(Value::Const(10)));
+        trans.not_eq(0, Type::Doubleword, Value::Ref(0), Value::Const(20));
+        let asm = trans.asm;
+
+        assert_eq!(
+            vec![
+                AsmX32::Mov(
+                    Place::Stack(4, Type::Doubleword),
+                    AsmValue::Const(10, Type::Doubleword),
+                ),
+                AsmX32::Mov(
+                    Place::Register(Register::new("eax")),
+                    AsmValue::Place(Place::Stack(4, Type::Doubleword))
+                ),
+                AsmX32::Cmp(
+                    Place::Register(Register::new("eax")),
+                    AsmValue::Const(20, Type::Doubleword)
+                ),
+                AsmX32::Setn(Place::Register(Register::new("al"))),
+                AsmX32::Movzx(
+                    Place::Register(Register::new("eax")),
+                    AsmValue::Place(Place::Register(Register::new("al")))
+                )
+            ],
+            asm
+        )
+    }
+
+    #[test]
+    fn not_equal_operation_consts() {
+        let mut trans = X64Backend::new();
+        trans.not_eq(0, Type::Doubleword, Value::Const(10), Value::Const(20));
+        let asm = trans.asm;
+
+        assert_eq!(
+            vec![
+                AsmX32::Mov(
+                    Place::Register(Register::new("eax")),
+                    AsmValue::Const(10, Type::Doubleword)
+                ),
+                AsmX32::Cmp(
+                    Place::Register(Register::new("eax")),
+                    AsmValue::Const(20, Type::Doubleword)
+                ),
+                AsmX32::Setn(Place::Register(Register::new("al"))),
+                AsmX32::Movzx(
+                    Place::Register(Register::new("eax")),
+                    AsmValue::Place(Place::Register(Register::new("al")))
+                )
             ],
             asm
         )

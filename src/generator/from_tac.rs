@@ -81,6 +81,20 @@ fn translate(translator: &mut impl Translator, line: tac::InstructionLine) {
                 ),
                 _ => unimplemented!(),
             }
+            tac::TypeOp::Equality(op) => match op {
+                tac::EqualityOp::Equal => translator.eq(
+                    parse_id(line.1.unwrap()),
+                    Type::Doubleword,
+                    parse_value(v1),
+                    parse_value(v2),
+                ),
+                tac::EqualityOp::NotEq => translator.not_eq(
+                    parse_id(line.1.unwrap()),
+                    Type::Doubleword,
+                    parse_value(v1),
+                    parse_value(v2),
+                ),
+            }
             _ => unimplemented!(),
         },
         tac::Instruction::Alloc(v) => {

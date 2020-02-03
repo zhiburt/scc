@@ -17,6 +17,20 @@ impl GASMx64 {
                 format_value(&v),
                 format_place(&p)
             ),
+            AsmX32::Movzx(p, v) => {
+                let instruction = match v.size() {
+                    Type::Byte => "movzb",
+                    _ => unimplemented!(),
+                };
+
+                format!(
+                    "  {}{} {}, {}",
+                    instruction,
+                    suffix(&v.size()),
+                    format_value(&v),
+                    format_place(&p)
+                )
+            },
             AsmX32::And(p, v) => format!(
                 "  and{} {}, {}",
                 suffix(&v.size()),
@@ -58,6 +72,16 @@ impl GASMx64 {
                 suffix(&p.size()),
                 format_place(&p),
             ),
+            AsmX32::Set(p) => format!(
+                "  set{} {}",
+                suffix(&p.size()),
+                format_place(&p),
+            ),
+            AsmX32::Setn(p) => format!(
+                "  setn{} {}",
+                suffix(&p.size()),
+                format_place(&p),
+            ),
             AsmX32::Convert(t) => match t {
                 Type::Doubleword => format!("  cltd"),
                 Type::Quadword => format!("  cqto"),
@@ -68,8 +92,8 @@ impl GASMx64 {
             AsmX32::Cmp(p, v) => format!(
                 "  cmp{} {}, {}",
                 suffix(&p.size()),
+                format_value(&v),
                 format_place(&p),
-                format_value(&v)
             ),
             AsmX32::Jmp(label) => format!("  jmp {}", label),
             AsmX32::Je(label) => format!("  je {}", label),
@@ -101,6 +125,7 @@ fn suffix(t: &Type) -> &'static str {
     match t {
         Type::Doubleword => "l",
         Type::Quadword => "q",
+        Type::Byte => "b",
         _ => unimplemented!(),
     }
 }
