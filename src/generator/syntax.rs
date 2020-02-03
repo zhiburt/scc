@@ -29,6 +29,12 @@ impl GASMx64 {
                 format_value(&v),
                 format_place(&p)
             ),
+            AsmX32::Xor(p, v) => format!(
+                "  xor{} {}, {}",
+                suffix(&v.size()),
+                format_value(&v),
+                format_place(&p)
+            ),
             AsmX32::Add(p, v) => format!(
                 "  add{} {}, {}",
                 suffix(&v.size()),
