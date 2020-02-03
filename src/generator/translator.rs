@@ -37,6 +37,7 @@ pub trait Translator {
     fn mul(&mut self, id: Id, t: Type, a: Value, b: Value);
     fn div(&mut self, id: Id, t: Type, a: Value, b: Value);
     fn div_reminder(&mut self, id: Id, t: Type, a: Value, b: Value);
+    fn bit_and(&mut self, id: Id, t: Type, a: Value, b: Value);
     // fn mul(&mut self, id: Id, t: Type, a: Value, b: Value);
     // fn div(&mut self, id: Id, t: Type, a: Value, b: Value);
     // fn module(&mut self, id: Id, t: Type, a: Value, b: Value);
