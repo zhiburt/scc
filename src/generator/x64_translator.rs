@@ -6,6 +6,7 @@ pub enum AsmX32 {
     Metadata(String),
     Label(String),
     And(Place, AsmValue),
+    Or(Place, AsmValue),
     Mov(Place, AsmValue),
     Add(Place, AsmValue),
     Sub(Place, AsmValue),
@@ -284,6 +285,14 @@ impl Translator for X64Backend {
         let second = self.copy_on(t, a, add_register);
         self.save_place(id, &second);
         self.push_asm(AsmX32::And(second, first));
+    }
+
+    fn bit_or(&mut self, id: Id, t: Type, a: Value, b: Value) {
+        let first = self.const_or_allocated(t.clone(), b);
+        let add_register = Place::Register(Register::new("rax").cast(&t));
+        let second = self.copy_on(t, a, add_register);
+        self.save_place(id, &second);
+        self.push_asm(AsmX32::Or(second, first));
     }
 
     fn ret(&mut self, t: Type, v: Value) {
@@ -711,6 +720,168 @@ mod translator_tests {
                     AsmValue::Const(10, Type::Quadword)
                 ),
                 AsmX32::And(
+                    Place::Register("rax".into()),
+                    AsmValue::Const(20, Type::Quadword)
+                )
+            ],
+            asm
+        )
+    }
+
+
+    #[test]
+    fn bit_or_const_and_const() {
+        let mut trans = X64Backend::new();
+        trans.bit_or(0, Type::Doubleword, Value::Const(10), Value::Const(20));
+        let asm = trans.asm;
+
+        assert_eq!(
+            vec![
+                AsmX32::Mov(
+                    Place::Register("eax".into()),
+                    AsmValue::Const(10, Type::Doubleword)
+                ),
+                AsmX32::Or(
+                    Place::Register("eax".into()),
+                    AsmValue::Const(20, Type::Doubleword)
+                )
+            ],
+            asm
+        )
+    }
+
+    #[test]
+    fn assign_var_then_bit_or_const() {
+        let mut trans = X64Backend::new();
+        trans.save(0, Type::Doubleword, Some(Value::Const(10)));
+        trans.bit_or(1, Type::Doubleword, Value::Ref(0), Value::Const(20));
+        let asm = trans.asm;
+
+        assert_eq!(
+            vec![
+                AsmX32::Mov(
+                    Place::Stack(4, Type::Doubleword),
+                    AsmValue::Const(10, Type::Doubleword)
+                ),
+                AsmX32::Mov(
+                    Place::Register("eax".into()),
+                    AsmValue::Place(Place::Stack(4, Type::Doubleword)),
+                ),
+                AsmX32::Or(
+                    Place::Register("eax".into()),
+                    AsmValue::Const(20, Type::Doubleword)
+                )
+            ],
+            asm
+        );
+    }
+
+    #[test]
+    fn bit_or_var_bit_or_var() {
+        let mut trans = X64Backend::new();
+        trans.save(0, Type::Doubleword, Some(Value::Const(10)));
+        trans.save(1, Type::Doubleword, Some(Value::Const(20)));
+        trans.bit_or(1, Type::Doubleword, Value::Ref(0), Value::Ref(1));
+        let asm = trans.asm;
+
+        assert_eq!(
+            vec![
+                AsmX32::Mov(
+                    Place::Stack(4, Type::Doubleword),
+                    AsmValue::Const(10, Type::Doubleword)
+                ),
+                AsmX32::Mov(
+                    Place::Stack(8, Type::Doubleword),
+                    AsmValue::Const(20, Type::Doubleword)
+                ),
+                AsmX32::Mov(
+                    Place::Register("eax".into()),
+                    AsmValue::Place(Place::Stack(4, Type::Doubleword)),
+                ),
+                AsmX32::Or(
+                    Place::Register("eax".into()),
+                    AsmValue::Place(Place::Stack(8, Type::Doubleword)),
+                )
+            ],
+            asm
+        );
+    }
+
+    #[test]
+    fn bit_or_var_bit_or_var_3_times() {
+        let mut trans = X64Backend::new();
+        trans.save(0, Type::Doubleword, Some(Value::Const(10)));
+        trans.bit_or(1, Type::Doubleword, Value::Ref(0), Value::Ref(0));
+        trans.bit_or(2, Type::Doubleword, Value::Ref(1), Value::Ref(0));
+        let asm = trans.asm;
+
+        assert_eq!(
+            vec![
+                AsmX32::Mov(
+                    Place::Stack(4, Type::Doubleword),
+                    AsmValue::Const(10, Type::Doubleword)
+                ),
+                AsmX32::Mov(
+                    Place::Register("eax".into()),
+                    AsmValue::Place(Place::Stack(4, Type::Doubleword)),
+                ),
+                AsmX32::Or(
+                    Place::Register("eax".into()),
+                    AsmValue::Place(Place::Stack(4, Type::Doubleword)),
+                ),
+                AsmX32::Or(
+                    Place::Register("eax".into()),
+                    AsmValue::Place(Place::Stack(4, Type::Doubleword)),
+                )
+            ],
+            asm
+        );
+    }
+
+    #[test]
+    fn bit_or_var_and_var_then_bit_or_the_result_and_itself() {
+        let mut trans = X64Backend::new();
+        trans.save(0, Type::Doubleword, Some(Value::Const(10)));
+        trans.bit_or(1, Type::Doubleword, Value::Ref(0), Value::Ref(0));
+        trans.bit_or(2, Type::Doubleword, Value::Ref(1), Value::Ref(1));
+        let asm = trans.asm;
+
+        assert_eq!(
+            vec![
+                AsmX32::Mov(
+                    Place::Stack(4, Type::Doubleword),
+                    AsmValue::Const(10, Type::Doubleword)
+                ),
+                AsmX32::Mov(
+                    Place::Register("eax".into()),
+                    AsmValue::Place(Place::Stack(4, Type::Doubleword)),
+                ),
+                AsmX32::Or(
+                    Place::Register("eax".into()),
+                    AsmValue::Place(Place::Stack(4, Type::Doubleword)),
+                ),
+                AsmX32::Or(
+                    Place::Register("eax".into()),
+                    AsmValue::Place(Place::Register("eax".into())),
+                )
+            ],
+            asm
+        );
+    }
+
+    #[test]
+    fn bit_or_const_to_const_quadword() {
+        let mut trans = X64Backend::new();
+        trans.bit_or(0, Type::Quadword, Value::Const(10), Value::Const(20));
+        let asm = trans.asm;
+
+        assert_eq!(
+            vec![
+                AsmX32::Mov(
+                    Place::Register("rax".into()),
+                    AsmValue::Const(10, Type::Quadword)
+                ),
+                AsmX32::Or(
                     Place::Register("rax".into()),
                     AsmValue::Const(20, Type::Quadword)
                 )

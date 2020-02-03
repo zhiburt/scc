@@ -23,6 +23,12 @@ impl GASMx64 {
                 format_value(&v),
                 format_place(&p)
             ),
+            AsmX32::Or(p, v) => format!(
+                "  or{} {}, {}",
+                suffix(&v.size()),
+                format_value(&v),
+                format_place(&p)
+            ),
             AsmX32::Add(p, v) => format!(
                 "  add{} {}, {}",
                 suffix(&v.size()),

@@ -67,6 +67,12 @@ fn translate(translator: &mut impl Translator, line: tac::InstructionLine) {
                     parse_value(v1),
                     parse_value(v2),
                 ),
+                tac::BitwiseOp::Or => translator.bit_or(
+                    parse_id(line.1.unwrap()),
+                    Type::Doubleword,
+                    parse_value(v1),
+                    parse_value(v2),
+                ),
                 _ => unimplemented!(),
             }
             _ => unimplemented!(),
