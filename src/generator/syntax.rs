@@ -26,7 +26,7 @@ impl GASMx64 {
                 format!(
                     "  {}{} {}, {}",
                     instruction,
-                    suffix(&v.size()),
+                    suffix(&p.size()),
                     format_value(&v),
                     format_place(&p)
                 )
@@ -79,6 +79,16 @@ impl GASMx64 {
             ),
             AsmX32::Setn(p) => format!(
                 "  setn{} {}",
+                suffix(&p.size()),
+                format_place(&p),
+            ),
+            AsmX32::Neg(p) => format!(
+                "  neg{} {}",
+                suffix(&p.size()),
+                format_place(&p),
+            ),
+            AsmX32::Not(p) => format!(
+                "  not{} {}",
                 suffix(&p.size()),
                 format_place(&p),
             ),

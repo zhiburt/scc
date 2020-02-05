@@ -40,6 +40,9 @@ pub trait Translator {
     fn bit_and(&mut self, id: Id, t: Type, a: Value, b: Value);
     fn bit_or(&mut self, id: Id, t: Type, a: Value, b: Value);
     fn bit_xor(&mut self, id: Id, t: Type, a: Value, b: Value);
+    fn neg(&mut self, id: Id, a: Id);
+    fn logical_neg(&mut self, id: Id, a: Id);
+    fn bitwise(&mut self, id: Id, a: Id);
     fn eq(&mut self, id: Id, t: Type, a: Value, b: Value);
     fn not_eq(&mut self, id: Id, t: Type, a: Value, b: Value);
     // fn mul(&mut self, id: Id, t: Type, a: Value, b: Value);

@@ -27,75 +27,102 @@ impl<T: Translator> Transit<T> {
 
 fn translate(translator: &mut impl Translator, line: tac::InstructionLine) {
     match line.0 {
-        tac::Instruction::Op(tac::Op::Op(op, v1, v2)) => match op {
-            tac::TypeOp::Arithmetic(op) => match op {
-                tac::ArithmeticOp::Add => translator.add(
-                    parse_id(line.1.unwrap()),
-                    Type::Doubleword,
-                    parse_value(v1),
-                    parse_value(v2),
-                ),
-                tac::ArithmeticOp::Sub => translator.sub(
-                    parse_id(line.1.unwrap()),
-                    Type::Doubleword,
-                    parse_value(v1),
-                    parse_value(v2),
-                ),
-                tac::ArithmeticOp::Mul => translator.mul(
-                    parse_id(line.1.unwrap()),
-                    Type::Doubleword,
-                    parse_value(v1),
-                    parse_value(v2),
-                ),
-                tac::ArithmeticOp::Div => translator.div(
-                    parse_id(line.1.unwrap()),
-                    Type::Doubleword,
-                    parse_value(v1),
-                    parse_value(v2),
-                ),
-                tac::ArithmeticOp::Mod => translator.div_reminder(
-                    parse_id(line.1.unwrap()),
-                    Type::Doubleword,
-                    parse_value(v1),
-                    parse_value(v2),
-                ),
-            },
-            tac::TypeOp::Bit(op) => match op {
-                tac::BitwiseOp::And => translator.bit_and(
-                    parse_id(line.1.unwrap()),
-                    Type::Doubleword,
-                    parse_value(v1),
-                    parse_value(v2),
-                ),
-                tac::BitwiseOp::Or => translator.bit_or(
-                    parse_id(line.1.unwrap()),
-                    Type::Doubleword,
-                    parse_value(v1),
-                    parse_value(v2),
-                ),
-                tac::BitwiseOp::Xor => translator.bit_xor(
-                    parse_id(line.1.unwrap()),
-                    Type::Doubleword,
-                    parse_value(v1),
-                    parse_value(v2),
-                ),
+        tac::Instruction::Op(op) => match op {
+            tac::Op::Op(op, v1, v2) => match op {
+                tac::TypeOp::Arithmetic(op) => match op {
+                    tac::ArithmeticOp::Add => translator.add(
+                        parse_id(line.1.unwrap()),
+                        Type::Doubleword,
+                        parse_value(v1),
+                        parse_value(v2),
+                    ),
+                    tac::ArithmeticOp::Sub => translator.sub(
+                        parse_id(line.1.unwrap()),
+                        Type::Doubleword,
+                        parse_value(v1),
+                        parse_value(v2),
+                    ),
+                    tac::ArithmeticOp::Mul => translator.mul(
+                        parse_id(line.1.unwrap()),
+                        Type::Doubleword,
+                        parse_value(v1),
+                        parse_value(v2),
+                    ),
+                    tac::ArithmeticOp::Div => translator.div(
+                        parse_id(line.1.unwrap()),
+                        Type::Doubleword,
+                        parse_value(v1),
+                        parse_value(v2),
+                    ),
+                    tac::ArithmeticOp::Mod => translator.div_reminder(
+                        parse_id(line.1.unwrap()),
+                        Type::Doubleword,
+                        parse_value(v1),
+                        parse_value(v2),
+                    ),
+                },
+                tac::TypeOp::Bit(op) => match op {
+                    tac::BitwiseOp::And => translator.bit_and(
+                        parse_id(line.1.unwrap()),
+                        Type::Doubleword,
+                        parse_value(v1),
+                        parse_value(v2),
+                    ),
+                    tac::BitwiseOp::Or => translator.bit_or(
+                        parse_id(line.1.unwrap()),
+                        Type::Doubleword,
+                        parse_value(v1),
+                        parse_value(v2),
+                    ),
+                    tac::BitwiseOp::Xor => translator.bit_xor(
+                        parse_id(line.1.unwrap()),
+                        Type::Doubleword,
+                        parse_value(v1),
+                        parse_value(v2),
+                    ),
+                    _ => unimplemented!(),
+                },
+                tac::TypeOp::Equality(op) => match op {
+                    tac::EqualityOp::Equal => translator.eq(
+                        parse_id(line.1.unwrap()),
+                        Type::Doubleword,
+                        parse_value(v1),
+                        parse_value(v2),
+                    ),
+                    tac::EqualityOp::NotEq => translator.not_eq(
+                        parse_id(line.1.unwrap()),
+                        Type::Doubleword,
+                        parse_value(v1),
+                        parse_value(v2),
+                    ),
+                },
                 _ => unimplemented!(),
+            },
+            tac::Op::Unary(op, value) => {
+                // assembly does not support the unary operators with constants
+                // so currently we unwrap it.
+                // Might it will be dismantle in IL pre-processing part(optimizations)
+                //
+                // TODO: including corresponding observations, it makes sense to support comments in IL
+                // to translate them into asm.
+                // It can be comments provided by types not only by strings
+                // such as `Comment::SimplifiedExp(exp)`
+                let id = parse_id(value.id().unwrap());
+                match op {
+                    tac::UnOp::Neg => translator.neg(
+                        parse_id(line.1.unwrap()),
+                        id,
+                    ),
+                    tac::UnOp::LogicNeg => translator.logical_neg(
+                            parse_id(line.1.unwrap()),
+                            id,
+                    ),
+                    tac::UnOp::BitComplement => translator.bitwise(
+                        parse_id(line.1.unwrap()),
+                        id,
+                    )
+                }
             }
-            tac::TypeOp::Equality(op) => match op {
-                tac::EqualityOp::Equal => translator.eq(
-                    parse_id(line.1.unwrap()),
-                    Type::Doubleword,
-                    parse_value(v1),
-                    parse_value(v2),
-                ),
-                tac::EqualityOp::NotEq => translator.not_eq(
-                    parse_id(line.1.unwrap()),
-                    Type::Doubleword,
-                    parse_value(v1),
-                    parse_value(v2),
-                ),
-            }
-            _ => unimplemented!(),
         },
         tac::Instruction::Alloc(v) => {
             translator.save(

@@ -14,6 +14,8 @@ pub enum AsmX32 {
     Sub(Place, AsmValue),
     Mul(Place, AsmValue),
     Div(Place),
+    Neg(Place),
+    Not(Place),
     Convert(Type),
     Set(Place),
     Setn(Place),
@@ -306,6 +308,60 @@ impl Translator for X64Backend {
         let second = self.copy_on(t, a, add_register);
         self.save_place(id, &second);
         self.push_asm(AsmX32::Xor(second, first));
+    }
+
+    fn neg(&mut self, id: Id, a: Id) {
+        let place = self.place(&a).unwrap().clone();
+        let t = place.size();
+        let add_register = Place::Register(Register::new("rax").cast(&t));
+        let value_place = AsmValue::Place(self.copy_value_on(AsmValue::Place(place), add_register.clone()));
+        self.push_asm(AsmX32::Neg(add_register));
+        // TODO: a critical issue appears here
+        // when we try to pass a il as
+        // ```
+        //   _t0: - a
+        //   _t1: - b
+        //   _t2: _t0 + _t1
+        // ```
+        // We would save the values on the %rax by default,
+        // but it will cause error error since t0 and t1 placed in the same storage
+        // so we just copy it on stack here instead of
+        // using something like `self.save_place(id, &place);`
+        // The same issue appears for all unary operations.
+        //
+        // There's no easy way to resolve it.
+        // There's only one I can see now is life interval calculation
+        //
+        // Also `clang` has different approach for this calculation
+        let place = self.alloc(&t);
+        self.save_place(id, &place);
+        self.copy_value_on(value_place, place.clone());
+    }
+
+    fn logical_neg(&mut self, id: Id, a: Id) {
+        // TODO: look at neg function
+        let place = self.place(&a).unwrap().clone();
+        let t = place.size();
+        self.push_asm(AsmX32::Cmp(place, AsmValue::Const(0, t.clone())));
+        self.push_asm(AsmX32::Setn(Place::Register("al".into())));
+        self.push_asm(AsmX32::Movzx(Place::Register("eax".into()), AsmValue::Place(Place::Register("al".into()))));
+
+        let place = self.alloc(&t);
+        self.save_place(id, &place);
+        self.copy_value_on(AsmValue::Place(Place::Register("eax".into())), place.clone());
+        self.save_place(id, &place);
+    }
+
+    fn bitwise(&mut self, id: Id, a: Id) {
+        // TODO: look at neg function
+        let place = self.place(&a).unwrap().clone();
+        let t = place.size();
+        let add_register = Place::Register(Register::new("rax").cast(&t));
+        let value_place = AsmValue::Place(self.copy_value_on(AsmValue::Place(place), add_register.clone()));
+        self.push_asm(AsmX32::Not(add_register));
+        let place = self.alloc(&t);
+        self.save_place(id, &place);
+        self.copy_value_on(value_place, place.clone());
     }
 
     fn eq(&mut self, id: Id, t: Type, a: Value, b: Value) {
