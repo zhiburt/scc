@@ -19,7 +19,7 @@ struct Generator {
     // it has been done only for pretty_output purposes right now
     instructions: Vec<InstructionLine>,
     context: Context,
-    counters: [usize; 3],
+    label_counter: usize,
     allocated: usize,
 }
 
@@ -74,6 +74,18 @@ impl Context {
             .or_default()
             .push(id.clone());
 
+        id
+    }
+
+    // add_tmp method was developed in regard to have the same counter for id
+    // for Var and Tmp types even though might it's not the best place to realize this method.
+    // Might we have to switch to another approach with ID.
+    // The main concerned about that is pretty_output needs an uniq indicator for tmp and var as well.
+    // But the translation code have a strong needs in uniq one for both.
+    // It may be a smelt code, since context does not deal with tmp at all currently.
+    fn add_tmp(&mut self) -> ID {
+        let id = ID::new(self.symbols_counter, IDType::Temporary);
+        self.symbols_counter += 1;
         id
     }
 
@@ -135,7 +147,7 @@ impl LoopContext {
 impl Generator {
     pub fn new() -> Self {
         Generator {
-            counters: [0, 0, 0],
+            label_counter: 0,
             allocated: 0,
             instructions: Vec::new(),
             context: Context::new(),
@@ -145,7 +157,7 @@ impl Generator {
     pub fn from(g: &Generator) -> Self {
         let mut generator = Generator::new();
         // check is it copy or clone in sense of references.
-        generator.counters = g.counters;
+        generator.label_counter = g.label_counter;
         generator
     }
 
@@ -631,7 +643,7 @@ impl Generator {
 
     fn alloc_tmp(&mut self) -> ID {
         self.allocated += 1;
-        ID::new(self.inc_tmp(), IDType::Temporary)
+        self.context.add_tmp()
     }
 
     fn alloc_var(&mut self, name: &str) -> ID {
@@ -643,34 +655,10 @@ impl Generator {
         self.context.add_symbol(name)
     }
 
-    fn inc_vars(&mut self) -> usize {
-        self.counters[1] += 1;
-        self.counters[1]
-    }
-
-    fn inc_tmp(&mut self) -> usize {
-        let i = self.counters[0];
-        self.counters[0] += 1;
-        i
-    }
-
     fn uniq_label(&mut self) -> Label {
-        let l = self.counters[2];
-        self.counters[2] += 1;
+        let l = self.label_counter;
+        self.label_counter += 1;
         l
-    }
-
-    fn id(&self, tp: IDType) -> ID {
-        match tp {
-            IDType::Temporary => ID {
-                id: self.counters[0],
-                tp,
-            },
-            IDType::Var => ID {
-                id: self.counters[1],
-                tp,
-            },
-        }
     }
 }
 
