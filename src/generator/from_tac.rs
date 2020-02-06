@@ -96,7 +96,32 @@ fn translate(translator: &mut impl Translator, line: tac::InstructionLine) {
                         parse_value(v2),
                     ),
                 },
-                _ => unimplemented!(),
+                tac::TypeOp::Relational(op) => match op {
+                    tac::RelationalOp::Greater => translator.gt(
+                        parse_id(line.1.unwrap()),
+                        Type::Doubleword,
+                        parse_value(v1),
+                        parse_value(v2),
+                    ),
+                    tac::RelationalOp::GreaterOrEq => translator.ge(
+                        parse_id(line.1.unwrap()),
+                        Type::Doubleword,
+                        parse_value(v1),
+                        parse_value(v2),
+                    ),
+                    tac::RelationalOp::Less => translator.lt(
+                        parse_id(line.1.unwrap()),
+                        Type::Doubleword,
+                        parse_value(v1),
+                        parse_value(v2),
+                    ),
+                    tac::RelationalOp::LessOrEq => translator.le(
+                        parse_id(line.1.unwrap()),
+                        Type::Doubleword,
+                        parse_value(v1),
+                        parse_value(v2),
+                    ),
+                }
             },
             tac::Op::Unary(op, value) => {
                 // assembly does not support the unary operators with constants

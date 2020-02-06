@@ -33,7 +33,7 @@ impl GASMx64 {
             },
             AsmX32::And(p, v) => format!(
                 "  and{} {}, {}",
-                suffix(&v.size()),
+                suffix(&p.size()),
                 format_value(&v),
                 format_place(&p)
             ),
@@ -78,6 +78,22 @@ impl GASMx64 {
             ),
             AsmX32::Setn(p) => format!(
                 "  setn {}",
+                format_place(&p),
+            ),
+            AsmX32::Setl(p) => format!(
+                "  setl {}",
+                format_place(&p),
+            ),
+            AsmX32::Setle(p) => format!(
+                "  setle {}",
+                format_place(&p),
+            ),
+            AsmX32::Setg(p) => format!(
+                "  setg {}",
+                format_place(&p),
+            ),
+            AsmX32::Setge(p) => format!(
+                "  setge {}",
                 format_place(&p),
             ),
             AsmX32::Neg(p) => format!(
