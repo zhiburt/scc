@@ -45,6 +45,10 @@ pub trait Translator {
     fn bitwise(&mut self, id: Id, a: Id);
     fn eq(&mut self, id: Id, t: Type, a: Value, b: Value);
     fn not_eq(&mut self, id: Id, t: Type, a: Value, b: Value);
+    fn lt(&mut self, id: Id, t: Type, a: Value, b: Value);
+    fn le(&mut self, id: Id, t: Type, a: Value, b: Value);
+    fn gt(&mut self, id: Id, t: Type, a: Value, b: Value);
+    fn ge(&mut self, id: Id, t: Type, a: Value, b: Value);
     // fn mul(&mut self, id: Id, t: Type, a: Value, b: Value);
     // fn div(&mut self, id: Id, t: Type, a: Value, b: Value);
     // fn module(&mut self, id: Id, t: Type, a: Value, b: Value);

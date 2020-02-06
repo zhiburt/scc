@@ -72,14 +72,12 @@ impl GASMx64 {
                 suffix(&p.size()),
                 format_place(&p),
             ),
-            AsmX32::Set(p) => format!(
-                "  set{} {}",
-                suffix(&p.size()),
+            AsmX32::Sete(p) => format!(
+                "  sete {}",
                 format_place(&p),
             ),
             AsmX32::Setn(p) => format!(
-                "  setn{} {}",
-                suffix(&p.size()),
+                "  setn {}",
                 format_place(&p),
             ),
             AsmX32::Neg(p) => format!(
