@@ -1981,6 +1981,88 @@ mod translator_tests {
     }
 
     #[test]
+    fn neg_doubleword_var() {
+        let mut trans = X64Backend::new();
+        trans.save(0, Type::Doubleword, Some(Value::Const(10)));
+        trans.neg(1, 0);
+        let asm = trans.asm;
+
+        assert_eq!(
+            vec![
+                AsmX32::Mov(
+                    Place::Stack(4, Type::Doubleword),
+                    AsmValue::Const(10, Type::Doubleword)
+                ),
+                AsmX32::Mov(
+                    Place::Register(Register::new("eax")),
+                    AsmValue::Place(Place::Stack(4, Type::Doubleword)),
+                ),
+                AsmX32::Neg(Place::Register(Register::new("eax"))),
+                AsmX32::Mov(
+                    Place::Stack(8, Type::Doubleword),
+                    AsmValue::Place(Place::Register(Register::new("eax"))),
+                ),
+            ],
+            asm
+        );
+    }
+
+    #[test]
+    fn bitwise_doubleword_var() {
+        let mut trans = X64Backend::new();
+        trans.save(0, Type::Doubleword, Some(Value::Const(10)));
+        trans.bitwise(1, 0);
+        let asm = trans.asm;
+
+        assert_eq!(
+            vec![
+                AsmX32::Mov(
+                    Place::Stack(4, Type::Doubleword),
+                    AsmValue::Const(10, Type::Doubleword)
+                ),
+                AsmX32::Mov(
+                    Place::Register(Register::new("eax")),
+                    AsmValue::Place(Place::Stack(4, Type::Doubleword)),
+                ),
+                AsmX32::Not(Place::Register(Register::new("eax"))),
+                AsmX32::Mov(
+                    Place::Stack(8, Type::Doubleword),
+                    AsmValue::Place(Place::Register(Register::new("eax"))),
+                ),
+            ],
+            asm
+        );
+    }
+
+    #[test]
+    fn logical_neg_doubleword_var() {
+        let mut trans = X64Backend::new();
+        trans.save(0, Type::Doubleword, Some(Value::Const(10)));
+        trans.logical_neg(1, 0);
+        let asm = trans.asm;
+
+        assert_eq!(
+            vec![
+                AsmX32::Mov(
+                    Place::Stack(4, Type::Doubleword),
+                    AsmValue::Const(10, Type::Doubleword)
+                ),
+                AsmX32::Cmp(Place::Stack(4, Type::Doubleword), AsmValue::Const(0, Type::Doubleword)),
+                AsmX32::Setn(Place::Register(Register::new("al"))),
+                AsmX32::Movzx(
+                    Place::Register(Register::new("eax")),
+                    AsmValue::Place(Place::Register(Register::new("al"))),
+                ),
+                AsmX32::Mov(
+                    Place::Stack(8, Type::Doubleword),
+                    AsmValue::Place(Place::Register(Register::new("eax"))),
+                ),
+            ],
+            asm
+        );
+    }
+
+    #[test]
     fn label_creation() {
         let mut trans = X64Backend::new();
         trans.label(0);
