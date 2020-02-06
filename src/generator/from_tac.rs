@@ -107,20 +107,34 @@ fn translate(translator: &mut impl Translator, line: tac::InstructionLine) {
                 // to translate them into asm.
                 // It can be comments provided by types not only by strings
                 // such as `Comment::SimplifiedExp(exp)`
-                let id = parse_id(value.id().unwrap());
-                match op {
-                    tac::UnOp::Neg => translator.neg(
-                        parse_id(line.1.unwrap()),
-                        id,
-                    ),
-                    tac::UnOp::LogicNeg => translator.logical_neg(
+                match value {
+                    // Even though it's not very well to implement it here
+                    // but while we still don't have an optimization stage
+                    // it's been implemented to be better testable.
+                    tac::Value::Const(tac::Const::Int(int)) => {
+                        let value = match op {
+                            tac::UnOp::Neg => -int as i64,
+                            tac::UnOp::LogicNeg => (int == 0) as i64,
+                            tac::UnOp::BitComplement => !int as i64,
+                        };
+
+                        translator.save(parse_id(line.1.unwrap()), Type::Doubleword, Some(Value::Const(value)));
+                    },
+                    tac::Value::ID(id) => match op {
+                        tac::UnOp::Neg => translator.neg(
                             parse_id(line.1.unwrap()),
-                            id,
-                    ),
-                    tac::UnOp::BitComplement => translator.bitwise(
-                        parse_id(line.1.unwrap()),
-                        id,
-                    )
+                            id.id as u32,
+                        ),
+                        tac::UnOp::LogicNeg => translator.logical_neg(
+                                parse_id(line.1.unwrap()),
+                                id.id as u32 ,
+                        ),
+                        tac::UnOp::BitComplement => translator.bitwise(
+                            parse_id(line.1.unwrap()),
+                            id.id as u32,
+                        ),
+                    },
+
                 }
             }
         },
