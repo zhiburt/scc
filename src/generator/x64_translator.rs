@@ -389,36 +389,26 @@ impl Translator for X64Backend {
     }
 
     fn lt(&mut self, id: Id, t: Type, a: Value, b: Value) {
-        let mut lhs_is_reallocated = false;
         let lhs = self.const_or_allocated(t.clone(), a);
-        let lhs_place = match &lhs {
+        let (lhs_place, rhs) = match &lhs {
             AsmValue::Place(place) => {
                 if b.is_ref() {
-                    lhs_is_reallocated = true;
-                    self.copy_value_on(lhs, Place::Register("eax".into()))
+                    (
+                        self.copy_value_on(lhs, Place::Register("eax".into())),
+                        self.const_or_allocated(t.clone(), b)
+                    )
                 } else {
-                    place.clone()
+                    (
+                        place.clone(),
+                        self.const_or_allocated(t.clone(), b)
+                    )
                 }
             },
             _ => {
-                // this cover case where we get expression like `1 < a`
-                lhs_is_reallocated = true;
-                self.copy_value_on(lhs, Place::Register("eax".into()))
-            }
-        };
-        let rhs = match b {
-            // tecnically it's mistake to get here constant?
-            Value::Const(..) => self.const_or_allocated(t.clone(), b),
-            _ => {
-                // this cover case where we get expression like `a < b`
-                // we copy b
-                if lhs_is_reallocated {
+                (
+                    self.copy_value_on(lhs, Place::Register("eax".into())),
                     self.const_or_allocated(t.clone(), b)
-                } else {
-                    let place = self.copy_on(t, b, Place::Register("eax".into()));
-                    AsmValue::Place(place)
-    
-                }
+                )
             }
         };
         self.push_asm(AsmX32::Cmp(lhs_place, rhs));
