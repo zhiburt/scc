@@ -98,7 +98,7 @@ struct VarView<'a> {
 impl<'a> VarView<'a> {
     fn pretty_id(&mut self, id: &tac::ID) -> String {
         match id.tp {
-            tac::IDType::Var => format!("{}", self.vars[&id.id]),
+            tac::IDType::Var => format!("{}<{}>", self.vars[&id.id], id.id),
             tac::IDType::Temporary => {
                 let tmp_id = if self.tmp_vars.contains_key(&id.id) {
                     self.tmp_vars[&id.id]

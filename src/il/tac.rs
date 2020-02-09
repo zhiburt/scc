@@ -18,6 +18,9 @@ struct Generator {
     // TODO: certainly not sure about contains this tuple
     // it has been done only for pretty_output purposes right now
     instructions: Vec<InstructionLine>,
+    // used to get deal with scopes
+    instruction_buffer: Option<Vec<InstructionLine>>,
+    is_buffering: bool,
     context: Context,
     label_counter: usize,
     allocated: usize,
@@ -150,6 +153,8 @@ impl Generator {
             label_counter: 0,
             allocated: 0,
             instructions: Vec::new(),
+            instruction_buffer: None,
+            is_buffering: false,
             context: Context::new(),
         }
     }
@@ -226,7 +231,13 @@ impl Generator {
             }
             _ => None,
         };
-        self.instructions.push(InstructionLine(inst, id.clone()));
+
+        if self.is_buffering {
+            self.instruction_buffer.as_mut().unwrap().push(InstructionLine(inst, id.clone()));
+        } else {
+            self.instructions.push(InstructionLine(inst, id.clone()));
+        }
+
         id
     }
 
@@ -417,9 +428,9 @@ impl Generator {
     fn emit_decl(&mut self, decl: &ast::Declaration) {
         match decl {
             ast::Declaration::Declare { name, exp } => {
-                let var_id = self.alloc_var(name);
                 if let Some(exp) = exp {
                     let exp_id = self.emit_expr(exp);
+                    let var_id = self.alloc_var(name);
                     self.emit(Instruction::Assignment(var_id, exp_id));
                 }
             }
@@ -543,7 +554,6 @@ impl Generator {
 
                 self.start_scope();
                 self.emit_decl(decl);
-                self.end_scope();
 
                 self.emit(Instruction::ControlOp(ControlOp::Label(begin_label)));
                 let cond_val = self.emit_expr(exp2);
@@ -551,13 +561,22 @@ impl Generator {
                     cond_val, end_label,
                 ))));
 
+                if let Some(exp3) = exp3 {
+                    self.start_buffering();
+                    self.emit_expr(exp3);
+                    self.stop_buffering();
+                }
+
+                self.end_scope();
+
                 self.start_scope();
                 self.emit_statement(statement);
                 self.end_scope();
 
-                if let Some(exp3) = exp3 {
-                    self.emit_expr(exp3);
+                if exp3.is_some() {
+                    self.flush_buffer();
                 }
+
                 self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::GOTO(
                     begin_label,
                 ))));
@@ -611,6 +630,22 @@ impl Generator {
                 ))));
             }
         }
+    }
+
+    fn start_buffering(&mut self) {
+        assert!(self.instruction_buffer.is_none(), ("instruction_buffer was not cleaned before"));
+        self.instruction_buffer = Some(Vec::new());
+        self.is_buffering = true;
+    }
+
+    fn stop_buffering(&mut self) {
+        self.is_buffering = false;
+    }
+    
+    fn flush_buffer(&mut self) {
+        assert!(self.instruction_buffer.is_some(), ("instruction_buffer was not set up before"));
+        let buffer = self.instruction_buffer.take().unwrap();
+        self.instructions.extend(buffer);
     }
 
     // TODO: implement a a function which call something in scope
