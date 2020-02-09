@@ -241,27 +241,21 @@ impl Translator for X64Backend {
     }
 
     fn add(&mut self, id: Id, t: Type, a: Value, b: Value) {
-        let first = self.const_or_allocated(t.clone(), b);
-        let add_register = Place::Register(Register::new("rax").cast(&t));
-        let second = self.copy_on(t, a, add_register);
-        self.save_place(id, &second);
-        self.push_asm(AsmX32::Add(second, first));
+        let (place, value) = self.parse_with_move_place(t, a, b);
+        self.save_place(id, &place);
+        self.push_asm(AsmX32::Add(place, value));
     }
 
     fn sub(&mut self, id: Id, t: Type, a: Value, b: Value) {
-        let first = self.const_or_allocated(t.clone(), b);
-        let add_register = Place::Register(Register::new("rax").cast(&t));
-        let second = self.copy_on(t, a, add_register);
-        self.save_place(id, &second);
-        self.push_asm(AsmX32::Sub(second, first));
+        let (place, value) = self.parse_with_move_place(t, a, b);
+        self.save_place(id, &place);
+        self.push_asm(AsmX32::Sub(place, value));
     }
 
     fn mul(&mut self, id: Id, t: Type, a: Value, b: Value) {
-        let first = self.const_or_allocated(t.clone(), b);
-        let add_register = Place::Register(Register::new("rax").cast(&t));
-        let second = self.copy_on(t, a, add_register);
-        self.save_place(id, &second);
-        self.push_asm(AsmX32::Mul(second, first));
+        let (place, value) = self.parse_with_move_place(t, a, b);
+        self.save_place(id, &place);
+        self.push_asm(AsmX32::Mul(place, value));
     }
 
     fn div(&mut self, id: Id, t: Type, a: Value, b: Value) {
@@ -291,27 +285,21 @@ impl Translator for X64Backend {
     }
 
     fn bit_and(&mut self, id: Id, t: Type, a: Value, b: Value) {
-        let first = self.const_or_allocated(t.clone(), b);
-        let add_register = Place::Register(Register::new("rax").cast(&t));
-        let second = self.copy_on(t, a, add_register);
-        self.save_place(id, &second);
-        self.push_asm(AsmX32::And(second, first));
+        let (place, value) = self.parse_with_move_place(t, a, b);
+        self.save_place(id, &place);
+        self.push_asm(AsmX32::And(place, value));
     }
 
     fn bit_or(&mut self, id: Id, t: Type, a: Value, b: Value) {
-        let first = self.const_or_allocated(t.clone(), b);
-        let add_register = Place::Register(Register::new("rax").cast(&t));
-        let second = self.copy_on(t, a, add_register);
-        self.save_place(id, &second);
-        self.push_asm(AsmX32::Or(second, first));
+        let (place, value) = self.parse_with_move_place(t, a, b);
+        self.save_place(id, &place);
+        self.push_asm(AsmX32::Or(place, value));
     }
 
     fn bit_xor(&mut self, id: Id, t: Type, a: Value, b: Value) {
-        let first = self.const_or_allocated(t.clone(), b);
-        let add_register = Place::Register(Register::new("rax").cast(&t));
-        let second = self.copy_on(t, a, add_register);
-        self.save_place(id, &second);
-        self.push_asm(AsmX32::Xor(second, first));
+        let (place, value) = self.parse_with_move_place(t, a, b);
+        self.save_place(id, &place);
+        self.push_asm(AsmX32::Xor(place, value));
     }
 
     fn neg(&mut self, id: Id, a: Id) {
@@ -368,22 +356,19 @@ impl Translator for X64Backend {
         self.copy_value_on(value_place, place.clone());
     }
 
-    fn eq(&mut self, id: Id, t: Type, a: Value, b: Value) {
-        let first = self.const_or_allocated(t.clone(), b);
-        let add_register = Place::Register(Register::new("rax").cast(&t));
-        let second = self.copy_on(t, a, add_register);
-        self.save_place(id, &second);
-        self.push_asm(AsmX32::Cmp(second, first));
+    fn eq(&mut self, id: Id, t: Type, a: Value, b: Value) 
+    {
+        let (place, value) = self.parse_with_move_place(t, a, b);
+        self.save_place(id, &place);
+        self.push_asm(AsmX32::Cmp(place, value));
         self.push_asm(AsmX32::Sete(Place::Register("al".into())));
         self.push_asm(AsmX32::Movzx(Place::Register("eax".into()), AsmValue::Place(Place::Register("al".into()))));
     }
 
     fn not_eq(&mut self, id: Id, t: Type, a: Value, b: Value) {
-        let first = self.const_or_allocated(t.clone(), b);
-        let add_register = Place::Register(Register::new("rax").cast(&t));
-        let second = self.copy_on(t, a, add_register);
-        self.save_place(id, &second);
-        self.push_asm(AsmX32::Cmp(second, first));
+        let (place, value) = self.parse_with_move_place(t, a, b);
+        self.save_place(id, &place);
+        self.push_asm(AsmX32::Cmp(place, value));
         self.push_asm(AsmX32::Setn(Place::Register("al".into())));
         self.push_asm(AsmX32::Movzx(Place::Register("eax".into()), AsmValue::Place(Place::Register("al".into()))));
     }
@@ -459,6 +444,19 @@ impl X64Backend {
                 self.const_or_allocated(t, b)
             )
         }
+    }
+
+    fn parse_with_move_place(&mut self, t: Type, a: Value, b: Value) -> (Place, AsmValue) {
+        let (copy_value, use_value) = if a.is_ref() {
+            (a, b)
+        } else {
+            (b, a)
+        };
+
+        (
+            self.copy_on(t.clone(), copy_value, Place::Register(Register::new("rax").cast(&t))),
+            self.const_or_allocated(t, use_value),
+        )
     }
 
     fn push_asm(&mut self, i: AsmX32) {
@@ -550,28 +548,35 @@ mod translator_tests {
     }
 
     #[test]
-    fn add_const_to_const() {
+    fn sum_const_and_var() {
         let mut trans = X64Backend::new();
-        trans.add(0, Type::Doubleword, Value::Const(10), Value::Const(20));
+        trans.save(0, Type::Doubleword, Some(Value::Const(10)));
+        trans.add(1, Type::Doubleword, Value::Const(20), Value::Ref(0));
         let asm = trans.asm;
 
         assert_eq!(
             vec![
                 AsmX32::Mov(
-                    Place::Register("eax".into()),
+                    Place::Stack(4, Type::Doubleword),
                     AsmValue::Const(10, Type::Doubleword)
+                ),
+                AsmX32::Mov(
+                    Place::Register("eax".into()),
+                    AsmValue::Place(Place::Stack(4, Type::Doubleword)),
                 ),
                 AsmX32::Add(
                     Place::Register("eax".into()),
                     AsmValue::Const(20, Type::Doubleword)
                 )
             ],
+
             asm
-        )
+        );
+
     }
 
     #[test]
-    fn assign_var_then_add_const() {
+    fn sum_var_and_const() {
         let mut trans = X64Backend::new();
         trans.save(0, Type::Doubleword, Some(Value::Const(10)));
         trans.add(1, Type::Doubleword, Value::Ref(0), Value::Const(20));
@@ -592,8 +597,10 @@ mod translator_tests {
                     AsmValue::Const(20, Type::Doubleword)
                 )
             ],
+
             asm
         );
+
     }
 
     #[test]
@@ -699,11 +706,11 @@ mod translator_tests {
             vec![
                 AsmX32::Mov(
                     Place::Register("rax".into()),
-                    AsmValue::Const(10, Type::Quadword)
+                    AsmValue::Const(20, Type::Quadword)
                 ),
                 AsmX32::Add(
                     Place::Register("rax".into()),
-                    AsmValue::Const(20, Type::Quadword)
+                    AsmValue::Const(10, Type::Quadword)
                 )
             ],
             asm
@@ -720,11 +727,11 @@ mod translator_tests {
             vec![
                 AsmX32::Mov(
                     Place::Register("eax".into()),
-                    AsmValue::Const(10, Type::Doubleword)
+                    AsmValue::Const(20, Type::Doubleword)
                 ),
                 AsmX32::And(
                     Place::Register("eax".into()),
-                    AsmValue::Const(20, Type::Doubleword)
+                    AsmValue::Const(10, Type::Doubleword)
                 )
             ],
             asm
@@ -860,11 +867,11 @@ mod translator_tests {
             vec![
                 AsmX32::Mov(
                     Place::Register("rax".into()),
-                    AsmValue::Const(10, Type::Quadword)
+                    AsmValue::Const(20, Type::Quadword)
                 ),
                 AsmX32::And(
                     Place::Register("rax".into()),
-                    AsmValue::Const(20, Type::Quadword)
+                    AsmValue::Const(10, Type::Quadword)
                 )
             ],
             asm
@@ -881,11 +888,11 @@ mod translator_tests {
             vec![
                 AsmX32::Mov(
                     Place::Register("eax".into()),
-                    AsmValue::Const(10, Type::Doubleword)
+                    AsmValue::Const(20, Type::Doubleword)
                 ),
                 AsmX32::Or(
                     Place::Register("eax".into()),
-                    AsmValue::Const(20, Type::Doubleword)
+                    AsmValue::Const(10, Type::Doubleword)
                 )
             ],
             asm
@@ -1021,11 +1028,11 @@ mod translator_tests {
             vec![
                 AsmX32::Mov(
                     Place::Register("rax".into()),
-                    AsmValue::Const(10, Type::Quadword)
+                    AsmValue::Const(20, Type::Quadword)
                 ),
                 AsmX32::Or(
                     Place::Register("rax".into()),
-                    AsmValue::Const(20, Type::Quadword)
+                    AsmValue::Const(10, Type::Quadword)
                 )
             ],
             asm
@@ -1042,11 +1049,11 @@ mod translator_tests {
             vec![
                 AsmX32::Mov(
                     Place::Register("eax".into()),
-                    AsmValue::Const(10, Type::Doubleword)
+                    AsmValue::Const(20, Type::Doubleword)
                 ),
                 AsmX32::Xor(
                     Place::Register("eax".into()),
-                    AsmValue::Const(20, Type::Doubleword)
+                    AsmValue::Const(10, Type::Doubleword)
                 )
             ],
             asm
@@ -1182,11 +1189,11 @@ mod translator_tests {
             vec![
                 AsmX32::Mov(
                     Place::Register("rax".into()),
-                    AsmValue::Const(10, Type::Quadword)
+                    AsmValue::Const(20, Type::Quadword)
                 ),
                 AsmX32::Xor(
                     Place::Register("rax".into()),
-                    AsmValue::Const(20, Type::Quadword)
+                    AsmValue::Const(10, Type::Quadword)
                 )
             ],
             asm
@@ -1203,11 +1210,11 @@ mod translator_tests {
             vec![
                 AsmX32::Mov(
                     Place::Register("eax".into()),
-                    AsmValue::Const(20, Type::Doubleword)
+                    AsmValue::Const(10, Type::Doubleword)
                 ),
                 AsmX32::Sub(
                     Place::Register("eax".into()),
-                    AsmValue::Const(10, Type::Doubleword)
+                    AsmValue::Const(20, Type::Doubleword)
                 )
             ],
             asm
@@ -1317,11 +1324,11 @@ mod translator_tests {
             vec![
                 AsmX32::Mov(
                     Place::Register("rax".into()),
-                    AsmValue::Const(20, Type::Quadword)
+                    AsmValue::Const(10, Type::Quadword)
                 ),
                 AsmX32::Sub(
                     Place::Register("rax".into()),
-                    AsmValue::Const(10, Type::Quadword)
+                    AsmValue::Const(20, Type::Quadword)
                 )
             ],
             asm
@@ -1338,11 +1345,11 @@ mod translator_tests {
             vec![
                 AsmX32::Mov(
                     Place::Register("eax".into()),
-                    AsmValue::Const(10, Type::Doubleword)
+                    AsmValue::Const(20, Type::Doubleword)
                 ),
                 AsmX32::Mul(
                     Place::Register("eax".into()),
-                    AsmValue::Const(20, Type::Doubleword)
+                    AsmValue::Const(10, Type::Doubleword)
                 )
             ],
             asm
@@ -1478,11 +1485,11 @@ mod translator_tests {
             vec![
                 AsmX32::Mov(
                     Place::Register("rax".into()),
-                    AsmValue::Const(10, Type::Quadword)
+                    AsmValue::Const(20, Type::Quadword)
                 ),
                 AsmX32::Mul(
                     Place::Register("rax".into()),
-                    AsmValue::Const(20, Type::Quadword)
+                    AsmValue::Const(10, Type::Quadword)
                 )
             ],
             asm
@@ -1908,11 +1915,11 @@ mod translator_tests {
             vec![
                 AsmX32::Mov(
                     Place::Register(Register::new("eax")),
-                    AsmValue::Const(10, Type::Doubleword)
+                    AsmValue::Const(20, Type::Doubleword)
                 ),
                 AsmX32::Cmp(
                     Place::Register(Register::new("eax")),
-                    AsmValue::Const(20, Type::Doubleword)
+                    AsmValue::Const(10, Type::Doubleword)
                 ),
                 AsmX32::Sete(Place::Register(Register::new("al"))),
                 AsmX32::Movzx(
@@ -1965,11 +1972,11 @@ mod translator_tests {
             vec![
                 AsmX32::Mov(
                     Place::Register(Register::new("eax")),
-                    AsmValue::Const(10, Type::Doubleword)
+                    AsmValue::Const(20, Type::Doubleword)
                 ),
                 AsmX32::Cmp(
                     Place::Register(Register::new("eax")),
-                    AsmValue::Const(20, Type::Doubleword)
+                    AsmValue::Const(10, Type::Doubleword)
                 ),
                 AsmX32::Setn(Place::Register(Register::new("al"))),
                 AsmX32::Movzx(
