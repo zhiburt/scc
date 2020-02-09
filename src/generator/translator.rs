@@ -13,6 +13,18 @@ impl Value {
             Value::Const(..) => false,
         }
     }
+
+    pub fn is_const(&self) -> bool {
+        !self.is_ref()
+    }
+
+
+    pub fn as_ref(self) -> Option<Id> {
+        match self {
+            Value::Ref(id) => Some(id),
+            Value::Const(..) => None,
+        }
+    }
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]

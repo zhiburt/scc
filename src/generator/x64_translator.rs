@@ -389,29 +389,8 @@ impl Translator for X64Backend {
     }
 
     fn lt(&mut self, id: Id, t: Type, a: Value, b: Value) {
-        let lhs = self.const_or_allocated(t.clone(), a);
-        let (lhs_place, rhs) = match &lhs {
-            AsmValue::Place(place) => {
-                if b.is_ref() {
-                    (
-                        self.copy_value_on(lhs, Place::Register("eax".into())),
-                        self.const_or_allocated(t.clone(), b)
-                    )
-                } else {
-                    (
-                        place.clone(),
-                        self.const_or_allocated(t.clone(), b)
-                    )
-                }
-            },
-            _ => {
-                (
-                    self.copy_value_on(lhs, Place::Register("eax".into())),
-                    self.const_or_allocated(t.clone(), b)
-                )
-            }
-        };
-        self.push_asm(AsmX32::Cmp(lhs_place, rhs));
+        let (place, value) = self.parse_values(t, a, b);
+        self.push_asm(AsmX32::Cmp(place, value));
         self.push_asm(AsmX32::Setl(Place::Register("al".into())));
         self.push_asm(AsmX32::And(Place::Register("al".into()), AsmValue::Const(1, Type::Doubleword)));
         self.push_asm(AsmX32::Movzx(Place::Register("eax".into()), AsmValue::Place(Place::Register(Register::new("al")))));
@@ -419,12 +398,30 @@ impl Translator for X64Backend {
     }
 
     fn le(&mut self, id: Id, t: Type, a: Value, b: Value) {
+        let (place, value) = self.parse_values(t, a, b);
+        self.push_asm(AsmX32::Cmp(place, value));
+        self.push_asm(AsmX32::Setle(Place::Register("al".into())));
+        self.push_asm(AsmX32::And(Place::Register("al".into()), AsmValue::Const(1, Type::Doubleword)));
+        self.push_asm(AsmX32::Movzx(Place::Register("eax".into()), AsmValue::Place(Place::Register(Register::new("al")))));
+        self.save_place(id, &Place::Register("eax".into()));
     }
 
     fn gt(&mut self, id: Id, t: Type, a: Value, b: Value) {
+        let (place, value) = self.parse_values(t, a, b);
+        self.push_asm(AsmX32::Cmp(place, value));
+        self.push_asm(AsmX32::Setg(Place::Register("al".into())));
+        self.push_asm(AsmX32::And(Place::Register("al".into()), AsmValue::Const(1, Type::Doubleword)));
+        self.push_asm(AsmX32::Movzx(Place::Register("eax".into()), AsmValue::Place(Place::Register(Register::new("al")))));
+        self.save_place(id, &Place::Register("eax".into()));
     }
 
     fn ge(&mut self, id: Id, t: Type, a: Value, b: Value) {
+        let (place, value) = self.parse_values(t, a, b);
+        self.push_asm(AsmX32::Cmp(place, value));
+        self.push_asm(AsmX32::Setge(Place::Register("al".into())));
+        self.push_asm(AsmX32::And(Place::Register("al".into()), AsmValue::Const(1, Type::Doubleword)));
+        self.push_asm(AsmX32::Movzx(Place::Register("eax".into()), AsmValue::Place(Place::Register(Register::new("al")))));
+        self.save_place(id, &Place::Register("eax".into()));
     }
 
     fn ret(&mut self, t: Type, v: Value) {
@@ -450,6 +447,20 @@ impl Translator for X64Backend {
 }
 
 impl X64Backend {
+    fn parse_values(&mut self, t: Type, a: Value, b: Value) -> (Place, AsmValue) {
+        if a.is_ref() && b.is_const() {
+            (
+                self.place(&a.as_ref().unwrap()).unwrap().clone(),
+                self.const_or_allocated(t.clone(), b),
+            )
+        } else {
+            (
+                self.copy_on(t.clone(), a, Place::Register(Register::new("rax").cast(&t))),
+                self.const_or_allocated(t, b)
+            )
+        }
+    }
+
     fn push_asm(&mut self, i: AsmX32) {
         self.asm.push(i);
     }
@@ -1986,6 +1997,38 @@ mod translator_tests {
                 AsmX32::Cmp(
                     Place::Stack(4, Type::Doubleword),
                     AsmValue::Const(1, Type::Doubleword)
+                ),
+                AsmX32::Setl(Place::Register(Register::new("al"))),
+                AsmX32::And(Place::Register(Register::new("al")), AsmValue::Const(1, Type::Doubleword)),
+                AsmX32::Movzx(
+                    Place::Register(Register::new("eax")),
+                    AsmValue::Place(Place::Register(Register::new("al")))
+                )
+            ],
+            asm
+        )
+    }
+
+    #[test]
+    fn const_less_var() {
+        let mut trans = X64Backend::new();
+        trans.save(0, Type::Doubleword, Some(Value::Const(0)));
+        trans.lt(1, Type::Doubleword, Value::Const(1), Value::Ref(0));
+        let asm = trans.asm;
+
+        assert_eq!(
+            vec![
+                AsmX32::Mov(
+                    Place::Stack(4, Type::Doubleword),
+                    AsmValue::Const(0, Type::Doubleword)
+                ),
+                AsmX32::Mov(
+                    Place::Register(Register::new("eax")),
+                    AsmValue::Const(1, Type::Doubleword),
+                ),
+                AsmX32::Cmp(
+                    Place::Register(Register::new("eax")),
+                    AsmValue::Place(Place::Stack(4, Type::Doubleword)),
                 ),
                 AsmX32::Setl(Place::Register(Register::new("al"))),
                 AsmX32::And(Place::Register(Register::new("al")), AsmValue::Const(1, Type::Doubleword)),
