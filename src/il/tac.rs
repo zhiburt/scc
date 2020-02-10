@@ -19,8 +19,8 @@ struct Generator {
     // it has been done only for pretty_output purposes right now
     instructions: Vec<InstructionLine>,
     // used to get deal with scopes
-    instruction_buffer: Option<Vec<InstructionLine>>,
-    is_buffering: bool,
+    instruction_buffer: Vec<Vec<InstructionLine>>,
+    instruction_buffer_index: usize,
     context: Context,
     label_counter: usize,
     allocated: usize,
@@ -153,8 +153,8 @@ impl Generator {
             label_counter: 0,
             allocated: 0,
             instructions: Vec::new(),
-            instruction_buffer: None,
-            is_buffering: false,
+            instruction_buffer: Vec::new(),
+            instruction_buffer_index: 0,
             context: Context::new(),
         }
     }
@@ -232,8 +232,8 @@ impl Generator {
             _ => None,
         };
 
-        if self.is_buffering {
-            self.instruction_buffer.as_mut().unwrap().push(InstructionLine(inst, id.clone()));
+        if self.instruction_buffer_index > 0 {
+            self.instruction_buffer[self.instruction_buffer_index - 1].push(InstructionLine(inst, id.clone()));
         } else {
             self.instructions.push(InstructionLine(inst, id.clone()));
         }
@@ -428,11 +428,16 @@ impl Generator {
     fn emit_decl(&mut self, decl: &ast::Declaration) {
         match decl {
             ast::Declaration::Declare { name, exp } => {
-                // allocate the value to be able to recognize it
-                let var_id = self.alloc_var(name);
+
                 if let Some(exp) = exp {
                     let exp_id = self.emit_expr(exp);
+                    let var_id = self.alloc_var(name);
                     self.emit(Instruction::Assignment(var_id, exp_id));
+                } else {
+                    // Allocate the value to be able to recognize it.
+                    // Do that after processing expression since there may be
+                    // a variable with the same name in the above scope
+                    let var_id = self.alloc_var(name);
                 }
             }
         }
@@ -634,19 +639,16 @@ impl Generator {
     }
 
     fn start_buffering(&mut self) {
-        assert!(self.instruction_buffer.is_none(), ("instruction_buffer was not cleaned before"));
-        self.instruction_buffer = Some(Vec::new());
-        self.is_buffering = true;
+        self.instruction_buffer.push(Vec::new());
+        self.instruction_buffer_index += 1;
     }
 
     fn stop_buffering(&mut self) {
-        self.is_buffering = false;
+        self.instruction_buffer_index -= 1;
     }
     
     fn flush_buffer(&mut self) {
-        assert!(self.instruction_buffer.is_some(), ("instruction_buffer was not set up before"));
-        let buffer = self.instruction_buffer.take().unwrap();
-        self.instructions.extend(buffer);
+        self.instructions.extend(self.instruction_buffer.pop().unwrap());
     }
 
     // TODO: implement a a function which call something in scope
