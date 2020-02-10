@@ -428,9 +428,10 @@ impl Generator {
     fn emit_decl(&mut self, decl: &ast::Declaration) {
         match decl {
             ast::Declaration::Declare { name, exp } => {
+                // allocate the value to be able to recognize it
+                let var_id = self.alloc_var(name);
                 if let Some(exp) = exp {
                     let exp_id = self.emit_expr(exp);
-                    let var_id = self.alloc_var(name);
                     self.emit(Instruction::Assignment(var_id, exp_id));
                 }
             }
