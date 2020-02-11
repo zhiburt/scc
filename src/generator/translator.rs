@@ -35,8 +35,19 @@ pub enum Type {
     Quadword,
 }
 
+impl Type {
+    pub fn size(&self) -> usize {
+        match self {
+            Type::Doubleword => 4,
+            Type::Quadword => 8,
+            Type::Word => 2,
+            Type::Byte => 1,
+        }
+    }
+}
+
 pub trait Translator {
-    fn func_begin(&mut self, name: &str);
+    fn func_begin(&mut self, name: &str, params: &[(Type, Id)]);
     fn func_end(&mut self);
     // TODO: might better supply &str instead of usize?
     fn label(&mut self, label: usize);
@@ -61,6 +72,7 @@ pub trait Translator {
     fn le(&mut self, id: Id, t: Type, a: Value, b: Value);
     fn gt(&mut self, id: Id, t: Type, a: Value, b: Value);
     fn ge(&mut self, id: Id, t: Type, a: Value, b: Value);
+    fn call(&mut self, id: Option<Id>, t: Type, name: &str, params: &[(Type, Value)]);
     // fn mul(&mut self, id: Id, t: Type, a: Value, b: Value);
     // fn div(&mut self, id: Id, t: Type, a: Value, b: Value);
     // fn module(&mut self, id: Id, t: Type, a: Value, b: Value);

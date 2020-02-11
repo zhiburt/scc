@@ -176,12 +176,14 @@ impl Generator {
             return None;
         }
 
+        let mut params = Vec::new();
         for p in func.parameters.iter() {
             /*
                 Don't allocate memory for parameters since
                 this memory was prepared by caller
             */
-            self.remember_var(&p);
+            let id = self.remember_var(&p);
+            params.push(id.id);
         }
 
         let blocks = func.blocks.as_ref().unwrap();
@@ -208,6 +210,7 @@ impl Generator {
             frame_size: self.allocated_memory(),
             instructions: self.flush(),
             vars: vars,
+            parameters: params,
         })
     }
 
@@ -932,6 +935,7 @@ pub enum FnType {
 #[derive(Debug)]
 pub struct FuncDef {
     pub name: String,
+    pub parameters: Vec<usize>,
     pub frame_size: BytesSize,
     pub vars: HashMap<usize, String>,
     pub instructions: Vec<InstructionLine>,

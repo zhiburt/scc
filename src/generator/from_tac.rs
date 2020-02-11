@@ -13,7 +13,11 @@ impl<T: Translator> Transit<T> {
     }
 
     pub fn gen(&mut self, func: tac::FuncDef) -> String {
-        self.translator.func_begin(&func.name);
+        let params = func.parameters.
+            iter().
+            map(|id| (Type::Doubleword, *id as translator::Id)).
+            collect::<Vec<_>>();
+        self.translator.func_begin(&func.name, &params);
 
         for instruction in func.instructions {
             translate(&mut self.translator, instruction);
@@ -189,9 +193,17 @@ fn translate(translator: &mut impl Translator, line: tac::InstructionLine) {
                 }
             },
         },
-        _ => {
-            println!("{:?}", line.0);
-            unimplemented!()
+        tac::Instruction::Call(tac::Call{name, params, tp, pop_size}) => {
+            translator.call(
+                line.1.map(|id| parse_id(id)),
+                Type::Doubleword,
+                &name,
+                params.
+                    into_iter().
+                    map(|v| (Type::Doubleword, parse_value(v))).
+                    collect::<Vec<_>>().
+                    as_slice(),
+            )
         }
     }
 }

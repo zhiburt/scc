@@ -29,6 +29,7 @@ pub enum AsmX32 {
     Cmp(Place, AsmValue),
     Push(AsmValue),
     Pop(Place),
+    Call(String),
     Ret,
 }
 
@@ -183,7 +184,20 @@ impl X64Backend {
 }
 
 impl Translator for X64Backend {
-    fn func_begin(&mut self, name: &str) {
+    fn func_begin(&mut self, name: &str, params: &[(Type, Id)]) {
+        let registers: [Register; 6] = ["rdi".into(), "rsi".into(), "rdx".into(), "rcx".into(), "r8".into(), "r9".into()];
+
+        let mut i = 0;
+        for (t, id) in params {
+            if i < registers.len() {
+                self.save_place(id.clone(), &Place::Register(registers[i].cast(&t)));
+                i += 1;
+            } else {
+                self.stack_index += t.size() as u64;
+                self.save_place(id.clone(), &Place::Stack(self.stack_index, t.clone()));
+            }
+        }
+
         self.push_asm(AsmX32::Metadata(format!(".globl {}", name)));
         self.push_asm(AsmX32::Label(name.to_owned()));
 
@@ -418,6 +432,32 @@ impl Translator for X64Backend {
             _ => {
                 self.push_asm(AsmX32::Mov(Place::Register(return_reg), value));
             }
+        }
+    }
+
+    fn call(&mut self, id: Option<Id>, t: Type, name: &str, params: &[(Type, Value)]) {
+        let registers: [Register; 6] = ["rdi".into(), "rsi".into(), "rdx".into(), "rcx".into(), "r8".into(), "r9".into()];
+
+        let mut stack_allocated = 0;
+        let mut i = 0;
+        for (t, p) in params {
+            if i < registers.len() {
+                self.push_asm(AsmX32::Mov(Place::Register(registers[i].cast(&t)), self.const_or_allocated(t.clone(), p.clone())));
+                i += 1;
+            } else {
+                stack_allocated += t.size();
+                self.push_asm(AsmX32::Push(self.const_or_allocated(t.clone(), p.clone())));
+            }
+        }
+
+        self.push_asm(AsmX32::Call(name.to_owned()));
+
+        if stack_allocated > 0 {
+            self.push_asm(AsmX32::Add(Place::Register(Register::new("rsp")), AsmValue::Const(stack_allocated as i64, Type::Quadword)));
+        }
+
+        if let Some(id) = id {
+            self.save_place(id, &Place::Register(Register::new("rax").cast(&t)));
         }
     }
 

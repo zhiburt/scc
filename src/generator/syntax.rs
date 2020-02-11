@@ -123,10 +123,7 @@ impl GASMx64 {
             AsmX32::Je(label) => format!("  je {}", label),
             AsmX32::Jne(label) => format!("  jne {}", label),
             AsmX32::Ret => format!("  ret"),
-            _ => {
-                println!("{:?}", asm);
-                unimplemented!()
-            }
+            AsmX32::Call(name) => format!( "  call {}", name),
         }
     }
 }
