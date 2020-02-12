@@ -248,9 +248,20 @@ impl Translator for X64Backend {
                 self.copy_value_on(value, place);
             }
         } else {
+            let value = if value.as_ref().unwrap().is_ref() {
+                // TODO: clang has much more attractive strategy to handle
+                // expressions like `a = b = 4`
+                // but stick with easiest one since the former one is
+                // quite hard to implement right now.
+                let register = Place::Register(Register::new("rax").cast(&t));
+                AsmValue::Place(self.copy_on(t.clone(), value.unwrap(), register))
+            } else {
+                self.const_or_allocated(t.clone(), value.unwrap())
+            };
+
             let place = self.alloc(&t);
             self.save_place(id, &place);
-            self.copy_on(t, value.unwrap(), place);
+            self.copy_value_on(value, place);
         }
     }
 
