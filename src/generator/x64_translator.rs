@@ -18,7 +18,7 @@ pub enum AsmX32 {
     Not(Place),
     Convert(Type),
     Sete(Place),
-    Setn(Place),
+    Setne(Place),
     Setl(Place),
     Setle(Place),
     Setg(Place),
@@ -349,7 +349,7 @@ impl Translator for X64Backend {
         let place = self.place(&a).unwrap().clone();
         let t = place.size();
         self.push_asm(AsmX32::Cmp(place, AsmValue::Const(0, t.clone())));
-        self.push_asm(AsmX32::Setn(Place::Register("al".into())));
+        self.push_asm(AsmX32::Setne(Place::Register("al".into())));
         self.push_asm(AsmX32::Movzx(Place::Register("eax".into()), AsmValue::Place(Place::Register("al".into()))));
 
         let place = self.alloc(&t);
@@ -383,7 +383,7 @@ impl Translator for X64Backend {
         let (place, value) = self.parse_with_move_place(t, a, b);
         self.save_place(id, &place);
         self.push_asm(AsmX32::Cmp(place, value));
-        self.push_asm(AsmX32::Setn(Place::Register("al".into())));
+        self.push_asm(AsmX32::Setne(Place::Register("al".into())));
         self.push_asm(AsmX32::Movzx(Place::Register("eax".into()), AsmValue::Place(Place::Register("al".into()))));
     }
 
@@ -1992,7 +1992,7 @@ mod translator_tests {
                     Place::Register(Register::new("eax")),
                     AsmValue::Const(20, Type::Doubleword)
                 ),
-                AsmX32::Setn(Place::Register(Register::new("al"))),
+                AsmX32::Setne(Place::Register(Register::new("al"))),
                 AsmX32::Movzx(
                     Place::Register(Register::new("eax")),
                     AsmValue::Place(Place::Register(Register::new("al")))
@@ -2018,7 +2018,7 @@ mod translator_tests {
                     Place::Register(Register::new("eax")),
                     AsmValue::Const(10, Type::Doubleword)
                 ),
-                AsmX32::Setn(Place::Register(Register::new("al"))),
+                AsmX32::Setne(Place::Register(Register::new("al"))),
                 AsmX32::Movzx(
                     Place::Register(Register::new("eax")),
                     AsmValue::Place(Place::Register(Register::new("al")))
@@ -2246,7 +2246,7 @@ mod translator_tests {
                     AsmValue::Const(10, Type::Doubleword)
                 ),
                 AsmX32::Cmp(Place::Stack(4, Type::Doubleword), AsmValue::Const(0, Type::Doubleword)),
-                AsmX32::Setn(Place::Register(Register::new("al"))),
+                AsmX32::Setne(Place::Register(Register::new("al"))),
                 AsmX32::Movzx(
                     Place::Register(Register::new("eax")),
                     AsmValue::Place(Place::Register(Register::new("al"))),

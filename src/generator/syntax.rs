@@ -76,8 +76,8 @@ impl GASMx64 {
                 "  sete {}",
                 format_place(&p),
             ),
-            AsmX32::Setn(p) => format!(
-                "  setn {}",
+            AsmX32::Setne(p) => format!(
+                "  setne {}",
                 format_place(&p),
             ),
             AsmX32::Setl(p) => format!(
