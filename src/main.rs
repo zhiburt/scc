@@ -42,23 +42,19 @@ fn main() {
 
             println!();
 
+            if !checks::function_checks::func_check(&program) {
+                eprintln!("invalid function declaration or definition");
+                std::process::exit(120);
+            }
+
+            let mut asm_file = std::fs::File::create(output_file).expect("Cannot create assembler code");
+            
             for f in tac {
-                println!(
-                    "{}\n",
-                    generator::from_tac::Transit::new(generator::x64_translator::X64Backend::new())
-                        .gen(f)
-                );
+                writeln!(asm_file,
+                    "{}",
+                    generator::from_tac::Transit::new(generator::x64_translator::X64Backend::new()).gen(f)
+                ).unwrap();
             }
         }
     }
-
-    if !checks::function_checks::func_check(&program) {
-        eprintln!("invalid function declaration or definition");
-        std::process::exit(120);
-    }
-
-    let mut asm_file = std::fs::File::create(output_file).expect("Cannot create assembler code");
-    asm_file
-        .write_all(generator::gen(program, "main").unwrap().as_ref())
-        .unwrap();
 }

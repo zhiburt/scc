@@ -261,7 +261,7 @@ impl Translator for X64Backend {
     }
 
     fn sub(&mut self, id: Id, t: Type, a: Value, b: Value) {
-        let (place, value) = self.parse_with_move_place(t, a, b);
+        let (place, value) = self.parse_with_move_place(t, b, a);
         self.save_place(id, &place);
         self.push_asm(AsmX32::Sub(place, value));
     }
