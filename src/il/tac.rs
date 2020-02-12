@@ -34,6 +34,7 @@ struct Context {
         NOTION: take away from ID as a dependency
     */
     symbols: HashMap<String, Vec<ID>>,
+    list_symbols: HashMap<String, Vec<ID>>,
     symbols_counter: usize,
     scopes: Vec<HashSet<String>>,
     loop_ctx: Vec<LoopContext>,
@@ -43,6 +44,7 @@ impl Context {
     fn new() -> Self {
         Context {
             symbols: HashMap::new(),
+            list_symbols: HashMap::new(),
             symbols_counter: 0,
             scopes: vec![HashSet::new()],
             loop_ctx: Vec::new(),
@@ -54,7 +56,19 @@ impl Context {
     }
 
     fn pop_scope(&mut self) {
-        self.scopes.pop();
+        let scope = self.scopes.pop().unwrap();
+        // TODO: might we should change the data structure since
+        // It got much more complicated for such type of typical needs
+        //
+        // Including the fact that we store the duplicates
+        // to be able to display them in pretty way it takes blazingly many resources.
+        //
+        // list_symbols was created to support pretty_output logic
+        // since it expected to get all names by IDs when we remove here the names
+        // it just cannot find them.
+        for symbol in scope {
+            self.symbols.get_mut(&symbol).unwrap().pop();
+        }
     }
 
     fn add_symbol(&mut self, name: &str) -> ID {
@@ -76,6 +90,10 @@ impl Context {
             .entry(name.to_owned())
             .or_default()
             .push(id.clone());
+        self.list_symbols.
+            entry(name.to_owned()).
+            or_default().
+            push(id.clone());
 
         id
     }
@@ -194,7 +212,7 @@ impl Generator {
 
         let vars = self
             .context
-            .symbols
+            .list_symbols
             .iter()
             .map(|(var, ids)| {
                 ids.iter()
