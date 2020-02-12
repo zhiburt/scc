@@ -20,7 +20,7 @@ struct Generator {
     instructions: Vec<InstructionLine>,
     // used to get deal with scopes
     instruction_buffer: Vec<Vec<InstructionLine>>,
-    instruction_buffer_index: usize,
+    is_buffering: bool,
     context: Context,
     label_counter: usize,
     allocated: usize,
@@ -111,7 +111,7 @@ impl Context {
     }
 
     fn get_symbol(&self, name: &str) -> Option<&ID> {
-        self.symbols.get(name).map_or(None, |ids| ids.last())
+        self.symbols.get(name).and_then(|ids| ids.last())
     }
 
     fn add_symbol_to_scope(&mut self, name: &str) -> bool {
@@ -172,7 +172,7 @@ impl Generator {
             allocated: 0,
             instructions: Vec::new(),
             instruction_buffer: Vec::new(),
-            instruction_buffer_index: 0,
+            is_buffering: false,
             context: Context::new(),
         }
     }
@@ -253,8 +253,8 @@ impl Generator {
             _ => None,
         };
 
-        if self.instruction_buffer_index > 0 {
-            self.instruction_buffer[self.instruction_buffer_index - 1].push(InstructionLine(inst, id.clone()));
+        if self.is_buffering {
+            self.instruction_buffer.last_mut().unwrap().push(InstructionLine(inst, id.clone()));
         } else {
             self.instructions.push(InstructionLine(inst, id.clone()));
         }
@@ -594,10 +594,9 @@ impl Generator {
                     self.stop_buffering();
                 }
 
-                self.end_scope();
-
                 self.start_scope();
                 self.emit_statement(statement);
+                self.end_scope();
                 self.end_scope();
 
                 if exp3.is_some() {
@@ -661,11 +660,11 @@ impl Generator {
 
     fn start_buffering(&mut self) {
         self.instruction_buffer.push(Vec::new());
-        self.instruction_buffer_index += 1;
+        self.is_buffering = true;
     }
 
     fn stop_buffering(&mut self) {
-        self.instruction_buffer_index -= 1;
+        self.is_buffering = false;
     }
     
     fn flush_buffer(&mut self) {

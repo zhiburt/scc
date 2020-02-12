@@ -19,6 +19,15 @@ impl<T: Translator> Transit<T> {
             collect::<Vec<_>>();
         self.translator.func_begin(&func.name, &params);
 
+        // TODO: Does it the best place to check the missed return statement?
+        //
+        // And does this the best way in terms of
+        // if exists if or for with return statement as well
+        // or even compound one
+        if !func.instructions.iter().any(is_return) {
+            unimplemented!();
+        }
+
         for instruction in func.instructions {
             translate(&mut self.translator, instruction);
         }
@@ -216,5 +225,12 @@ fn parse_value(v: tac::Value) -> translator::Value {
     match v {
         tac::Value::Const(tac::Const::Int(int)) => translator::Value::Const(int as i64),
         tac::Value::ID(id) => translator::Value::Ref(parse_id(id)),
+    }
+}
+
+fn is_return(line: &tac::InstructionLine) -> bool {
+    match line.0 {
+        tac::Instruction::ControlOp(tac::ControlOp::Return(..)) => true,
+        _ => false,
     }
 }
