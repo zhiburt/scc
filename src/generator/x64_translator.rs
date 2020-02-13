@@ -185,19 +185,6 @@ impl X64Backend {
 
 impl Translator for X64Backend {
     fn func_begin(&mut self, name: &str, params: &[(Type, Id)]) {
-        let registers: [Register; 6] = ["rdi".into(), "rsi".into(), "rdx".into(), "rcx".into(), "r8".into(), "r9".into()];
-
-        let mut i = 0;
-        for (t, id) in params {
-            if i < registers.len() {
-                self.save_place(id.clone(), &Place::Register(registers[i].cast(&t)));
-                i += 1;
-            } else {
-                self.stack_index += t.size() as u64;
-                self.save_place(id.clone(), &Place::Stack(self.stack_index, t.clone()));
-            }
-        }
-
         self.push_asm(AsmX32::Metadata(format!(".globl {}", name)));
         self.push_asm(AsmX32::Label(name.to_owned()));
 
@@ -206,6 +193,21 @@ impl Translator for X64Backend {
             Place::Register("rbp".into()),
             AsmValue::Place(Place::Register("rsp".into())),
         ));
+
+        let registers: [Register; 6] = ["rdi".into(), "rsi".into(), "rdx".into(), "rcx".into(), "r8".into(), "r9".into()];
+
+        let mut i = 0;
+        for (t, id) in params {
+            if i < registers.len() {
+                let place = self.alloc(&t);
+                self.save_place(*id, &place);
+                self.copy_value_on(AsmValue::Place(Place::Register(registers[i].cast(&t))), place);
+                i += 1;
+            } else {
+                // TODO: there's a difference in handling stack paramaters
+                unimplemented!()
+            }
+        }
     }
 
     fn func_end(&mut self) {
@@ -272,7 +274,7 @@ impl Translator for X64Backend {
     }
 
     fn sub(&mut self, id: Id, t: Type, a: Value, b: Value) {
-        let (place, value) = self.parse_with_move_place(t, b, a);
+        let (place, value) = self.parse_with_move_place(t, a, b);
         self.save_place(id, &place);
         self.push_asm(AsmX32::Sub(place, value));
     }
@@ -498,16 +500,31 @@ impl X64Backend {
     }
 
     fn parse_with_move_place(&mut self, t: Type, a: Value, b: Value) -> (Place, AsmValue) {
-        let (copy_value, use_value) = if a.is_ref() {
-            (a, b)
-        } else {
-            (b, a)
-        };
+        let a = self.const_or_allocated(t.clone(), a);
+        let b = self.const_or_allocated(t.clone(), b);
+        if let AsmValue::Place(Place::Stack(..)) = a {
+            if let AsmValue::Place(Place::Stack(..)) = b {
+                (
+                    self.copy_value_on(a, Place::Register(Register::new("rax").cast(&t))),
+                    b,
+                )
+            } else {
+                let place = match a {
+                    AsmValue::Place(place) => place,
+                    _ => unreachable!()
+                };
 
-        (
-            self.copy_on(t.clone(), copy_value, Place::Register(Register::new("rax").cast(&t))),
-            self.const_or_allocated(t, use_value),
-        )
+                (
+                    place,
+                    b,
+                )
+            }
+        } else {
+            (
+                self.copy_value_on(a, Place::Register(Register::new("rax").cast(&t))),
+                b,
+            )
+        }
     }
 
     fn push_asm(&mut self, i: AsmX32) {
