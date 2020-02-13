@@ -268,24 +268,60 @@ impl Translator for X64Backend {
     }
 
     fn add(&mut self, id: Id, t: Type, a: Value, b: Value) {
-        let (place, value) = self.parse_with_move_place(t, a, b);
-        self.save_place(id, &place);
-        self.push_asm(AsmX32::Add(place, value));
+        let place = Place::Register(Register::new("rax").cast(&t));
+        let value = self.const_or_allocated(t.clone(), b);
+        self.copy_on(t.clone(), a, place.clone());
+        self.push_asm(AsmX32::Add(place.clone(), value));
+        let copy_place = self.alloc(&t);
+        self.copy_value_on(AsmValue::Place(place), copy_place.clone());
+        self.save_place(id, &copy_place);
     }
 
     fn sub(&mut self, id: Id, t: Type, a: Value, b: Value) {
-        let (place, value) = self.parse_with_move_place(t, a, b);
-        self.save_place(id, &place);
-        self.push_asm(AsmX32::Sub(place, value));
+        let place = Place::Register(Register::new("rax").cast(&t));
+        let value = self.const_or_allocated(t.clone(), b);
+        self.copy_on(t.clone(), a, place.clone());
+        self.push_asm(AsmX32::Sub(place.clone(), value));
+        let copy_place = self.alloc(&t);
+        self.copy_value_on(AsmValue::Place(place), copy_place.clone());
+        self.save_place(id, &copy_place);
     }
 
     fn mul(&mut self, id: Id, t: Type, a: Value, b: Value) {
-        let (place, value) = self.parse_with_move_place(t, a, b);
-        self.save_place(id, &place);
-        self.push_asm(AsmX32::Mul(place, value));
+        let place = Place::Register(Register::new("rax").cast(&t));
+        let value = self.const_or_allocated(t.clone(), b);
+        self.copy_on(t.clone(), a, place.clone());
+        self.push_asm(AsmX32::Mul(place.clone(), value));
+        let copy_place = self.alloc(&t);
+        self.copy_value_on(AsmValue::Place(place), copy_place.clone());
+        self.save_place(id, &copy_place);
     }
 
     fn div(&mut self, id: Id, t: Type, a: Value, b: Value) {
+        let sub_register = Place::Register(Register::new("rax").cast(&t));
+        self.copy_on(t.clone(), a, sub_register.clone());
+        // To be comparable with clang, it does this operation
+        // before possible move of constant
+        self.push_asm(AsmX32::Convert(t.clone()));
+
+        let second = self.const_or_allocated(t.clone(), b);
+        let divisor_place = match second {
+            AsmValue::Place(place) => place,
+            AsmValue::Const(..) => {
+                // TODO: why do we use rcx directly why not any of others registers?
+                let remain_register = Place::Register(Register::new("rcx").cast(&t));
+                self.copy_value_on(second, remain_register.clone())
+            }
+        };
+
+        self.push_asm(AsmX32::Div(divisor_place.clone()));
+
+        let copy_place = self.alloc(&t);
+        self.save_place(id, &copy_place);
+        self.copy_value_on(AsmValue::Place(sub_register), copy_place);
+    }
+
+    fn div_reminder(&mut self, id: Id, t: Type, a: Value, b: Value) {
         let sub_register = Place::Register(Register::new("rax").cast(&t));
         let first = self.copy_on(t.clone(), a, sub_register);
         // To be comparable with clang, it does this operation
@@ -302,31 +338,41 @@ impl Translator for X64Backend {
             }
         };
 
-        self.save_place(id, &first);
-        self.push_asm(AsmX32::Div(divisor_place));
-    }
+        self.push_asm(AsmX32::Div(divisor_place.clone()));
 
-    fn div_reminder(&mut self, id: Id, t: Type, a: Value, b: Value) {
-        self.div(id, t.clone(), a, b);
-        self.push_asm(AsmX32::Mov(Place::Register(Register::new("rax").cast(&t)), AsmValue::Place(Place::Register(Register::new("rdx").cast(&t)))));
+        let copy_place = self.alloc(&t);
+        self.save_place(id, &copy_place);
+        self.copy_value_on(AsmValue::Place(Place::Register(Register::new("rdx").cast(&t))), copy_place);
     }
 
     fn bit_and(&mut self, id: Id, t: Type, a: Value, b: Value) {
-        let (place, value) = self.parse_with_move_place(t, a, b);
-        self.save_place(id, &place);
-        self.push_asm(AsmX32::And(place, value));
+        let place = Place::Register(Register::new("rax").cast(&t));
+        let value = self.const_or_allocated(t.clone(), b);
+        self.copy_on(t.clone(), a, place.clone());
+        self.push_asm(AsmX32::And(place.clone(), value));
+        let copy_place = self.alloc(&t);
+        self.copy_value_on(AsmValue::Place(place), copy_place.clone());
+        self.save_place(id, &copy_place);
     }
 
     fn bit_or(&mut self, id: Id, t: Type, a: Value, b: Value) {
-        let (place, value) = self.parse_with_move_place(t, a, b);
-        self.save_place(id, &place);
-        self.push_asm(AsmX32::Or(place, value));
+        let place = Place::Register(Register::new("rax").cast(&t));
+        let value = self.const_or_allocated(t.clone(), b);
+        self.copy_on(t.clone(), a, place.clone());
+        self.push_asm(AsmX32::Or(place.clone(), value));
+        let copy_place = self.alloc(&t);
+        self.copy_value_on(AsmValue::Place(place), copy_place.clone());
+        self.save_place(id, &copy_place);
     }
 
     fn bit_xor(&mut self, id: Id, t: Type, a: Value, b: Value) {
-        let (place, value) = self.parse_with_move_place(t, a, b);
-        self.save_place(id, &place);
-        self.push_asm(AsmX32::Xor(place, value));
+        let place = Place::Register(Register::new("rax").cast(&t));
+        let value = self.const_or_allocated(t.clone(), b);
+        self.copy_on(t.clone(), a, place.clone());
+        self.push_asm(AsmX32::Xor(place.clone(), value));
+        let copy_place = self.alloc(&t);
+        self.copy_value_on(AsmValue::Place(place), copy_place.clone());
+        self.save_place(id, &copy_place);
     }
 
     fn neg(&mut self, id: Id, a: Id) {
@@ -385,55 +431,84 @@ impl Translator for X64Backend {
 
     fn eq(&mut self, id: Id, t: Type, a: Value, b: Value) 
     {
-        let (place, value) = self.parse_with_move_place(t, a, b);
-        self.save_place(id, &place);
-        self.push_asm(AsmX32::Cmp(place, value));
+        let (place, value) = self.parse_with_move_place(t.clone(), a, b);
+        self.push_asm(AsmX32::Cmp(place.clone(), value));
         self.push_asm(AsmX32::Sete(Place::Register("al".into())));
         self.push_asm(AsmX32::Movzx(Place::Register("eax".into()), AsmValue::Place(Place::Register("al".into()))));
+        let copy_place = self.alloc(&t);
+        self.save_place(id, &copy_place);
+        self.copy_value_on(AsmValue::Place(place), copy_place);
     }
 
     fn not_eq(&mut self, id: Id, t: Type, a: Value, b: Value) {
-        let (place, value) = self.parse_with_move_place(t, a, b);
+        let (place, value) = self.parse_with_move_place(t.clone(), a, b);
         self.save_place(id, &place);
-        self.push_asm(AsmX32::Cmp(place, value));
+        self.push_asm(AsmX32::Cmp(place.clone(), value));
         self.push_asm(AsmX32::Setne(Place::Register("al".into())));
         self.push_asm(AsmX32::Movzx(Place::Register("eax".into()), AsmValue::Place(Place::Register("al".into()))));
+        let copy_place = self.alloc(&t);
+        self.save_place(id, &copy_place);
+        self.copy_value_on(AsmValue::Place(place), copy_place);
     }
 
     fn lt(&mut self, id: Id, t: Type, a: Value, b: Value) {
-        let (place, value) = self.parse_values(t, a, b);
-        self.push_asm(AsmX32::Cmp(place, value));
+        let place = Place::Register(Register::new("rax").cast(&t));
+        let value = self.const_or_allocated(t.clone(), b);
+        self.copy_on(t.clone(), a, place.clone());
+
+        self.push_asm(AsmX32::Cmp(place.clone(), value));
         self.push_asm(AsmX32::Setl(Place::Register("al".into())));
         self.push_asm(AsmX32::And(Place::Register("al".into()), AsmValue::Const(1, Type::Doubleword)));
         self.push_asm(AsmX32::Movzx(Place::Register("eax".into()), AsmValue::Place(Place::Register(Register::new("al")))));
         self.save_place(id, &Place::Register("eax".into()));
+        let copy_place = self.alloc(&t);
+        self.save_place(id, &copy_place);
+        self.copy_value_on(AsmValue::Place(place), copy_place);
     }
 
     fn le(&mut self, id: Id, t: Type, a: Value, b: Value) {
-        let (place, value) = self.parse_values(t, a, b);
-        self.push_asm(AsmX32::Cmp(place, value));
+        let place = Place::Register(Register::new("rax").cast(&t));
+        let value = self.const_or_allocated(t.clone(), b);
+        self.copy_on(t.clone(), a, place.clone());
+
+        self.push_asm(AsmX32::Cmp(place.clone(), value));
         self.push_asm(AsmX32::Setle(Place::Register("al".into())));
         self.push_asm(AsmX32::And(Place::Register("al".into()), AsmValue::Const(1, Type::Doubleword)));
         self.push_asm(AsmX32::Movzx(Place::Register("eax".into()), AsmValue::Place(Place::Register(Register::new("al")))));
         self.save_place(id, &Place::Register("eax".into()));
+        let copy_place = self.alloc(&t);
+        self.save_place(id, &copy_place);
+        self.copy_value_on(AsmValue::Place(place), copy_place);
     }
 
     fn gt(&mut self, id: Id, t: Type, a: Value, b: Value) {
-        let (place, value) = self.parse_values(t, a, b);
-        self.push_asm(AsmX32::Cmp(place, value));
+        let place = Place::Register(Register::new("rax").cast(&t));
+        let value = self.const_or_allocated(t.clone(), b);
+        self.copy_on(t.clone(), a, place.clone());
+
+        self.push_asm(AsmX32::Cmp(place.clone(), value));
         self.push_asm(AsmX32::Setg(Place::Register("al".into())));
         self.push_asm(AsmX32::And(Place::Register("al".into()), AsmValue::Const(1, Type::Doubleword)));
         self.push_asm(AsmX32::Movzx(Place::Register("eax".into()), AsmValue::Place(Place::Register(Register::new("al")))));
         self.save_place(id, &Place::Register("eax".into()));
+        let copy_place = self.alloc(&t);
+        self.save_place(id, &copy_place);
+        self.copy_value_on(AsmValue::Place(place), copy_place);
     }
 
     fn ge(&mut self, id: Id, t: Type, a: Value, b: Value) {
-        let (place, value) = self.parse_values(t, a, b);
-        self.push_asm(AsmX32::Cmp(place, value));
+        let place = Place::Register(Register::new("rax").cast(&t));
+        let value = self.const_or_allocated(t.clone(), b);
+        self.copy_on(t.clone(), a, place.clone());
+
+        self.push_asm(AsmX32::Cmp(place.clone(), value));
         self.push_asm(AsmX32::Setge(Place::Register("al".into())));
         self.push_asm(AsmX32::And(Place::Register("al".into()), AsmValue::Const(1, Type::Doubleword)));
         self.push_asm(AsmX32::Movzx(Place::Register("eax".into()), AsmValue::Place(Place::Register(Register::new("al")))));
         self.save_place(id, &Place::Register("eax".into()));
+        let copy_place = self.alloc(&t);
+        self.save_place(id, &copy_place);
+        self.copy_value_on(AsmValue::Place(place), copy_place);
     }
 
     fn ret(&mut self, t: Type, v: Value) {
