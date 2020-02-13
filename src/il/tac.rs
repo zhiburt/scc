@@ -575,9 +575,14 @@ impl Generator {
             } => {
                 let begin_label = self.uniq_label();
                 let end_label = self.uniq_label();
+                let continue_label = if exp3.is_some() {
+                    self.uniq_label()
+                } else {
+                    begin_label.clone()
+                };
 
                 self.context
-                    .push_loop(LoopContext::new(begin_label, end_label));
+                    .push_loop(LoopContext::new(continue_label, end_label));
 
                 self.start_scope();
                 self.emit_decl(decl);
@@ -600,6 +605,8 @@ impl Generator {
                 self.end_scope();
 
                 if exp3.is_some() {
+                    self.emit(Instruction::ControlOp(ControlOp::Label(continue_label)));
+
                     self.flush_buffer();
                 }
 
@@ -618,9 +625,14 @@ impl Generator {
             } => {
                 let begin_label = self.uniq_label();
                 let end_label = self.uniq_label();
+                let continue_label = if exp3.is_some() {
+                    self.uniq_label()
+                } else {
+                    begin_label.clone()
+                };
 
                 self.context
-                    .push_loop(LoopContext::new(begin_label, end_label));
+                    .push_loop(LoopContext::new(continue_label, end_label));
 
                 if let Some(exp) = exp1 {
                     self.emit_expr(exp);
@@ -635,7 +647,10 @@ impl Generator {
                 self.emit_statement(statement);
                 self.end_scope();
 
+
                 if let Some(exp3) = exp3 {
+                    self.emit(Instruction::ControlOp(ControlOp::Label(continue_label)));
+
                     self.emit_expr(exp3);
                 }
                 self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::GOTO(
