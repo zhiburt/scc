@@ -409,6 +409,8 @@ impl Translator for X64Backend {
         let t = place.size();
         self.push_asm(AsmX32::Cmp(place, AsmValue::Const(0, t.clone())));
         self.push_asm(AsmX32::Setne(Place::Register("al".into())));
+        self.push_asm(AsmX32::Xor(Place::Register("al".into()), AsmValue::Const(-1, Type::Byte)));
+        self.push_asm(AsmX32::And(Place::Register("al".into()), AsmValue::Const(1, Type::Byte)));
         self.push_asm(AsmX32::Movzx(Place::Register("eax".into()), AsmValue::Place(Place::Register("al".into()))));
 
         let place = self.alloc(&t);
