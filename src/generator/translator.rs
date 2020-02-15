@@ -47,7 +47,7 @@ impl Type {
 }
 
 pub trait Translator {
-    fn func_begin(&mut self, name: &str, params: &[(Type, Id)]);
+    fn func_begin(&mut self, name: &str, params: &[(Type, Id)], has_multi_ret: bool);
     fn func_end(&mut self);
     // TODO: might better supply &str instead of usize?
     fn label(&mut self, label: usize);

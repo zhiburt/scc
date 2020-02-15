@@ -13,23 +13,31 @@ impl<T: Translator> Transit<T> {
     }
 
     pub fn gen(&mut self, func: tac::FuncDef) -> String {
+        let count_return = func.instructions.iter().filter(|v| is_return(v)).count();
+
         let params = func.parameters.
             iter().
             map(|id| (Type::Doubleword, *id as translator::Id)).
             collect::<Vec<_>>();
-        self.translator.func_begin(&func.name, &params);
+        let has_not_one_way_return = count_return > 1 || {
+            match func.instructions.last() {
+                Some(tac::InstructionLine(tac::Instruction::ControlOp(tac::ControlOp::Return(..)), ..)) => false,
+                _ => true,
+            } 
+        };
+        self.translator.func_begin(&func.name, &params, has_not_one_way_return );
+
+        for instruction in func.instructions {
+            translate(&mut self.translator, instruction);
+        }
 
         // TODO: Does it the best place to check the missed return statement?
         //
         // And does this the best way in terms of
         // if exists if or for with return statement as well
         // or even compound one
-        if !func.instructions.iter().any(is_return) {
-            unimplemented!();
-        }
-
-        for instruction in func.instructions {
-            translate(&mut self.translator, instruction);
+        if count_return == 0 {
+            self.translator.ret(Type::Doubleword, Value::Const(0));
         }
 
         self.translator.func_end();

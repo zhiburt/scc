@@ -170,6 +170,8 @@ impl Into<Register> for &'static str {
 pub struct X64Backend {
     stack_index: u64,
     memory: HashMap<Id, Place>,
+    ret_label: Option<String>, // It's blazingly bad design step ???
+    ret_label_index: usize,
     asm: Vec<AsmX32>,
 }
 
@@ -178,13 +180,15 @@ impl X64Backend {
         X64Backend {
             memory: HashMap::new(),
             stack_index: 0,
+            ret_label: None,
+            ret_label_index: 0,
             asm: Vec::new(),
         }
     }
 }
 
 impl Translator for X64Backend {
-    fn func_begin(&mut self, name: &str, params: &[(Type, Id)]) {
+    fn func_begin(&mut self, name: &str, params: &[(Type, Id)], has_multi_ret: bool) {
         self.push_asm(AsmX32::Metadata(format!(".globl {}", name)));
         self.push_asm(AsmX32::Label(name.to_owned()));
 
@@ -208,9 +212,18 @@ impl Translator for X64Backend {
                 unimplemented!()
             }
         }
+
+        if has_multi_ret {
+            self.ret_label = Some(self.create_label())
+        }
     }
 
     fn func_end(&mut self) {
+        if let Some(ret_label) = self.ret_label.clone() {
+            self.push_asm(AsmX32::Label(ret_label));
+            self.ret_label = None;
+        }
+
         self.push_asm(AsmX32::Pop(Place::Register("rbp".into())));
         self.push_asm(AsmX32::Ret);
     }
@@ -523,6 +536,9 @@ impl Translator for X64Backend {
                 self.push_asm(AsmX32::Mov(Place::Register(return_reg), value));
             }
         }
+        if let Some(ret_label) = self.ret_label.clone() {
+            self.push_asm(AsmX32::Jmp(ret_label));
+        }
     }
 
     fn call(&mut self, id: Option<Id>, t: Type, name: &str, params: &[(Type, Value)]) {
@@ -658,6 +674,11 @@ impl X64Backend {
             AsmValue::Place(Place::Stack(.., t)) => t.clone(),
             AsmValue::Place(Place::Register(reg)) => reg.size(),
         }
+    }
+
+    fn create_label(&mut self) -> String {
+        self.ret_label_index += 1;
+        format!(".RR_{}", self.ret_label_index)
     }
 }
 
