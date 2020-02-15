@@ -439,7 +439,7 @@ impl Translator for X64Backend {
         self.push_asm(AsmX32::Movzx(Place::Register("eax".into()), AsmValue::Place(Place::Register("al".into()))));
         let copy_place = self.alloc(&t);
         self.save_place(id, &copy_place);
-        self.copy_value_on(AsmValue::Place(place), copy_place);
+        self.copy_value_on(AsmValue::Place(Place::Register("eax".into())), copy_place);
     }
 
     fn not_eq(&mut self, id: Id, t: Type, a: Value, b: Value) {
@@ -450,7 +450,7 @@ impl Translator for X64Backend {
         self.push_asm(AsmX32::Movzx(Place::Register("eax".into()), AsmValue::Place(Place::Register("al".into()))));
         let copy_place = self.alloc(&t);
         self.save_place(id, &copy_place);
-        self.copy_value_on(AsmValue::Place(place), copy_place);
+        self.copy_value_on(AsmValue::Place(Place::Register("eax".into())), copy_place);
     }
 
     fn lt(&mut self, id: Id, t: Type, a: Value, b: Value) {
@@ -547,7 +547,9 @@ impl Translator for X64Backend {
         }
 
         if let Some(id) = id {
-            self.save_place(id, &Place::Register(Register::new("rax").cast(&t)));
+            let place = self.alloc(&t);
+            self.save_place(id, &place);
+            self.copy_value_on(AsmValue::Place(Place::Register(Register::new("rax").cast(&t))), place);
         }
     }
 
