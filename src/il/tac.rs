@@ -18,8 +18,11 @@ struct Generator {
     // TODO: certainly not sure about contains this tuple
     // it has been done only for pretty_output purposes right now
     instructions: Vec<InstructionLine>,
+    // used to get deal with scopes
+    instruction_buffer: Vec<Vec<InstructionLine>>,
+    is_buffering: bool,
     context: Context,
-    counters: [usize; 3],
+    label_counter: usize,
     allocated: usize,
 }
 
@@ -31,6 +34,7 @@ struct Context {
         NOTION: take away from ID as a dependency
     */
     symbols: HashMap<String, Vec<ID>>,
+    list_symbols: HashMap<String, Vec<ID>>,
     symbols_counter: usize,
     scopes: Vec<HashSet<String>>,
     loop_ctx: Vec<LoopContext>,
@@ -40,6 +44,7 @@ impl Context {
     fn new() -> Self {
         Context {
             symbols: HashMap::new(),
+            list_symbols: HashMap::new(),
             symbols_counter: 0,
             scopes: vec![HashSet::new()],
             loop_ctx: Vec::new(),
@@ -51,7 +56,19 @@ impl Context {
     }
 
     fn pop_scope(&mut self) {
-        self.scopes.pop();
+        let scope = self.scopes.pop().unwrap();
+        // TODO: might we should change the data structure since
+        // It got much more complicated for such type of typical needs
+        //
+        // Including the fact that we store the duplicates
+        // to be able to display them in pretty way it takes blazingly many resources.
+        //
+        // list_symbols was created to support pretty_output logic
+        // since it expected to get all names by IDs when we remove here the names
+        // it just cannot find them.
+        for symbol in scope {
+            self.symbols.get_mut(&symbol).unwrap().pop();
+        }
     }
 
     fn add_symbol(&mut self, name: &str) -> ID {
@@ -73,12 +90,28 @@ impl Context {
             .entry(name.to_owned())
             .or_default()
             .push(id.clone());
+        self.list_symbols.
+            entry(name.to_owned()).
+            or_default().
+            push(id.clone());
 
         id
     }
 
+    // add_tmp method was developed in regard to have the same counter for id
+    // for Var and Tmp types even though might it's not the best place to realize this method.
+    // Might we have to switch to another approach with ID.
+    // The main concerned about that is pretty_output needs an uniq indicator for tmp and var as well.
+    // But the translation code have a strong needs in uniq one for both.
+    // It may be a smelt code, since context does not deal with tmp at all currently.
+    fn add_tmp(&mut self) -> ID {
+        let id = ID::new(self.symbols_counter, IDType::Temporary);
+        self.symbols_counter += 1;
+        id
+    }
+
     fn get_symbol(&self, name: &str) -> Option<&ID> {
-        self.symbols.get(name).map_or(None, |ids| ids.last())
+        self.symbols.get(name).and_then(|ids| ids.last())
     }
 
     fn add_symbol_to_scope(&mut self, name: &str) -> bool {
@@ -135,9 +168,11 @@ impl LoopContext {
 impl Generator {
     pub fn new() -> Self {
         Generator {
-            counters: [0, 0, 0],
+            label_counter: 0,
             allocated: 0,
             instructions: Vec::new(),
+            instruction_buffer: Vec::new(),
+            is_buffering: false,
             context: Context::new(),
         }
     }
@@ -145,7 +180,7 @@ impl Generator {
     pub fn from(g: &Generator) -> Self {
         let mut generator = Generator::new();
         // check is it copy or clone in sense of references.
-        generator.counters = g.counters;
+        generator.label_counter = g.label_counter;
         generator
     }
 
@@ -159,12 +194,14 @@ impl Generator {
             return None;
         }
 
+        let mut params = Vec::new();
         for p in func.parameters.iter() {
             /*
                 Don't allocate memory for parameters since
                 this memory was prepared by caller
             */
-            self.remember_var(&p);
+            let id = self.remember_var(&p);
+            params.push(id.id);
         }
 
         let blocks = func.blocks.as_ref().unwrap();
@@ -175,7 +212,7 @@ impl Generator {
 
         let vars = self
             .context
-            .symbols
+            .list_symbols
             .iter()
             .map(|(var, ids)| {
                 ids.iter()
@@ -191,6 +228,7 @@ impl Generator {
             frame_size: self.allocated_memory(),
             instructions: self.flush(),
             vars: vars,
+            parameters: params,
         })
     }
 
@@ -214,7 +252,13 @@ impl Generator {
             }
             _ => None,
         };
-        self.instructions.push(InstructionLine(inst, id.clone()));
+
+        if self.is_buffering {
+            self.instruction_buffer.last_mut().unwrap().push(InstructionLine(inst, id.clone()));
+        } else {
+            self.instructions.push(InstructionLine(inst, id.clone()));
+        }
+
         id
     }
 
@@ -233,10 +277,7 @@ impl Generator {
             ast::Exp::FuncCall(name, params) => {
                 // Notion: it might be useful if we don't work with IDs itself here,
                 // instead we could handle types which contains its size and id
-                let values = params
-                    .iter()
-                    .map(|exp| self.emit_expr(exp))
-                    .collect();
+                let values = params.iter().map(|exp| self.emit_expr(exp)).collect();
 
                 let types_size = params.len() * 4;
 
@@ -249,10 +290,7 @@ impl Generator {
                 let val = self.emit_expr(exp);
                 // TODO: looks like here the problem with additional tmp variable
                 let id = self
-                    .emit(Instruction::Op(Op::Unary(
-                        UnOp::from(op),
-                        val,
-                    )))
+                    .emit(Instruction::Op(Op::Unary(UnOp::from(op), val)))
                     .unwrap();
                 Value::from(id)
             }
@@ -266,16 +304,26 @@ impl Generator {
                 };
 
                 if op.is_postfix() {
-                    let var_copy = self.emit(Instruction::Alloc(Value::from(var_id.clone()))).unwrap();
+                    let var_copy = self
+                        .emit(Instruction::Alloc(Value::from(var_id.clone())))
+                        .unwrap();
                     let changed_id = self
-                        .emit(Instruction::Op(Op::Op(arithmetic_op, Value::from(var_id.clone()), one)))
+                        .emit(Instruction::Op(Op::Op(
+                            arithmetic_op,
+                            Value::from(var_id.clone()),
+                            one,
+                        )))
                         .unwrap();
                     self.emit(Instruction::Assignment(var_id, Value::from(changed_id)))
                         .unwrap();
                     Value::from(var_copy)
                 } else {
                     let changed_id = self
-                        .emit(Instruction::Op(Op::Op(arithmetic_op, Value::from(var_id.clone()), one)))
+                        .emit(Instruction::Op(Op::Op(
+                            arithmetic_op,
+                            Value::from(var_id.clone()),
+                            one,
+                        )))
                         .unwrap();
                     self.emit(Instruction::Assignment(
                         var_id,
@@ -289,7 +337,9 @@ impl Generator {
                 if let ast::BinOp::And = op {
                     let end_label = self.uniq_label();
                     let val1 = self.emit_expr(exp1);
-                    let tmp_var = self.emit(Instruction::Alloc(Value::from(Const::Int(0)))).unwrap();
+                    let tmp_var = self
+                        .emit(Instruction::Alloc(Value::from(Const::Int(0))))
+                        .unwrap();
                     self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::IfGOTO(
                         val1, end_label,
                     ))));
@@ -297,8 +347,13 @@ impl Generator {
                     self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::IfGOTO(
                         val2, end_label,
                     ))));
-                    let false_var = self.emit(Instruction::Alloc(Value::from(Const::Int(1)))).unwrap();
-                    self.emit(Instruction::Assignment(tmp_var.clone(), Value::from(false_var)));
+                    let false_var = self
+                        .emit(Instruction::Alloc(Value::from(Const::Int(1))))
+                        .unwrap();
+                    self.emit(Instruction::Assignment(
+                        tmp_var.clone(),
+                        Value::from(false_var),
+                    ));
                     self.emit(Instruction::ControlOp(ControlOp::Label(end_label)));
                     Value::from(tmp_var)
                 } else if let ast::BinOp::Or = op {
@@ -306,7 +361,9 @@ impl Generator {
                     let false_branch = self.uniq_label();
                     let end_label = self.uniq_label();
                     let val1 = self.emit_expr(exp1);
-                    let tmp_var = self.emit(Instruction::Alloc(Value::from(Const::Int(1)))).unwrap();
+                    let tmp_var = self
+                        .emit(Instruction::Alloc(Value::from(Const::Int(1))))
+                        .unwrap();
                     self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::IfGOTO(
                         val1,
                         second_branch,
@@ -324,21 +381,31 @@ impl Generator {
                         end_label,
                     ))));
                     self.emit(Instruction::ControlOp(ControlOp::Label(false_branch)));
-                    let false_var = self.emit(Instruction::Alloc(Value::from(Const::Int(0)))).unwrap();
-                    self.emit(Instruction::Assignment(tmp_var.clone(), Value::from(false_var)));
+                    let false_var = self
+                        .emit(Instruction::Alloc(Value::from(Const::Int(0))))
+                        .unwrap();
+                    self.emit(Instruction::Assignment(
+                        tmp_var.clone(),
+                        Value::from(false_var),
+                    ));
                     self.emit(Instruction::ControlOp(ControlOp::Label(end_label)));
                     Value::from(tmp_var)
                 } else {
                     let id1 = self.emit_expr(exp1);
                     let val = self.emit_expr(exp2);
-                    Value::from(self.emit(Instruction::Op(Op::Op(TypeOp::from(op), id1, val)))
-                        .unwrap())
+                    Value::from(
+                        self.emit(Instruction::Op(Op::Op(TypeOp::from(op), id1, val)))
+                            .unwrap(),
+                    )
                 }
             }
             ast::Exp::Assign(name, exp) => {
                 let var_id = self.recognize_var(name);
                 let exp_id = self.emit_expr(exp);
-                Value::from(self.emit(Instruction::Assignment(var_id, Value::from(exp_id))).unwrap())
+                Value::from(
+                    self.emit(Instruction::Assignment(var_id, Value::from(exp_id)))
+                        .unwrap(),
+                )
             }
             ast::Exp::CondExp(cond, exp1, exp2) => {
                 /*
@@ -382,10 +449,16 @@ impl Generator {
     fn emit_decl(&mut self, decl: &ast::Declaration) {
         match decl {
             ast::Declaration::Declare { name, exp } => {
-                let var_id = self.alloc_var(name);
+
                 if let Some(exp) = exp {
                     let exp_id = self.emit_expr(exp);
+                    let var_id = self.alloc_var(name);
                     self.emit(Instruction::Assignment(var_id, exp_id));
+                } else {
+                    // Allocate the value to be able to recognize it.
+                    // Do that after processing expression since there may be
+                    // a variable with the same name in the above scope
+                    let var_id = self.alloc_var(name);
                 }
             }
         }
@@ -502,13 +575,17 @@ impl Generator {
             } => {
                 let begin_label = self.uniq_label();
                 let end_label = self.uniq_label();
+                let continue_label = if exp3.is_some() {
+                    self.uniq_label()
+                } else {
+                    begin_label.clone()
+                };
 
                 self.context
-                    .push_loop(LoopContext::new(begin_label, end_label));
+                    .push_loop(LoopContext::new(continue_label, end_label));
 
                 self.start_scope();
                 self.emit_decl(decl);
-                self.end_scope();
 
                 self.emit(Instruction::ControlOp(ControlOp::Label(begin_label)));
                 let cond_val = self.emit_expr(exp2);
@@ -516,13 +593,23 @@ impl Generator {
                     cond_val, end_label,
                 ))));
 
+                if let Some(exp3) = exp3 {
+                    self.start_buffering();
+                    self.emit_expr(exp3);
+                    self.stop_buffering();
+                }
+
                 self.start_scope();
                 self.emit_statement(statement);
                 self.end_scope();
+                self.end_scope();
 
-                if let Some(exp3) = exp3 {
-                    self.emit_expr(exp3);
+                if exp3.is_some() {
+                    self.emit(Instruction::ControlOp(ControlOp::Label(continue_label)));
+
+                    self.flush_buffer();
                 }
+
                 self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::GOTO(
                     begin_label,
                 ))));
@@ -538,9 +625,14 @@ impl Generator {
             } => {
                 let begin_label = self.uniq_label();
                 let end_label = self.uniq_label();
+                let continue_label = if exp3.is_some() {
+                    self.uniq_label()
+                } else {
+                    begin_label.clone()
+                };
 
                 self.context
-                    .push_loop(LoopContext::new(begin_label, end_label));
+                    .push_loop(LoopContext::new(continue_label, end_label));
 
                 if let Some(exp) = exp1 {
                     self.emit_expr(exp);
@@ -555,7 +647,10 @@ impl Generator {
                 self.emit_statement(statement);
                 self.end_scope();
 
+
                 if let Some(exp3) = exp3 {
+                    self.emit(Instruction::ControlOp(ControlOp::Label(continue_label)));
+
                     self.emit_expr(exp3);
                 }
                 self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::GOTO(
@@ -576,6 +671,19 @@ impl Generator {
                 ))));
             }
         }
+    }
+
+    fn start_buffering(&mut self) {
+        self.instruction_buffer.push(Vec::new());
+        self.is_buffering = true;
+    }
+
+    fn stop_buffering(&mut self) {
+        self.is_buffering = false;
+    }
+    
+    fn flush_buffer(&mut self) {
+        self.instructions.extend(self.instruction_buffer.pop().unwrap());
     }
 
     // TODO: implement a a function which call something in scope
@@ -608,7 +716,7 @@ impl Generator {
 
     fn alloc_tmp(&mut self) -> ID {
         self.allocated += 1;
-        ID::new(self.inc_tmp(), IDType::Temporary)
+        self.context.add_tmp()
     }
 
     fn alloc_var(&mut self, name: &str) -> ID {
@@ -620,34 +728,10 @@ impl Generator {
         self.context.add_symbol(name)
     }
 
-    fn inc_vars(&mut self) -> usize {
-        self.counters[1] += 1;
-        self.counters[1]
-    }
-
-    fn inc_tmp(&mut self) -> usize {
-        let i = self.counters[0];
-        self.counters[0] += 1;
-        i
-    }
-
     fn uniq_label(&mut self) -> Label {
-        let l = self.counters[2];
-        self.counters[2] += 1;
+        let l = self.label_counter;
+        self.label_counter += 1;
         l
-    }
-
-    fn id(&self, tp: IDType) -> ID {
-        match tp {
-            IDType::Temporary => ID {
-                id: self.counters[0],
-                tp,
-            },
-            IDType::Var => ID {
-                id: self.counters[1],
-                tp,
-            },
-        }
     }
 }
 
@@ -695,7 +779,7 @@ impl ID {
         }
     }
 
-    fn new(id: usize, tp: IDType) -> Self {
+    pub fn new(id: usize, tp: IDType) -> Self {
         ID { id, tp }
     }
 }
@@ -773,9 +857,16 @@ pub enum Value {
 }
 
 impl Value {
-    fn id(self) -> Option<ID> {
+    pub fn id(self) -> Option<ID> {
         match self {
             Value::ID(id) => Some(id),
+            _ => None,
+        }
+    }
+
+    pub fn constant(self) -> Option<Const> {
+        match self {
+            Value::Const(c) => Some(c),
             _ => None,
         }
     }
@@ -876,6 +967,7 @@ pub enum FnType {
 #[derive(Debug)]
 pub struct FuncDef {
     pub name: String,
+    pub parameters: Vec<usize>,
     pub frame_size: BytesSize,
     pub vars: HashMap<usize, String>,
     pub instructions: Vec<InstructionLine>,

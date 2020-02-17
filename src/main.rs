@@ -39,16 +39,23 @@ fn main() {
             for f in &tac {
                 pretty_output::pretty_tac(std::io::stdout(), f);
             }
+
+            println!();
+
+            if !checks::function_checks::func_check(&program) {
+                eprintln!("invalid function declaration or definition");
+                std::process::exit(120);
+            }
+
+            let mut asm_file = std::fs::File::create(output_file).expect("Cannot create assembler code");
+            
+            let mut generator = generator::from_tac::Transit::new(generator::x64_translator::X64Backend::new());
+            for f in tac {
+                writeln!(asm_file,
+                    "{}",
+                    generator.gen(f)
+                ).unwrap();
+            }
         }
     }
-
-    if !checks::function_checks::func_check(&program) {
-        eprintln!("invalid function declaration or definition");
-        std::process::exit(120);
-    }
-
-    let mut asm_file = std::fs::File::create(output_file).expect("Cannot create assembler code");
-    asm_file
-        .write_all(generator::gen(program, "main").unwrap().as_ref())
-        .unwrap();
 }
