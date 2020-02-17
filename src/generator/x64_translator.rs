@@ -188,7 +188,7 @@ impl X64Backend {
 }
 
 impl Translator for X64Backend {
-    fn func_begin(&mut self, name: &str, params: &[(Type, Id)], has_multi_ret: bool) {
+    fn func_begin(&mut self, name: &str, params: &[(Type, Id)], has_multi_ret: bool, alloc_size: usize) {
         self.push_asm(AsmX32::Metadata(format!(".globl {}", name)));
         self.push_asm(AsmX32::Label(name.to_owned()));
 
@@ -198,8 +198,11 @@ impl Translator for X64Backend {
             AsmValue::Place(Place::Register("rsp".into())),
         ));
 
-        let registers: [Register; 6] = ["rdi".into(), "rsi".into(), "rdx".into(), "rcx".into(), "r8".into(), "r9".into()];
+        if alloc_size != 0 {
+            self.push_asm(AsmX32::Sub(Place::Register(Register::new("rsp")), AsmValue::Const(alloc_size as i64, Type::Quadword)));
+        }
 
+        let registers: [Register; 6] = ["rdi".into(), "rsi".into(), "rdx".into(), "rcx".into(), "r8".into(), "r9".into()];
         let mut i = 0;
         for (t, id) in params {
             if i < registers.len() {
@@ -218,10 +221,14 @@ impl Translator for X64Backend {
         }
     }
 
-    fn func_end(&mut self) {
+    fn func_end(&mut self, alloc_size: usize) {
         if let Some(ret_label) = self.ret_label.clone() {
             self.push_asm(AsmX32::Label(ret_label));
             self.ret_label = None;
+        }
+
+        if alloc_size != 0 {
+            self.push_asm(AsmX32::Add(Place::Register(Register::new("rsp")), AsmValue::Const(alloc_size as i64, Type::Quadword)));
         }
 
         self.push_asm(AsmX32::Pop(Place::Register("rbp".into())));
@@ -542,6 +549,14 @@ impl Translator for X64Backend {
     }
 
     fn call(&mut self, id: Option<Id>, t: Type, name: &str, params: &[(Type, Value)]) {
+        // alignment
+        self.push_asm(AsmX32::Mov(Place::Register(Register::new("rax")), AsmValue::Place(Place::Register(Register::new("rsp")))));
+        self.push_asm(AsmX32::Xor(Place::Register(Register::new("rdx")), AsmValue::Place(Place::Register(Register::new("rdx")))));
+        self.push_asm(AsmX32::Mov(Place::Register(Register::new("rcx")), AsmValue::Const(16, Type::Quadword)));
+        self.push_asm(AsmX32::Div(Place::Register(Register::new("rcx"))));
+        self.push_asm(AsmX32::Sub(Place::Register(Register::new("rsp")), AsmValue::Place(Place::Register(Register::new("rdx")))));
+        self.push_asm(AsmX32::Push(AsmValue::Place(Place::Register(Register::new("rdx")))));
+
         let registers: [Register; 6] = ["rdi".into(), "rsi".into(), "rdx".into(), "rcx".into(), "r8".into(), "r9".into()];
 
         let mut stack_allocated = 0;
@@ -562,6 +577,9 @@ impl Translator for X64Backend {
             self.push_asm(AsmX32::Add(Place::Register(Register::new("rsp")), AsmValue::Const(stack_allocated as i64, Type::Quadword)));
         }
 
+        self.push_asm(AsmX32::Pop(Place::Register(Register::new("rdx"))));
+        self.push_asm(AsmX32::Add(Place::Register(Register::new("rsp")), AsmValue::Place(Place::Register(Register::new("rdx")))));
+
         if let Some(id) = id {
             let place = self.alloc(&t);
             self.save_place(id, &place);
@@ -569,12 +587,16 @@ impl Translator for X64Backend {
         }
     }
 
-    fn stash(&self) -> String {
+    fn stash(&mut self) -> String {
         let mut buf = String::new();
         for i in &self.asm {
             buf += &super::syntax::GASMx64::to_string(i);
             buf += "\n";
         }
+
+        self.asm.clear();
+        self.stack_index = 0;
+
         buf
     }
 }

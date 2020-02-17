@@ -25,7 +25,7 @@ impl<T: Translator> Transit<T> {
                 _ => true,
             } 
         };
-        self.translator.func_begin(&func.name, &params, has_not_one_way_return );
+        self.translator.func_begin(&func.name, &params, has_not_one_way_return, func.frame_size);
 
         for instruction in func.instructions {
             translate(&mut self.translator, instruction);
@@ -40,7 +40,7 @@ impl<T: Translator> Transit<T> {
             self.translator.ret(Type::Doubleword, Value::Const(0));
         }
 
-        self.translator.func_end();
+        self.translator.func_end(func.frame_size);
 
         self.translator.stash()
     }

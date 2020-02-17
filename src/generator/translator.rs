@@ -47,8 +47,8 @@ impl Type {
 }
 
 pub trait Translator {
-    fn func_begin(&mut self, name: &str, params: &[(Type, Id)], has_multi_ret: bool);
-    fn func_end(&mut self);
+    fn func_begin(&mut self, name: &str, params: &[(Type, Id)], has_multi_ret: bool, alloc_size: usize);
+    fn func_end(&mut self, alloc_size: usize);
     // TODO: might better supply &str instead of usize?
     fn label(&mut self, label: usize);
     fn jump(&mut self, label: usize);
@@ -78,5 +78,5 @@ pub trait Translator {
     // fn module(&mut self, id: Id, t: Type, a: Value, b: Value);
     fn ret(&mut self, t: Type, v: Value);
     // fn stash<S: Syntax>(&self, syntax: S);
-    fn stash(&self) -> String;
+    fn stash(&mut self) -> String;
 }

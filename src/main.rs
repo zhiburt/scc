@@ -49,10 +49,11 @@ fn main() {
 
             let mut asm_file = std::fs::File::create(output_file).expect("Cannot create assembler code");
             
+            let mut generator = generator::from_tac::Transit::new(generator::x64_translator::X64Backend::new());
             for f in tac {
                 writeln!(asm_file,
                     "{}",
-                    generator::from_tac::Transit::new(generator::x64_translator::X64Backend::new()).gen(f)
+                    generator.gen(f)
                 ).unwrap();
             }
         }
