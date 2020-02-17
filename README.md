@@ -4,7 +4,10 @@ A compiler of C code to assembly. The great part of which is done with considera
 
 It uses `gasm` sytaxis for assembly files.
 
-> _This project takes its origin from education aims._
+
+> An SCC may be valuable for someone who has a blazing interest in compilers. It might be used for educational purposes as well on practice to take around compilers and bring an understanding of how some things work and why. And also we undoubtedly should not forget simple things not so bad as they are said :):)
+>
+> This project takes its origin from education goals.
 
 ## Usage
 
@@ -14,7 +17,7 @@ The compiler generates `asm.s` file by default.
 cargo run main.c
 ```
 
-There's a script which imitates the machure compiler to generate binary imidiately.
+There's a bash script which imitates a mature compiler to generate binary.
 The command below will produce binary file.
 
 ```
