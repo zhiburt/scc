@@ -5,4 +5,10 @@ if [[ $status -ne 0 ]]; then
 fi
 
 name_exec=${1%.*}
-gcc -m64 asm.s -o $name_exec
+compiler="gcc"
+if [[ CLANG_BACKEND -ne "" ]]
+then
+    compiler="clang"
+fi
+
+${compiler} -m64 asm.s -o $name_exec
