@@ -172,6 +172,7 @@ pub struct X64Backend {
     memory: HashMap<Id, Place>,
     ret_label: Option<String>, // It's blazingly bad design step ???
     ret_label_index: usize,
+    frame_size: usize,
     asm: Vec<AsmX32>,
 }
 
@@ -182,6 +183,7 @@ impl X64Backend {
             stack_index: 0,
             ret_label: None,
             ret_label_index: 0,
+            frame_size: 0,
             asm: Vec::new(),
         }
     }
@@ -198,6 +200,7 @@ impl Translator for X64Backend {
             AsmValue::Place(Place::Register("rsp".into())),
         ));
 
+        self.frame_size = alloc_size;
         if alloc_size != 0 {
             self.push_asm(AsmX32::Sub(Place::Register(Register::new("rsp")), AsmValue::Const(alloc_size as i64, Type::Quadword)));
         }
@@ -550,12 +553,10 @@ impl Translator for X64Backend {
 
     fn call(&mut self, id: Option<Id>, t: Type, name: &str, params: &[(Type, Value)]) {
         // alignment
-        self.push_asm(AsmX32::Mov(Place::Register(Register::new("rax")), AsmValue::Place(Place::Register(Register::new("rsp")))));
-        self.push_asm(AsmX32::Xor(Place::Register(Register::new("rdx")), AsmValue::Place(Place::Register(Register::new("rdx")))));
-        self.push_asm(AsmX32::Mov(Place::Register(Register::new("rcx")), AsmValue::Const(16, Type::Quadword)));
-        self.push_asm(AsmX32::Div(Place::Register(Register::new("rcx"))));
-        self.push_asm(AsmX32::Sub(Place::Register(Register::new("rsp")), AsmValue::Place(Place::Register(Register::new("rdx")))));
-        self.push_asm(AsmX32::Push(AsmValue::Place(Place::Register(Register::new("rdx")))));
+        if self.frame_size != 0 {
+            let padding = self.frame_size % 16;
+            self.push_asm(AsmX32::Sub(Place::Register(Register::new("rsp")), AsmValue::Const(padding as i64, Type::Quadword)));
+        }
 
         let registers: [Register; 6] = ["rdi".into(), "rsi".into(), "rdx".into(), "rcx".into(), "r8".into(), "r9".into()];
 
@@ -577,8 +578,10 @@ impl Translator for X64Backend {
             self.push_asm(AsmX32::Add(Place::Register(Register::new("rsp")), AsmValue::Const(stack_allocated as i64, Type::Quadword)));
         }
 
-        self.push_asm(AsmX32::Pop(Place::Register(Register::new("rdx"))));
-        self.push_asm(AsmX32::Add(Place::Register(Register::new("rsp")), AsmValue::Place(Place::Register(Register::new("rdx")))));
+        if self.frame_size != 0 {
+            let padding = self.frame_size % 16;
+            self.push_asm(AsmX32::Add(Place::Register(Register::new("rsp")), AsmValue::Const(padding as i64, Type::Quadword)));
+        }
 
         if let Some(id) = id {
             let place = self.alloc(&t);
