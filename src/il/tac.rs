@@ -26,6 +26,7 @@ struct Generator {
     allocated: usize,
 }
 
+// TODO: change the type make the files private and create method instead
 #[derive(Debug)]
 pub struct InstructionLine(pub Instruction, pub Option<ID>);
 
@@ -820,6 +821,13 @@ impl ID {
     pub fn new(id: usize, tp: IDType) -> Self {
         ID { id, tp }
     }
+
+    pub fn is_var(&self) -> bool {
+        match self.tp {
+            IDType::Var => true,
+            IDType::Temporary => false,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -906,6 +914,20 @@ impl Value {
         match self {
             Value::Const(c) => Some(c),
             _ => None,
+        }
+    }
+
+    pub fn as_id(&self) -> Option<&ID> {
+        match self {
+            Value::ID(id) => Some(id),
+            _ => None,
+        }
+    }
+
+    pub fn is_id(&self) -> bool {
+        match self {
+            Value::ID(..) => true,
+            _ => false,
         }
     }
 }
