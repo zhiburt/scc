@@ -87,7 +87,7 @@ impl Context {
             unimplemented!()
         }
 
-        let id = ID::new(self.symbols_counter, IDType::Var);
+        let id = self.symbols_counter;
         self.symbols_counter += 1;
         self.symbols
             .entry(name.to_owned())
@@ -108,7 +108,7 @@ impl Context {
     // But the translation code have a strong needs in uniq one for both.
     // It may be a smelt code, since context does not deal with tmp at all currently.
     fn add_tmp(&mut self) -> ID {
-        let id = ID::new(self.symbols_counter, IDType::Temporary);
+        let id = self.symbols_counter;
         self.symbols_counter += 1;
         id
     }
@@ -209,7 +209,7 @@ impl Generator {
                 this memory was prepared by caller
             */
             let id = self.remember_var(&p);
-            params.push(id.id);
+            params.push(id);
         }
 
         let blocks = func.blocks.as_ref().unwrap();
@@ -241,24 +241,11 @@ impl Generator {
             self.emit(Instruction::ControlOp(ControlOp::Return(Value::ID(v))));
         }
 
-        let vars = self
-            .context
-            .list_symbols
-            .iter()
-            .map(|(var, ids)| {
-                ids.iter()
-                    .map(|id| (id.id, var.clone()))
-                    .collect::<Vec<_>>()
-            })
-            .flatten()
-            .collect::<HashMap<usize, String>>();
-
         self.context.symbols.clear();
         Some(FuncDef {
             name: func.name.clone(),
             frame_size: self.allocated_memory(),
             instructions: self.flush(),
-            vars: vars,
             parameters: params,
         })
     }
@@ -804,37 +791,7 @@ enum Exp {
     Op(Op),
 }
 
-#[derive(Clone, Debug)]
-pub struct ID {
-    pub id: usize,
-    pub tp: IDType,
-}
-
-impl ID {
-    fn tmp() -> Self {
-        ID {
-            id: 0,
-            tp: IDType::Temporary,
-        }
-    }
-
-    pub fn new(id: usize, tp: IDType) -> Self {
-        ID { id, tp }
-    }
-
-    pub fn is_var(&self) -> bool {
-        match self.tp {
-            IDType::Var => true,
-            IDType::Temporary => false,
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub enum IDType {
-    Temporary,
-    Var,
-}
+pub type ID = usize;
 
 pub type Label = usize;
 
@@ -1029,7 +986,6 @@ pub struct FuncDef {
     pub name: String,
     pub parameters: Vec<usize>,
     pub frame_size: BytesSize,
-    pub vars: HashMap<usize, String>,
     pub instructions: Vec<InstructionLine>,
 }
 

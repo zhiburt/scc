@@ -4,8 +4,6 @@ use std::io::Write;
 use simple_c_compiler::il::tac;
 
 pub fn pretty<W: Write>(mut w: W, fun: &tac::FuncDef) {
-    let mut vars = VarView{ tmp_vars: HashMap::new(), vars: &fun.vars, tpm_counter: 0 };
-
     writeln!(w, "{}:", pretty_fun_name(&fun.name));
     writeln!(w, "  BeginFunc {}", fun.frame_size);
 
@@ -15,28 +13,23 @@ pub fn pretty<W: Write>(mut w: W, fun: &tac::FuncDef) {
                 writeln!(
                     w,
                     "  {}: {}",
-                    vars.pretty_id(id.as_ref().unwrap()),
-                    vars.pretty_val(val),
+                    pretty_id(id.as_ref().unwrap()),
+                    pretty_value(val),
                 )
                 .unwrap();
             }
             tac::Instruction::Assignment(id1, v) => {
-                writeln!(
-                    w,
-                    "  {}: {}",
-                    vars.pretty_id(id1),
-                    vars.pretty_val(v),
-                );
+                writeln!(w, "  {}: {}", pretty_id(id1), pretty_value(v),);
             }
             tac::Instruction::Call(call) => {
                 for p in call.params.iter() {
-                    writeln!(w, "  PushParam {}", vars.pretty_val(p));
+                    writeln!(w, "  PushParam {}", pretty_value(p));
                 }
 
                 writeln!(
                     w,
                     "  {}: LCall {}",
-                    vars.pretty_id(id.as_ref().unwrap()),
+                    pretty_id(id.as_ref().unwrap()),
                     pretty_fun_name(&call.name)
                 );
                 writeln!(w, "  PopParams {}", call.pop_size);
@@ -47,19 +40,19 @@ pub fn pretty<W: Write>(mut w: W, fun: &tac::FuncDef) {
                         writeln!(
                             w,
                             "  {}: {} {} {}",
-                            vars.pretty_id(id.as_ref().unwrap()),
-                            vars.pretty_val(v1),
+                            pretty_id(id.as_ref().unwrap()),
+                            pretty_value(v1),
                             pretty_type(t),
-                            vars.pretty_val(v2)
+                            pretty_value(v2)
                         );
                     }
                     tac::Op::Unary(op, v1) => {
                         writeln!(
                             w,
                             "  {}: {} {}",
-                            vars.pretty_id(id.as_ref().unwrap()),
+                            pretty_id(id.as_ref().unwrap()),
                             pretty_unary_op(op),
-                            vars.pretty_val(v1),
+                            pretty_value(v1),
                         );
                     }
                 };
@@ -72,53 +65,25 @@ pub fn pretty<W: Write>(mut w: W, fun: &tac::FuncDef) {
                     tac::Branch::GOTO(label) => {
                         writeln!(w, "  Goto {}", pretty_label(label));
                     }
-                    tac::Branch::IfGOTO(val, label) => {
-                        writeln!(
-                            w,
-                            "  IfZ {} Goto {}",
-                            vars.pretty_val(val),
-                            pretty_label(label)
-                        );
+                    tac::Branch::IfGOTO(v, label) => {
+                        writeln!(w, "  IfZ {} Goto {}", pretty_value(v), pretty_label(label));
                     }
                 },
-                tac::ControlOp::Return(value) => {
-                    writeln!(w, "  Return {}", vars.pretty_val(value)).unwrap()
-                }
+                tac::ControlOp::Return(v) => writeln!(w, "  Return {}", pretty_value(v)).unwrap(),
             },
         }
     }
 }
 
-struct VarView<'a> {
-    vars: &'a HashMap<usize, String>,
-    tmp_vars: HashMap<usize, usize>,
-    tpm_counter: usize,
+pub fn pretty_value(v: &tac::Value) -> String {
+    match v {
+        tac::Value::Const(tac::Const::Int(c)) => format!("{}", c),
+        tac::Value::ID(id) => pretty_id(id),
+    }
 }
 
-impl<'a> VarView<'a> {
-    fn pretty_id(&mut self, id: &tac::ID) -> String {
-        match id.tp {
-            tac::IDType::Var => format!("{}<{}>", self.vars[&id.id], id.id),
-            tac::IDType::Temporary => {
-                let tmp_id = if self.tmp_vars.contains_key(&id.id) {
-                    self.tmp_vars[&id.id]
-                } else {
-                    let tmp_id = self.tpm_counter;
-                    self.tmp_vars.insert(id.id, tmp_id);
-                    self.tpm_counter += 1;
-                    tmp_id
-                };
-                format!("_t{}", tmp_id)
-            },
-        }
-    }
-    
-    fn pretty_val(&mut self, v: &tac::Value) -> String {
-        match v {
-            tac::Value::ID(id) => format!("{}", self.pretty_id(id)),
-            tac::Value::Const(tac::Const::Int(val)) => format!("{}", val),
-        }
-    }
+pub fn pretty_id(id: &tac::ID) -> String {
+    format!("%{}", id)
 }
 
 pub fn pretty_label(label: &tac::Label) -> String {

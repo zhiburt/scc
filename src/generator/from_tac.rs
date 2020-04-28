@@ -169,15 +169,15 @@ fn translate(translator: &mut impl Translator, line: tac::InstructionLine) {
                     tac::Value::ID(id) => match op {
                         tac::UnOp::Neg => translator.neg(
                             parse_id(line.1.unwrap()),
-                            id.id as u32,
+                            id as u32,
                         ),
                         tac::UnOp::LogicNeg => translator.logical_neg(
                                 parse_id(line.1.unwrap()),
-                                id.id as u32 ,
+                                id as u32 ,
                         ),
                         tac::UnOp::BitComplement => translator.bitwise(
                             parse_id(line.1.unwrap()),
-                            id.id as u32,
+                            id as u32,
                         ),
                     },
 
@@ -226,7 +226,7 @@ fn translate(translator: &mut impl Translator, line: tac::InstructionLine) {
 }
 
 fn parse_id(id: tac::ID) -> translator::Id {
-    id.id as translator::Id
+    id as translator::Id
 }
 
 fn parse_value(v: tac::Value) -> translator::Value {

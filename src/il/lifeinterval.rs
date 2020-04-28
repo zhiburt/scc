@@ -7,7 +7,7 @@ pub struct Range {
     /// start is a first index where a id showed up
     start: usize,
     /// end is a last index where a id showed up
-    /// 
+    ///
     /// It's considered that on this index
     /// a variable can be safely utilized.
     end: usize,
@@ -24,7 +24,7 @@ pub fn life_intervals(instructions: &[InstructionLine]) -> BTreeMap<usize, Range
     let mut intervals = BTreeMap::new();
     for (index, InstructionLine(i, id)) in instructions.iter().enumerate().rev() {
         match id {
-            Some(id) if id.is_var() => {
+            Some(id) => {
                 // end is equal index + 1
                 // to show that it's should live more then index
                 // but on index + 1 it can be utilized as well
@@ -32,10 +32,10 @@ pub fn life_intervals(instructions: &[InstructionLine]) -> BTreeMap<usize, Range
                 // Otherwise we could not recognize difference
                 // between both these expressions
                 //
-                // `a = b + c` where let's imagine it's a place of `b`'s last absence 
+                // `a = b + c` where let's imagine it's a place of `b`'s last absence
                 // and `d = e + f` where let's imagine all of these live after this expression
                 intervals
-                    .entry(id.id)
+                    .entry(*id)
                     .and_modify(|e: &mut Range| e.start = index)
                     .or_insert(Range {
                         start: index,
@@ -45,12 +45,9 @@ pub fn life_intervals(instructions: &[InstructionLine]) -> BTreeMap<usize, Range
             _ => (),
         }
 
-        for id in instruction_ids(i) {
-            if !id.is_var() {
-                continue;
-            }
+        for id in instruction_ids(i).into_iter() {
             intervals
-                .entry(id.id)
+                .entry(id)
                 .and_modify(|e: &mut Range| e.start = index)
                 .or_insert(Range {
                     start: index,
@@ -65,8 +62,8 @@ pub fn life_intervals(instructions: &[InstructionLine]) -> BTreeMap<usize, Range
 fn instruction_ids(i: &Instruction) -> Vec<ID> {
     let mut ids = Vec::new();
     for v in instruction_values(i) {
-        if v.is_id() {
-            ids.push(v.as_id().unwrap().clone())
+        if let Value::ID(id) = v {
+            ids.push(*id)
         }
     }
 
