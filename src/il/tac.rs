@@ -38,6 +38,7 @@ struct Context {
     symbols_counter: usize,
     scopes: Vec<HashSet<String>>,
     loop_ctx: Vec<LoopContext>,
+    ret_ctx: Option<ReturnContext>,
 }
 
 impl Context {
@@ -48,6 +49,7 @@ impl Context {
             symbols_counter: 0,
             scopes: vec![HashSet::new()],
             loop_ctx: Vec::new(),
+            ret_ctx: None,
         }
     }
 
@@ -90,10 +92,10 @@ impl Context {
             .entry(name.to_owned())
             .or_default()
             .push(id.clone());
-        self.list_symbols.
-            entry(name.to_owned()).
-            or_default().
-            push(id.clone());
+        self.list_symbols
+            .entry(name.to_owned())
+            .or_default()
+            .push(id.clone());
 
         id
     }
@@ -165,6 +167,11 @@ impl LoopContext {
     }
 }
 
+struct ReturnContext {
+    save_id: ID,
+    label: Label,
+}
+
 impl Generator {
     pub fn new() -> Self {
         Generator {
@@ -206,8 +213,31 @@ impl Generator {
 
         let blocks = func.blocks.as_ref().unwrap();
 
+        let count_returns = count_returns(blocks);
+        if count_returns > 0 {
+            let ret_id = self
+                .emit(Instruction::Alloc(Value::Const(Const::Int(0))))
+                .unwrap();
+            let label = self.uniq_label();
+            self.context.ret_ctx = Some(ReturnContext {
+                save_id: ret_id,
+                label,
+            });
+        }
+
         for block in blocks {
             self.emit_block(&block);
+        }
+
+        if count_returns == 0 {
+            self.emit(Instruction::ControlOp(ControlOp::Return(Value::Const(
+                Const::Int(0),
+            ))));
+        } else if count_returns != 1 {
+            let v = self.context.ret_ctx.as_ref().unwrap().save_id.clone();
+            let l = self.context.ret_ctx.as_ref().unwrap().label.clone();
+            self.emit(Instruction::ControlOp(ControlOp::Label(l)));
+            self.emit(Instruction::ControlOp(ControlOp::Return(Value::ID(v))));
         }
 
         let vars = self
@@ -254,7 +284,10 @@ impl Generator {
         };
 
         if self.is_buffering {
-            self.instruction_buffer.last_mut().unwrap().push(InstructionLine(inst, id.clone()));
+            self.instruction_buffer
+                .last_mut()
+                .unwrap()
+                .push(InstructionLine(inst, id.clone()));
         } else {
             self.instructions.push(InstructionLine(inst, id.clone()));
         }
@@ -449,7 +482,6 @@ impl Generator {
     fn emit_decl(&mut self, decl: &ast::Declaration) {
         match decl {
             ast::Declaration::Declare { name, exp } => {
-
                 if let Some(exp) = exp {
                     let exp_id = self.emit_expr(exp);
                     let var_id = self.alloc_var(name);
@@ -480,7 +512,14 @@ impl Generator {
             }
             ast::Statement::Return { exp } => {
                 let val = self.emit_expr(exp);
-                self.emit(Instruction::ControlOp(ControlOp::Return(val)));
+                if let Some(ret) = self.context.ret_ctx.as_ref() {
+                    let save_id = ret.save_id.clone();
+                    let l = ret.label;
+                    self.emit(Instruction::Assignment(save_id, val));
+                    self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::GOTO(l))));
+                } else {
+                    self.emit(Instruction::ControlOp(ControlOp::Return(val)));
+                }
             }
             ast::Statement::Conditional {
                 cond_expr,
@@ -647,7 +686,6 @@ impl Generator {
                 self.emit_statement(statement);
                 self.end_scope();
 
-
                 if let Some(exp3) = exp3 {
                     self.emit(Instruction::ControlOp(ControlOp::Label(continue_label)));
 
@@ -681,9 +719,9 @@ impl Generator {
     fn stop_buffering(&mut self) {
         self.is_buffering = false;
     }
-    
     fn flush_buffer(&mut self) {
-        self.instructions.extend(self.instruction_buffer.pop().unwrap());
+        self.instructions
+            .extend(self.instruction_buffer.pop().unwrap());
     }
 
     // TODO: implement a a function which call something in scope
@@ -985,5 +1023,40 @@ fn assign_op_to_type_op(op: &ast::AssignmentOp) -> TypeOp {
         ast::AssignmentOp::BitXor => TypeOp::Bit(BitwiseOp::Xor),
         ast::AssignmentOp::BitLeftShift => TypeOp::Bit(BitwiseOp::LShift),
         ast::AssignmentOp::BitRightShift => TypeOp::Bit(BitwiseOp::RShift),
+    }
+}
+
+fn count_returns(blocks: &[ast::BlockItem]) -> usize {
+    let mut i = 0;
+    for b in blocks {
+        i += count_returns_bl(b)
+    }
+
+    i
+}
+
+fn count_returns_bl(b: &ast::BlockItem) -> usize {
+    match b {
+        ast::BlockItem::Statement(st) => count_returns_st(st),
+        _ => 0,
+    }
+}
+
+fn count_returns_st(st: &ast::Statement) -> usize {
+    match st {
+        ast::Statement::Return { .. } => 1,
+        ast::Statement::Conditional {
+            if_block,
+            else_block,
+            ..
+        } => count_returns_st(if_block) + else_block.as_ref().map_or(0, |st| count_returns_st(st)),
+        ast::Statement::Compound {
+            list: list @ Some(..),
+        } => count_returns(list.as_ref().unwrap()),
+        ast::Statement::For { statement, .. } => count_returns_st(statement),
+        ast::Statement::ForDecl { statement, .. } => count_returns_st(statement),
+        ast::Statement::While { statement, .. } => count_returns_st(statement),
+        ast::Statement::Do { statement, .. } => count_returns_st(statement),
+        _ => 0,
     }
 }
