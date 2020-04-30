@@ -1,5 +1,5 @@
 mod ast;
-mod visitor;
+pub mod visitor;
 
 pub use ast::*;
-pub use visitor::*;
+pub use visitor::{Visitor};

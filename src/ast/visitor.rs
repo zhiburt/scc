@@ -22,7 +22,7 @@ pub trait Visitor<'ast> {
     }
 }
 
-fn visit_statement<'ast, V: Visitor<'ast> + ?Sized>(v: &mut V, st: &'ast Statement) {
+pub fn visit_statement<'ast, V: Visitor<'ast> + ?Sized>(v: &mut V, st: &'ast Statement) {
     match st {
         Statement::Return { exp } => v.visit_expr(exp),
         Statement::Exp { exp } => {
@@ -90,7 +90,7 @@ fn visit_statement<'ast, V: Visitor<'ast> + ?Sized>(v: &mut V, st: &'ast Stateme
     }
 }
 
-fn visit_expr<'ast, V: Visitor<'ast> + ?Sized>(v: &mut V, exp: &'ast Exp) {
+pub fn visit_expr<'ast, V: Visitor<'ast> + ?Sized>(v: &mut V, exp: &'ast Exp) {
     match exp {
         Exp::BinOp(_, exp1, exp2) => {
             v.visit_expr(exp1);
@@ -115,14 +115,14 @@ fn visit_expr<'ast, V: Visitor<'ast> + ?Sized>(v: &mut V, exp: &'ast Exp) {
     }
 }
 
-fn visit_block<'ast, V: Visitor<'ast> + ?Sized>(v: &mut V, block: &'ast BlockItem) {
+pub fn visit_block<'ast, V: Visitor<'ast> + ?Sized>(v: &mut V, block: &'ast BlockItem) {
     match block {
         BlockItem::Declaration(decl) => v.visit_decl(decl),
         BlockItem::Statement(st) => v.visit_statement(st),
     }
 }
 
-fn visit_decl<'ast, V: Visitor<'ast> + ?Sized>(v: &mut V, decl: &'ast Declaration) {
+pub fn visit_decl<'ast, V: Visitor<'ast> + ?Sized>(v: &mut V, decl: &'ast Declaration) {
     match decl {
         Declaration::Declare { exp, .. } => {
             if let Some(exp) = exp {
@@ -132,7 +132,7 @@ fn visit_decl<'ast, V: Visitor<'ast> + ?Sized>(v: &mut V, decl: &'ast Declaratio
     }
 }
 
-fn visit_function<'ast, V: Visitor<'ast> + ?Sized>(v: &mut V, func: &'ast FuncDecl) {
+pub fn visit_function<'ast, V: Visitor<'ast> + ?Sized>(v: &mut V, func: &'ast FuncDecl) {
     if let Some(body) = func.blocks.as_ref() {
         for b in body {
             v.visit_block(b);
