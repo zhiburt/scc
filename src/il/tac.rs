@@ -523,17 +523,13 @@ impl Generator {
                     self.emit(Instruction::ControlOp(ControlOp::Label(end_label)));
                 }
             }
-            ast::Statement::Compound { list: list } => {
-                self.start_scope();
-
+            ast::Statement::Compound { list: list } => self.scoped(|g| {
                 if let Some(list) = list {
                     for block in list {
-                        self.emit_block(block);
+                        g.emit_block(block);
                     }
                 }
-
-                self.end_scope();
-            }
+            }),
             ast::Statement::While { exp, statement } => {
                 let begin_label = self.uniq_label();
                 let end_label = self.uniq_label();
@@ -547,9 +543,9 @@ impl Generator {
                     cond_val, end_label,
                 ))));
 
-                self.start_scope();
-                self.emit_statement(statement);
-                self.end_scope();
+                self.scoped(|g| {
+                    g.emit_statement(statement);
+                });
 
                 self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::GOTO(
                     begin_label,
@@ -567,9 +563,9 @@ impl Generator {
 
                 self.emit(Instruction::ControlOp(ControlOp::Label(begin_label)));
 
-                self.start_scope();
-                self.emit_statement(statement);
-                self.end_scope();
+                self.scoped(|g| {
+                    g.emit_statement(statement);
+                });
 
                 let cond_val = self.emit_expr(exp);
                 self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::IfGOTO(
@@ -599,26 +595,24 @@ impl Generator {
                 self.context
                     .push_loop(LoopContext::new(continue_label, end_label));
 
-                self.start_scope();
-                self.emit_decl(decl);
+                self.scoped(|g| {
+                    g.emit_decl(decl);
 
-                self.emit(Instruction::ControlOp(ControlOp::Label(begin_label)));
-                let cond_val = self.emit_expr(exp2);
-                self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::IfGOTO(
-                    cond_val, end_label,
-                ))));
+                    g.emit(Instruction::ControlOp(ControlOp::Label(begin_label)));
+                    let cond_val = g.emit_expr(exp2);
+                    g.emit(Instruction::ControlOp(ControlOp::Branch(Branch::IfGOTO(
+                        cond_val, end_label,
+                    ))));
 
-                self.start_scope();
-                self.emit_statement(statement);
-                self.end_scope();
+                    g.scoped(|g| {
+                        g.emit_statement(statement);
+                    });
 
-
-                if let Some(exp3) = exp3 {
-                    self.emit(Instruction::ControlOp(ControlOp::Label(continue_label)));
-                    self.emit_expr(exp3);
-                }
-
-                self.end_scope();
+                    if let Some(exp3) = exp3 {
+                        g.emit(Instruction::ControlOp(ControlOp::Label(continue_label)));
+                        g.emit_expr(exp3);
+                    }
+                });
 
                 self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::GOTO(
                     begin_label,
@@ -653,9 +647,9 @@ impl Generator {
                     cond_val, end_label,
                 ))));
 
-                self.start_scope();
-                self.emit_statement(statement);
-                self.end_scope();
+                self.scoped(|g| {
+                    g.emit_statement(statement);
+                });
 
                 if let Some(exp3) = exp3 {
                     self.emit(Instruction::ControlOp(ControlOp::Label(continue_label)));
@@ -682,12 +676,9 @@ impl Generator {
         }
     }
 
-    // TODO: implement a a function which call something in scope
-    fn start_scope(&mut self) {
+    fn scoped<Scoped: FnOnce(&mut Self)>(&mut self, f: Scoped) {
         self.context.push_scope();
-    }
-
-    fn end_scope(&mut self) {
+        f(self);
         self.context.pop_scope();
     }
 
