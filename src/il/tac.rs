@@ -214,7 +214,7 @@ impl Generator {
 
         let blocks = func.blocks.as_ref().unwrap();
 
-        let count_returns = count_returns(blocks);
+        let count_returns = count_returns(&func);
         if count_returns > 0 {
             let ret_id = self
                 .emit(Instruction::Alloc(Value::Const(Const::Int(0))))
@@ -1004,37 +1004,22 @@ fn assign_op_to_type_op(op: &ast::AssignmentOp) -> TypeOp {
     }
 }
 
-fn count_returns(blocks: &[ast::BlockItem]) -> usize {
-    let mut i = 0;
-    for b in blocks {
-        i += count_returns_bl(b)
-    }
+fn count_returns(func: &ast::FuncDecl) -> usize {
+    use ast::Visitor;
+    let mut counter = ReturnCounter(0);
+    counter.visit_function(func);
 
-    i
+    counter.0
 }
 
-fn count_returns_bl(b: &ast::BlockItem) -> usize {
-    match b {
-        ast::BlockItem::Statement(st) => count_returns_st(st),
-        _ => 0,
-    }
-}
+struct ReturnCounter(usize);
 
-fn count_returns_st(st: &ast::Statement) -> usize {
-    match st {
-        ast::Statement::Return { .. } => 1,
-        ast::Statement::Conditional {
-            if_block,
-            else_block,
-            ..
-        } => count_returns_st(if_block) + else_block.as_ref().map_or(0, |st| count_returns_st(st)),
-        ast::Statement::Compound {
-            list: list @ Some(..),
-        } => count_returns(list.as_ref().unwrap()),
-        ast::Statement::For { statement, .. } => count_returns_st(statement),
-        ast::Statement::ForDecl { statement, .. } => count_returns_st(statement),
-        ast::Statement::While { statement, .. } => count_returns_st(statement),
-        ast::Statement::Do { statement, .. } => count_returns_st(statement),
-        _ => 0,
+impl<'a> ast::Visitor<'a> for ReturnCounter {
+    fn visit_statement(&mut self, st: &'a ast::Statement) {
+        if matches!(st, ast::Statement::Return {..}) {
+            self.0 += 1;
+        }
+
+        ast::visitor::visit_statement(self, st);
     }
 }
