@@ -130,13 +130,6 @@ impl Context {
 
         do some stuff with context, and then it goes off the scope drop will be called
     */
-    fn push_loop(&mut self, ctx: LoopContext) {
-        self.loop_ctx.push(ctx);
-    }
-
-    fn pop_loop(&mut self) {
-        self.loop_ctx.pop();
-    }
 
     fn loop_end(&self) -> Label {
         self.loop_ctx.last().as_ref().unwrap().end
@@ -154,6 +147,7 @@ impl Context {
     }
 }
 
+#[derive(Clone)]
 struct LoopContext {
     begin: Label,
     end: Label,
@@ -531,52 +525,36 @@ impl Generator {
                 }
             }),
             ast::Statement::While { exp, statement } => {
-                let begin_label = self.uniq_label();
-                let end_label = self.uniq_label();
+                self.loop_scope(|g, ctx| {
+                    g.emit(Instruction::ControlOp(ControlOp::Label(ctx.begin)));
+                    let cond_val = g.emit_expr(exp);
+                    g.emit(Instruction::ControlOp(ControlOp::Branch(Branch::IfGOTO(
+                        cond_val, ctx.end,
+                    ))));
 
-                self.context
-                    .push_loop(LoopContext::new(begin_label, end_label));
+                    g.scoped(|g| g.emit_statement(statement));
 
-                self.emit(Instruction::ControlOp(ControlOp::Label(begin_label)));
-                let cond_val = self.emit_expr(exp);
-                self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::IfGOTO(
-                    cond_val, end_label,
-                ))));
-
-                self.scoped(|g| {
-                    g.emit_statement(statement);
+                    g.emit(Instruction::ControlOp(ControlOp::Branch(Branch::GOTO(
+                        ctx.begin,
+                    ))));
+                    g.emit(Instruction::ControlOp(ControlOp::Label(ctx.end)));
                 });
-
-                self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::GOTO(
-                    begin_label,
-                ))));
-                self.emit(Instruction::ControlOp(ControlOp::Label(end_label)));
-
-                self.context.pop_loop();
             }
             ast::Statement::Do { exp, statement } => {
-                let begin_label = self.uniq_label();
-                let end_label = self.uniq_label();
+                self.loop_scope(|g, ctx| {
+                    g.emit(Instruction::ControlOp(ControlOp::Label(ctx.begin)));
 
-                self.context
-                    .push_loop(LoopContext::new(begin_label, end_label));
+                    g.scoped(|g| g.emit_statement(statement));
 
-                self.emit(Instruction::ControlOp(ControlOp::Label(begin_label)));
-
-                self.scoped(|g| {
-                    g.emit_statement(statement);
+                    let cond_val = g.emit_expr(exp);
+                    g.emit(Instruction::ControlOp(ControlOp::Branch(Branch::IfGOTO(
+                        cond_val, ctx.end,
+                    ))));
+                    g.emit(Instruction::ControlOp(ControlOp::Branch(Branch::GOTO(
+                        ctx.begin,
+                    ))));
+                    g.emit(Instruction::ControlOp(ControlOp::Label(ctx.end)));
                 });
-
-                let cond_val = self.emit_expr(exp);
-                self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::IfGOTO(
-                    cond_val, end_label,
-                ))));
-                self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::GOTO(
-                    begin_label,
-                ))));
-                self.emit(Instruction::ControlOp(ControlOp::Label(end_label)));
-
-                self.context.pop_loop();
             }
             ast::Statement::ForDecl {
                 decl,
@@ -584,85 +562,69 @@ impl Generator {
                 exp3,
                 statement,
             } => {
-                let begin_label = self.uniq_label();
-                let end_label = self.uniq_label();
-                let continue_label = if exp3.is_some() {
-                    self.uniq_label()
-                } else {
-                    begin_label.clone()
-                };
-
-                self.context
-                    .push_loop(LoopContext::new(continue_label, end_label));
-
-                self.scoped(|g| {
-                    g.emit_decl(decl);
-
-                    g.emit(Instruction::ControlOp(ControlOp::Label(begin_label)));
-                    let cond_val = g.emit_expr(exp2);
-                    g.emit(Instruction::ControlOp(ControlOp::Branch(Branch::IfGOTO(
-                        cond_val, end_label,
-                    ))));
+                self.loop_scope(|g, ctx| {
+                    let begin_label = if exp3.is_some() {
+                        g.uniq_label()
+                    } else {
+                        ctx.begin
+                    };
 
                     g.scoped(|g| {
-                        g.emit_statement(statement);
+                        g.emit_decl(decl);
+
+                        g.emit(Instruction::ControlOp(ControlOp::Label(begin_label)));
+                        let cond_val = g.emit_expr(exp2);
+                        g.emit(Instruction::ControlOp(ControlOp::Branch(Branch::IfGOTO(
+                            cond_val, ctx.end,
+                        ))));
+
+                        g.scoped(|g| g.emit_statement(statement));
+
+                        if let Some(exp3) = exp3 {
+                            g.emit(Instruction::ControlOp(ControlOp::Label(ctx.begin)));
+                            g.emit_expr(exp3);
+                        }
                     });
 
-                    if let Some(exp3) = exp3 {
-                        g.emit(Instruction::ControlOp(ControlOp::Label(continue_label)));
-                        g.emit_expr(exp3);
-                    }
+                    g.emit(Instruction::ControlOp(ControlOp::Branch(Branch::GOTO(
+                        begin_label,
+                    ))));
+                    g.emit(Instruction::ControlOp(ControlOp::Label(ctx.end)));
                 });
-
-                self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::GOTO(
-                    begin_label,
-                ))));
-                self.emit(Instruction::ControlOp(ControlOp::Label(end_label)));
-
-                self.context.pop_loop();
             }
             ast::Statement::For {
                 exp1,
                 exp2,
                 exp3,
                 statement,
-            } => {
-                let begin_label = self.uniq_label();
-                let end_label = self.uniq_label();
-                let continue_label = if exp3.is_some() {
-                    self.uniq_label()
+            } => self.loop_scope(|g, ctx| {
+                let begin_label = if exp3.is_some() {
+                    g.uniq_label()
                 } else {
-                    begin_label.clone()
+                    ctx.begin
                 };
 
-                self.context
-                    .push_loop(LoopContext::new(continue_label, end_label));
-
                 if let Some(exp) = exp1 {
-                    self.emit_expr(exp);
+                    g.emit_expr(exp);
                 }
-                self.emit(Instruction::ControlOp(ControlOp::Label(begin_label)));
-                let cond_val = self.emit_expr(exp2);
-                self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::IfGOTO(
-                    cond_val, end_label,
+                g.emit(Instruction::ControlOp(ControlOp::Label(begin_label)));
+                let cond_val = g.emit_expr(exp2);
+                g.emit(Instruction::ControlOp(ControlOp::Branch(Branch::IfGOTO(
+                    cond_val, ctx.end,
                 ))));
 
-                self.scoped(|g| {
-                    g.emit_statement(statement);
-                });
+                g.scoped(|g| g.emit_statement(statement));
 
                 if let Some(exp3) = exp3 {
-                    self.emit(Instruction::ControlOp(ControlOp::Label(continue_label)));
+                    g.emit(Instruction::ControlOp(ControlOp::Label(ctx.begin)));
 
-                    self.emit_expr(exp3);
+                    g.emit_expr(exp3);
                 }
-                self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::GOTO(
+                g.emit(Instruction::ControlOp(ControlOp::Branch(Branch::GOTO(
                     begin_label,
                 ))));
-                self.emit(Instruction::ControlOp(ControlOp::Label(end_label)));
-
-                self.context.pop_loop();
-            }
+                g.emit(Instruction::ControlOp(ControlOp::Label(ctx.end)));
+            }),
             ast::Statement::Break => {
                 self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::GOTO(
                     self.context.loop_end(),
@@ -680,6 +642,13 @@ impl Generator {
         self.context.push_scope();
         f(self);
         self.context.pop_scope();
+    }
+
+    fn loop_scope<S: FnOnce(&mut Self, LoopContext)>(&mut self, f: S) {
+        let ctx = LoopContext::new(self.uniq_label(), self.uniq_label());
+        self.context.loop_ctx.push(ctx.clone());
+        f(self, ctx);
+        self.context.loop_ctx.pop();
     }
 
     pub fn recognize_var(&mut self, name: &str) -> ID {
