@@ -18,9 +18,6 @@ struct Generator {
     // TODO: certainly not sure about contains this tuple
     // it has been done only for pretty_output purposes right now
     instructions: Vec<InstructionLine>,
-    // used to get deal with scopes
-    instruction_buffer: Vec<Vec<InstructionLine>>,
-    is_buffering: bool,
     context: Context,
     label_counter: usize,
     allocated: usize,
@@ -179,8 +176,6 @@ impl Generator {
             label_counter: 0,
             allocated: 0,
             instructions: Vec::new(),
-            instruction_buffer: Vec::new(),
-            is_buffering: false,
             context: Context::new(),
         }
     }
@@ -271,14 +266,7 @@ impl Generator {
             _ => None,
         };
 
-        if self.is_buffering {
-            self.instruction_buffer
-                .last_mut()
-                .unwrap()
-                .push(InstructionLine(inst, id.clone()));
-        } else {
-            self.instructions.push(InstructionLine(inst, id.clone()));
-        }
+        self.instructions.push(InstructionLine(inst, id.clone()));
 
         id
     }
@@ -620,22 +608,17 @@ impl Generator {
                     cond_val, end_label,
                 ))));
 
-                if let Some(exp3) = exp3 {
-                    self.start_buffering();
-                    self.emit_expr(exp3);
-                    self.stop_buffering();
-                }
-
                 self.start_scope();
                 self.emit_statement(statement);
                 self.end_scope();
-                self.end_scope();
 
-                if exp3.is_some() {
+
+                if let Some(exp3) = exp3 {
                     self.emit(Instruction::ControlOp(ControlOp::Label(continue_label)));
-
-                    self.flush_buffer();
+                    self.emit_expr(exp3);
                 }
+
+                self.end_scope();
 
                 self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::GOTO(
                     begin_label,
@@ -697,19 +680,6 @@ impl Generator {
                 ))));
             }
         }
-    }
-
-    fn start_buffering(&mut self) {
-        self.instruction_buffer.push(Vec::new());
-        self.is_buffering = true;
-    }
-
-    fn stop_buffering(&mut self) {
-        self.is_buffering = false;
-    }
-    fn flush_buffer(&mut self) {
-        self.instructions
-            .extend(self.instruction_buffer.pop().unwrap());
     }
 
     // TODO: implement a a function which call something in scope
