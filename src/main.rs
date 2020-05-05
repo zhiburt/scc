@@ -52,6 +52,10 @@ fn main() {
             println!();
             pretty_output::pretty_tac(std::io::stdout(), f);
             println!();
+            let intervals =
+                simple_c_compiler::il::lifeinterval::LiveIntervals::new(&f.instructions);
+            writeln!(std::io::stdout(), "intervals {}\n{:?}", f.name, intervals.0).unwrap();
+            println!();
         }
     }
 
@@ -61,9 +65,5 @@ fn main() {
     }
 
     let mut asm_file = std::fs::File::create(output_file).expect("Cannot create output file");
-    let mut generator =
-        generator::from_tac::Transit::new(generator::x64_translator::X64Backend::new());
-    for f in tac {
-        writeln!(asm_file, "{}", generator.gen(f)).unwrap();
-    }
+    writeln!(asm_file, "{}", generator::gen(tac)).unwrap();
 }
