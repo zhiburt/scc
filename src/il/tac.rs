@@ -76,9 +76,7 @@ impl Context {
             /*
                 TODO: Here should be raised a error since we have added the same variable to scope
                 what is error
-
                 it may be implemented as a feature, what means that we can pass here a config of polices to such type of behavior
-
                 It's not handled anywhere above in the chain of compilation process
             */
             unimplemented!()
@@ -122,12 +120,9 @@ impl Context {
     /*
         NOTION: could we store in context more useful information?
         e.g variables context
-
         on that regard we could develop a more convenient approach like
-
         let ctx = generator.push_ctx();
         ...
-
         do some stuff with context, and then it goes off the scope drop will be called
     */
 
@@ -203,8 +198,9 @@ impl Generator {
 
         let blocks = func.blocks.as_ref().unwrap();
 
-        let count_returns = count_returns(&func);
-        if count_returns > 0 {
+        let has_function_call = has_function_call(&func);
+        let (count_returns, has_flat_return) = count_returns(&func);
+        if count_returns > 1 || !has_flat_return {
             let ret_id = self
                 .emit(Instruction::Alloc(Value::Const(Const::Int(0))))
                 .unwrap();
@@ -223,7 +219,7 @@ impl Generator {
             self.emit(Instruction::ControlOp(ControlOp::Return(Value::Const(
                 Const::Int(0),
             ))));
-        } else if count_returns != 1 {
+        } else if count_returns != 1 || !has_flat_return {
             let v = self.context.ret_ctx.as_ref().unwrap().save_id.clone();
             let l = self.context.ret_ctx.as_ref().unwrap().label.clone();
             self.emit(Instruction::ControlOp(ControlOp::Label(l)));
@@ -236,6 +232,7 @@ impl Generator {
             frame_size: self.allocated_memory(),
             instructions: self.flush(),
             parameters: params,
+            has_function_call,
         })
     }
 
@@ -350,12 +347,9 @@ impl Generator {
                     self.emit(Instruction::ControlOp(ControlOp::Branch(Branch::IfGOTO(
                         val2, end_label,
                     ))));
-                    let false_var = self
-                        .emit(Instruction::Alloc(Value::from(Const::Int(1))))
-                        .unwrap();
                     self.emit(Instruction::Assignment(
                         tmp_var.clone(),
-                        Value::from(false_var),
+                        Value::from(Const::Int(1)),
                     ));
                     self.emit(Instruction::ControlOp(ControlOp::Label(end_label)));
                     Value::from(tmp_var)
@@ -384,12 +378,9 @@ impl Generator {
                         end_label,
                     ))));
                     self.emit(Instruction::ControlOp(ControlOp::Label(false_branch)));
-                    let false_var = self
-                        .emit(Instruction::Alloc(Value::from(Const::Int(0))))
-                        .unwrap();
                     self.emit(Instruction::Assignment(
                         tmp_var.clone(),
-                        Value::from(false_var),
+                        Value::from(Const::Int(0)),
                     ));
                     self.emit(Instruction::ControlOp(ControlOp::Label(end_label)));
                     Value::from(tmp_var)
@@ -917,6 +908,7 @@ pub struct FuncDef {
     pub parameters: Vec<usize>,
     pub frame_size: BytesSize,
     pub instructions: Vec<InstructionLine>,
+    pub has_function_call: bool,
 }
 
 fn assign_op_to_type_op(op: &ast::AssignmentOp) -> TypeOp {
@@ -934,22 +926,50 @@ fn assign_op_to_type_op(op: &ast::AssignmentOp) -> TypeOp {
     }
 }
 
-fn count_returns(func: &ast::FuncDecl) -> usize {
+fn count_returns(func: &ast::FuncDecl) -> (usize, bool) {
     use ast::Visitor;
-    let mut counter = ReturnCounter(0);
+    let mut counter = ReturnCounter(0, false, 0);
     counter.visit_function(func);
 
-    counter.0
+    (counter.0, counter.1)
 }
 
-struct ReturnCounter(usize);
+// counter, is_root_return, deep_counter
+struct ReturnCounter(usize, bool, usize);
 
 impl<'a> ast::Visitor<'a> for ReturnCounter {
     fn visit_statement(&mut self, st: &'a ast::Statement) {
         if matches!(st, ast::Statement::Return {..}) {
             self.0 += 1;
+
+            if !self.1 && self.2 == 1 {
+                self.1 = true;
+            }
         }
 
+        self.2 += 1;
+
         ast::visitor::visit_statement(self, st);
+    }
+}
+
+fn has_function_call(func: &ast::FuncDecl) -> bool {
+    use ast::Visitor;
+    let mut counter = CallCounter(0);
+    counter.visit_function(func);
+
+    counter.0 > 0
+}
+
+// counter, is_root_return, deep_counter
+struct CallCounter(usize);
+
+impl<'a> ast::Visitor<'a> for CallCounter {
+    fn visit_expr(&mut self, exp: &'a ast::Exp) {
+        if matches!(exp, ast::Exp::FuncCall(..)) {
+            self.0 += 1;
+        }
+
+        ast::visitor::visit_expr(self, exp);
     }
 }
