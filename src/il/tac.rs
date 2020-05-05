@@ -8,7 +8,7 @@ pub fn il(p: &ast::Program) -> Vec<FuncDef> {
         if let Some(func) = gen.parse(fun) {
             funcs.push(func);
         }
-        gen.clear_vars();
+        gen = Generator::from(&gen);
     }
 
     funcs
