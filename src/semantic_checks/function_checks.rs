@@ -13,14 +13,25 @@ fn global_check(prog: &ast::Program) -> bool {
     let mut functions: HashMap<String, &ast::FuncDecl> = HashMap::new();
     for func in &prog.0 {
         if let Some(f) = functions.get(&func.name) {
-            if f.parameters.len() == func.parameters.len() {
-                break;
+            // redefine function
+            // 
+            // todo: not complete yet as if there's one signature and several realization we
+            // possible miss it since we save only one function and then compare every one with this.
+            //
+            // possible solution is to store all functions in HashMap<String, Vec<&ast::FuncDecl>>
+            // and after compare them
+            //
+            // In a way that multiply definitions is possible but implementations is not 
+            //  
+            if f.blocks.is_some() && func.blocks.is_some() {
+                return false;
             }
-
-            return false;
+            if f.parameters.len() != func.parameters.len() {
+                return false;
+            }
+        } else {
+            functions.insert(func.name.clone(), func);
         }
-
-        functions.insert(func.name.clone(), func);
     }
 
     return true;
