@@ -942,7 +942,7 @@ impl<'a> ast::Visitor<'a> for ReturnCounter {
         if matches!(st, ast::Statement::Return {..}) {
             self.0 += 1;
 
-            if !self.1 && self.2 == 1 {
+            if !self.1 && self.2 == 0 {
                 self.1 = true;
             }
         }
