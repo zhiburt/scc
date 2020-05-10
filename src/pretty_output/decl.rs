@@ -6,6 +6,7 @@ pub fn pretty_prog(prog: &Program) -> String {
     let mut out = Vec::new();
     for func in &prog.0 {
         out.push(printer.function(func));
+        printer.clear();
     }
 
     out.join("\n\n")
@@ -24,6 +25,11 @@ impl Printer {
             ident,
             lines: Vec::new(),
         }
+    }
+
+    fn clear(&mut self) {
+        self.lines.clear();
+        self.buf.clear();
     }
 
     fn tab<F: FnMut(&mut Printer)>(&mut self, mut f: F) {
