@@ -22,6 +22,8 @@ mod pretty_output;
     author = "Maxim Z."
 )]
 struct Opt {
+    #[clap(short = "lex", long = "pretty-lex")]
+    pretty_lex: bool,
     #[clap(short = "ast", long = "pretty-ast")]
     pretty_ast: bool,
     #[clap(short = "tac", long = "pretty-tac")]
@@ -40,6 +42,11 @@ fn main() {
     let program = std::fs::File::open(input_file).unwrap();
     let lexer = Lexer::new();
     let tokens = lexer.lex(program);
+
+    if opt.pretty_lex {
+        println!("\n{}", pretty_output::pretty_tokens(&tokens));
+    }
+
     let ast = parser::parse(tokens).expect("Cannot parse program");
 
     if opt.pretty_ast {
