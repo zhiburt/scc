@@ -28,9 +28,7 @@ impl Generator {
     }
 
     fn gen_function(&mut self, func: tac::FuncDef) {
-        let is_main = func.name == "main";
-        let mut memory_map =
-            allocator::Allocator::new(is_main, &func.parameters, &func.instructions);
+        let mut memory_map = allocator::Allocator::new(&func);
         let mut code = Vec::new();
 
         for (line, i) in func.instructions.into_iter().enumerate() {

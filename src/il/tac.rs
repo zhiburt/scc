@@ -1,5 +1,5 @@
-use crate::ast;
 use super::constant_fold;
+use crate::ast;
 use std::collections::{HashMap, HashSet};
 
 pub fn il(p: &ast::Program) -> Vec<FuncDef> {
@@ -29,11 +29,12 @@ struct Generator {
 #[derive(Debug)]
 pub struct InstructionLine(pub Instruction, pub Option<ID>);
 
-struct Context {
+#[derive(Clone)]
+pub struct Context {
     /*
         NOTION: take away from ID as a dependency
     */
-    symbols: HashMap<String, Vec<ID>>,
+    symbols: HashMap<String, Vec<ID>>, // todo: why we are using Vec<ID> here? 
     list_symbols: HashMap<String, Vec<ID>>,
     symbols_counter: usize,
     scopes: Vec<HashSet<String>>,
@@ -119,6 +120,13 @@ impl Context {
         last_scope.insert(name.to_owned())
     }
 
+    pub fn is_variable(&self, id: ID) -> bool {
+        self.symbols
+            .values()
+            .find(|ids| ids.iter().find(|&&i| i == id).map_or(false, |_| true))
+            .map_or(false, |_| true)
+    }
+
     /*
         NOTION: could we store in context more useful information?
         e.g variables context
@@ -156,6 +164,7 @@ impl LoopContext {
     }
 }
 
+#[derive(Clone)]
 struct ReturnContext {
     save_id: ID,
     label: Label,
@@ -228,13 +237,13 @@ impl Generator {
             self.emit(Instruction::ControlOp(ControlOp::Return(Value::ID(v))));
         }
 
-        self.context.symbols.clear();
         Some(FuncDef {
             name: func.name.clone(),
             frame_size: self.allocated_memory(),
             instructions: self.flush(),
             parameters: params,
             has_function_call,
+            ctx: self.context.clone(),
         })
     }
 
@@ -904,13 +913,13 @@ pub enum FnType {
     LCall,
 }
 
-#[derive(Debug)]
 pub struct FuncDef {
     pub name: String,
     pub parameters: Vec<usize>,
     pub frame_size: BytesSize,
     pub instructions: Vec<InstructionLine>,
     pub has_function_call: bool,
+    pub ctx: Context,
 }
 
 fn assign_op_to_type_op(op: &ast::AssignmentOp) -> TypeOp {

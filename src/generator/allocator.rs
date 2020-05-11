@@ -11,13 +11,13 @@ pub struct Allocator {
 }
 
 impl Allocator {
-    pub fn new(is_main: bool, params: &[tac::ID], instructions: &[tac::InstructionLine]) -> Self {
+    pub fn new(f: &tac::FuncDef) -> Self {
         let REGISTERS: &'static [asm::MachineRegister] = {
-            if is_main {
+            if f.name == "main" {
                 &["eax", "ebx", "ecx", "edx"]
             } else {
                 // let params_regs = ["edi", "esi", "edx", "ecx", "r8d", "r9d"];
-                match params.len() {
+                match f.parameters.len() {
                     6..=std::usize::MAX => &["edi", "esi", "edx", "ecx", "r8d", "r9d", "ebx"],
                     5 => &["edi", "esi", "edx", "ecx", "r8d", "ebx", "eax"],
                     4 => &["edi", "esi", "edx", "ecx", "eax"],
@@ -30,8 +30,8 @@ impl Allocator {
             }
         };
 
-        let intervals = lifeinterval::LiveIntervals::new(instructions);
-        let (mut s, stack_start) = Self::recognize_params(params);
+        let intervals = lifeinterval::LiveIntervals::new(&f.instructions);
+        let (mut s, stack_start) = Self::recognize_params(&f.parameters);
 
         let mut free = REGISTERS.to_vec();
         let mut allocated: HashMap<&str, tac::ID> = HashMap::new();
@@ -47,10 +47,9 @@ impl Allocator {
         }
 
         let mut used_registers = free.clone();
-
         let mut stack_ptr = stack_start;
-        for (index, tac::InstructionLine(i, id)) in instructions.iter().enumerate() {
-            if let tac::Instruction::Alloc(..) = i {
+        for (index, tac::InstructionLine(i, id)) in f.instructions.iter().enumerate() {
+            if matches!(i, tac::Instruction::Assignment(..)) && f.ctx.is_variable(id.unwrap()) {
                 stack_ptr += 4;
                 s.insert(
                     id.unwrap(),
