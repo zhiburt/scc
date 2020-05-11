@@ -1,11 +1,13 @@
 use crate::ast;
+use super::constant_fold;
 use std::collections::{HashMap, HashSet};
 
 pub fn il(p: &ast::Program) -> Vec<FuncDef> {
     let mut gen = Generator::new();
     let mut funcs = Vec::new();
     for fun in &p.0 {
-        if let Some(func) = gen.parse(fun) {
+        if let Some(mut func) = gen.parse(fun) {
+            constant_fold::fold(&mut func.instructions);
             funcs.push(func);
         }
         gen = Generator::from(&gen);
@@ -723,7 +725,7 @@ pub enum Op {
     Unary(UnOp, Value),
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum TypeOp {
     Arithmetic(ArithmeticOp),
     Relational(RelationalOp),
@@ -822,7 +824,7 @@ impl From<ID> for Value {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum ArithmeticOp {
     Add,
     Sub,
@@ -831,7 +833,7 @@ pub enum ArithmeticOp {
     Mod,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum BitwiseOp {
     And,
     Or,
@@ -840,7 +842,7 @@ pub enum BitwiseOp {
     RShift,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum UnOp {
     Neg,
     BitComplement,
@@ -857,7 +859,7 @@ impl UnOp {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum RelationalOp {
     Less,
     LessOrEq,
@@ -865,7 +867,7 @@ pub enum RelationalOp {
     GreaterOrEq,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum EqualityOp {
     Equal,
     NotEq,
