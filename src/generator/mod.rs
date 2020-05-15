@@ -191,7 +191,6 @@ fn checked_mov(
     b
 }
 
-
 fn checked_add(
     line: usize,
     al: &mut allocator::Allocator,
@@ -264,6 +263,119 @@ fn checked_add(
         ));
     }
     b
+}
+
+fn checked(
+    instr: &'static str,
+    line: usize,
+    al: &mut allocator::Allocator,
+    from: tac::ID,
+    to: tac::ID,
+) -> asm::Block {
+    let mut b = asm::Block::new();
+    if matches!(al.get(from).rg, asm::RegisterBackend::StackOffset(..))
+        && matches!(al.get(to).rg, asm::RegisterBackend::StackOffset(..))
+    {
+        match al.find_free_at(line) {
+            Some(reg) => {
+                b.emit(Instruction::new(
+                    "movl",
+                    vec![
+                        al.get(from).into(),
+                        asm::Register::machine(reg, asm::Size::Doubleword).into(),
+                    ],
+                ));
+                b.emit(Instruction::new(
+                    instr,
+                    vec![
+                        asm::Register::machine(reg, asm::Size::Doubleword).into(),
+                        al.get(to).into(),
+                    ],
+                ));
+            }
+            None => {
+                let reg = al.live_at(line).first().unwrap().clone();
+                let offset = al.alloc_stack();
+                b.emit(Instruction::new(
+                    "movl",
+                    vec![
+                        reg.into(),
+                        asm::Register::new(
+                            asm::RegisterBackend::StackOffset(offset),
+                            asm::Size::Doubleword,
+                        )
+                        .into(),
+                    ],
+                ));
+
+                b.emit(Instruction::new(
+                    "movl",
+                    vec![al.get(from).into(), reg.into()],
+                ));
+
+                b.emit(Instruction::new(instr, vec![reg.into(), al.get(to).into()]));
+
+                b.emit(Instruction::new(
+                    "movl",
+                    vec![
+                        asm::Register::new(
+                            asm::RegisterBackend::StackOffset(offset),
+                            asm::Size::Doubleword,
+                        )
+                        .into(),
+                        reg.into(),
+                    ],
+                ));
+            }
+        }
+    } else {
+        b.emit(Instruction::new(
+            instr,
+            vec![al.get(from).into(), al.get(to).into()],
+        ));
+    }
+    b
+}
+
+fn get_register(
+    line: usize,
+    al: &mut allocator::Allocator,
+) -> (asm::MachineRegister, asm::Block, asm::Block) {
+    match al.find_free_at(line) {
+        Some(reg) => (reg, asm::Block::new(), asm::Block::new()),
+        None => {
+            let reg = al.live_at(line).first().unwrap().clone();
+            let offset = al.alloc_stack();
+
+            let mut spill = asm::Block::new();
+            spill.emit(Instruction::new(
+                "movl",
+                vec![
+                    reg.into(),
+                    asm::Register::new(
+                        asm::RegisterBackend::StackOffset(offset),
+                        asm::Size::Doubleword,
+                    )
+                    .into(),
+                ],
+            ));
+
+            let mut unspill = asm::Block::new();
+            unspill.emit(Instruction::new(
+                "movl",
+                vec![
+                    asm::Register::new(
+                        asm::RegisterBackend::StackOffset(offset),
+                        asm::Size::Doubleword,
+                    )
+                    .into(),
+                    reg.into(),
+                ],
+            ));
+
+            (reg.as_machine(), spill, unspill)
+        }
+    }
 }
 
 fn translate(
@@ -2320,78 +2432,164 @@ fn translate(
             tac::Value::ID(lhs),
             tac::Value::ID(rhs),
         )) => {
-            b.emit(Instruction::new(
-                "cmpl",
-                vec![map.get(lhs).into(), map.get(rhs).into()],
-            ));
-            b.emit(Instruction::new(
-                "sete",
-                vec![map.get(id.unwrap()).as_byte().into()],
-            ));
-            b.emit(Instruction::new(
-                "andb",
-                vec![asm::Const(1).into(), map.get(id.unwrap()).as_byte().into()],
-            ));
+            if matches!(
+                map.get(id.unwrap()).rg,
+                asm::RegisterBackend::StackOffset(..)
+            ) {
+                let (reg, spill, unspill) = get_register(line, map);
+                let reg = asm::Register::machine(reg, asm::Size::Doubleword);
+                b += spill;
+                b += checked("cmpl", line, &mut map, lhs, rhs);
+                b.emit(Instruction::new("sete", vec![reg.as_byte().into()]));
+                b.emit(Instruction::new(
+                    "andb",
+                    vec![asm::Const(1).into(), reg.as_byte().into()],
+                ));
 
-            b.emit(Instruction::new(
-                "movzbl",
-                vec![
-                    map.get(id.unwrap()).as_byte().into(),
-                    map.get(id.unwrap()).into(),
-                ],
-            ));
+                b.emit(Instruction::new(
+                    "movzbl",
+                    vec![reg.as_byte().into(), reg.into()],
+                ));
+
+                b.emit(Instruction::new(
+                    "movl",
+                    vec![reg.into(), map.get(id.unwrap()).into()],
+                ));
+
+                b += unspill;
+            } else {
+                b += checked("cmpl", line, &mut map, lhs, rhs);
+                b.emit(Instruction::new(
+                    "sete",
+                    vec![map.get(id.unwrap()).as_byte().into()],
+                ));
+                b.emit(Instruction::new(
+                    "andb",
+                    vec![asm::Const(1).into(), map.get(id.unwrap()).as_byte().into()],
+                ));
+
+                b.emit(Instruction::new(
+                    "movzbl",
+                    vec![
+                        map.get(id.unwrap()).as_byte().into(),
+                        map.get(id.unwrap()).into(),
+                    ],
+                ));
+            }
         }
         tac::Instruction::Op(tac::Op::Op(
             tac::TypeOp::Equality(tac::EqualityOp::Equal),
             tac::Value::ID(lhs),
             tac::Value::Const(tac::Const::Int(rhs)),
         )) => {
-            b.emit(Instruction::new(
-                "cmpl",
-                vec![asm::Const(rhs).into(), map.get(lhs).into()],
-            ));
-            b.emit(Instruction::new(
-                "sete",
-                vec![map.get(id.unwrap()).as_byte().into()],
-            ));
-            b.emit(Instruction::new(
-                "andb",
-                vec![asm::Const(1).into(), map.get(id.unwrap()).as_byte().into()],
-            ));
+            if matches!(
+                map.get(id.unwrap()).rg,
+                asm::RegisterBackend::StackOffset(..)
+            ) {
+                let (reg, spill, unspill) = get_register(line, map);
+                let reg = asm::Register::machine(reg, asm::Size::Doubleword);
+                b += spill;
 
-            b.emit(Instruction::new(
-                "movzbl",
-                vec![
-                    map.get(id.unwrap()).as_byte().into(),
-                    map.get(id.unwrap()).into(),
-                ],
-            ));
+                b.emit(Instruction::new(
+                    "cmpl",
+                    vec![asm::Const(rhs).into(), map.get(lhs).into()],
+                ));
+                b.emit(Instruction::new("sete", vec![reg.as_byte().into()]));
+                b.emit(Instruction::new(
+                    "andb",
+                    vec![asm::Const(1).into(), reg.as_byte().into()],
+                ));
+
+                b.emit(Instruction::new(
+                    "movzbl",
+                    vec![reg.as_byte().into(), reg.into()],
+                ));
+
+                b.emit(Instruction::new(
+                    "movl",
+                    vec![reg.into(), map.get(id.unwrap()).into()],
+                ));
+
+                b += unspill;
+            } else {
+                b.emit(Instruction::new(
+                    "cmpl",
+                    vec![asm::Const(rhs).into(), map.get(lhs).into()],
+                ));
+                b.emit(Instruction::new(
+                    "sete",
+                    vec![map.get(id.unwrap()).as_byte().into()],
+                ));
+                b.emit(Instruction::new(
+                    "andb",
+                    vec![asm::Const(1).into(), map.get(id.unwrap()).as_byte().into()],
+                ));
+
+                b.emit(Instruction::new(
+                    "movzbl",
+                    vec![
+                        map.get(id.unwrap()).as_byte().into(),
+                        map.get(id.unwrap()).into(),
+                    ],
+                ));
+            }
         }
         tac::Instruction::Op(tac::Op::Op(
             tac::TypeOp::Equality(tac::EqualityOp::Equal),
             tac::Value::Const(tac::Const::Int(lhs)),
             tac::Value::ID(rhs),
         )) => {
-            b.emit(Instruction::new(
-                "cmpl",
-                vec![asm::Const(lhs).into(), map.get(rhs).into()],
-            ));
-            b.emit(Instruction::new(
-                "sete",
-                vec![map.get(id.unwrap()).as_byte().into()],
-            ));
-            b.emit(Instruction::new(
-                "andb",
-                vec![asm::Const(1).into(), map.get(id.unwrap()).as_byte().into()],
-            ));
+            if matches!(
+                map.get(id.unwrap()).rg,
+                asm::RegisterBackend::StackOffset(..)
+            ) {
+                let (reg, spill, unspill) = get_register(line, map);
+                let reg = asm::Register::machine(reg, asm::Size::Doubleword);
+                b += spill;
 
-            b.emit(Instruction::new(
-                "movzbl",
-                vec![
-                    map.get(id.unwrap()).as_byte().into(),
-                    map.get(id.unwrap()).into(),
-                ],
-            ));
+                b.emit(Instruction::new(
+                    "cmpl",
+                    vec![asm::Const(lhs).into(), map.get(rhs).into()],
+                ));
+                b.emit(Instruction::new("sete", vec![reg.as_byte().into()]));
+                b.emit(Instruction::new(
+                    "andb",
+                    vec![asm::Const(1).into(), reg.as_byte().into()],
+                ));
+
+                b.emit(Instruction::new(
+                    "movzbl",
+                    vec![reg.as_byte().into(), reg.into()],
+                ));
+
+                b.emit(Instruction::new(
+                    "movl",
+                    vec![reg.into(), map.get(id.unwrap()).into()],
+                ));
+
+                b += unspill;
+            } else {
+                b.emit(Instruction::new(
+                    "cmpl",
+                    vec![asm::Const(lhs).into(), map.get(rhs).into()],
+                ));
+                b.emit(Instruction::new(
+                    "sete",
+                    vec![map.get(id.unwrap()).as_byte().into()],
+                ));
+                b.emit(Instruction::new(
+                    "andb",
+                    vec![asm::Const(1).into(), map.get(id.unwrap()).as_byte().into()],
+                ));
+
+                b.emit(Instruction::new(
+                    "movzbl",
+                    vec![
+                        map.get(id.unwrap()).as_byte().into(),
+                        map.get(id.unwrap()).into(),
+                    ],
+                ));
+            }
         }
         tac::Instruction::Op(tac::Op::Op(
             tac::TypeOp::Equality(tac::EqualityOp::Equal),
@@ -2445,78 +2643,164 @@ fn translate(
             tac::Value::ID(lhs),
             tac::Value::ID(rhs),
         )) => {
-            b.emit(Instruction::new(
-                "cmpl",
-                vec![map.get(lhs).into(), map.get(rhs).into()],
-            ));
-            b.emit(Instruction::new(
-                "setne",
-                vec![map.get(id.unwrap()).as_byte().into()],
-            ));
-            b.emit(Instruction::new(
-                "andb",
-                vec![asm::Const(1).into(), map.get(id.unwrap()).as_byte().into()],
-            ));
+            if matches!(
+                map.get(id.unwrap()).rg,
+                asm::RegisterBackend::StackOffset(..)
+            ) {
+                let (reg, spill, unspill) = get_register(line, map);
+                let reg = asm::Register::machine(reg, asm::Size::Doubleword);
+                b += spill;
+                b += checked("cmpl", line, &mut map, lhs, rhs);
+                b.emit(Instruction::new("setne", vec![reg.as_byte().into()]));
+                b.emit(Instruction::new(
+                    "andb",
+                    vec![asm::Const(1).into(), reg.as_byte().into()],
+                ));
 
-            b.emit(Instruction::new(
-                "movzbl",
-                vec![
-                    map.get(id.unwrap()).as_byte().into(),
-                    map.get(id.unwrap()).into(),
-                ],
-            ));
+                b.emit(Instruction::new(
+                    "movzbl",
+                    vec![reg.as_byte().into(), reg.into()],
+                ));
+
+                b.emit(Instruction::new(
+                    "movl",
+                    vec![reg.into(), map.get(id.unwrap()).into()],
+                ));
+
+                b += unspill;
+            } else {
+                b += checked("cmpl", line, &mut map, lhs, rhs);
+                b.emit(Instruction::new(
+                    "setne",
+                    vec![map.get(id.unwrap()).as_byte().into()],
+                ));
+                b.emit(Instruction::new(
+                    "andb",
+                    vec![asm::Const(1).into(), map.get(id.unwrap()).as_byte().into()],
+                ));
+
+                b.emit(Instruction::new(
+                    "movzbl",
+                    vec![
+                        map.get(id.unwrap()).as_byte().into(),
+                        map.get(id.unwrap()).into(),
+                    ],
+                ));
+            }
         }
         tac::Instruction::Op(tac::Op::Op(
             tac::TypeOp::Equality(tac::EqualityOp::NotEq),
             tac::Value::ID(lhs),
             tac::Value::Const(tac::Const::Int(rhs)),
         )) => {
-            b.emit(Instruction::new(
-                "cmpl",
-                vec![asm::Const(rhs).into(), map.get(lhs).into()],
-            ));
-            b.emit(Instruction::new(
-                "setne",
-                vec![map.get(id.unwrap()).as_byte().into()],
-            ));
-            b.emit(Instruction::new(
-                "andb",
-                vec![asm::Const(1).into(), map.get(id.unwrap()).as_byte().into()],
-            ));
+            if matches!(
+                map.get(id.unwrap()).rg,
+                asm::RegisterBackend::StackOffset(..)
+            ) {
+                let (reg, spill, unspill) = get_register(line, map);
+                let reg = asm::Register::machine(reg, asm::Size::Doubleword);
+                b += spill;
 
-            b.emit(Instruction::new(
-                "movzbl",
-                vec![
-                    map.get(id.unwrap()).as_byte().into(),
-                    map.get(id.unwrap()).into(),
-                ],
-            ));
+                b.emit(Instruction::new(
+                    "cmpl",
+                    vec![asm::Const(rhs).into(), map.get(lhs).into()],
+                ));
+                b.emit(Instruction::new("setne", vec![reg.as_byte().into()]));
+                b.emit(Instruction::new(
+                    "andb",
+                    vec![asm::Const(1).into(), reg.as_byte().into()],
+                ));
+
+                b.emit(Instruction::new(
+                    "movzbl",
+                    vec![reg.as_byte().into(), reg.into()],
+                ));
+
+                b.emit(Instruction::new(
+                    "movl",
+                    vec![reg.into(), map.get(id.unwrap()).into()],
+                ));
+
+                b += unspill;
+            } else {
+                b.emit(Instruction::new(
+                    "cmpl",
+                    vec![asm::Const(rhs).into(), map.get(lhs).into()],
+                ));
+                b.emit(Instruction::new(
+                    "setne",
+                    vec![map.get(id.unwrap()).as_byte().into()],
+                ));
+                b.emit(Instruction::new(
+                    "andb",
+                    vec![asm::Const(1).into(), map.get(id.unwrap()).as_byte().into()],
+                ));
+
+                b.emit(Instruction::new(
+                    "movzbl",
+                    vec![
+                        map.get(id.unwrap()).as_byte().into(),
+                        map.get(id.unwrap()).into(),
+                    ],
+                ));
+            }
         }
         tac::Instruction::Op(tac::Op::Op(
             tac::TypeOp::Equality(tac::EqualityOp::NotEq),
             tac::Value::Const(tac::Const::Int(lhs)),
             tac::Value::ID(rhs),
         )) => {
-            b.emit(Instruction::new(
-                "cmpl",
-                vec![asm::Const(lhs).into(), map.get(rhs).into()],
-            ));
-            b.emit(Instruction::new(
-                "setne",
-                vec![map.get(id.unwrap()).as_byte().into()],
-            ));
-            b.emit(Instruction::new(
-                "andb",
-                vec![asm::Const(1).into(), map.get(id.unwrap()).as_byte().into()],
-            ));
+            if matches!(
+                map.get(id.unwrap()).rg,
+                asm::RegisterBackend::StackOffset(..)
+            ) {
+                let (reg, spill, unspill) = get_register(line, map);
+                let reg = asm::Register::machine(reg, asm::Size::Doubleword);
+                b += spill;
 
-            b.emit(Instruction::new(
-                "movzbl",
-                vec![
-                    map.get(id.unwrap()).as_byte().into(),
-                    map.get(id.unwrap()).into(),
-                ],
-            ));
+                b.emit(Instruction::new(
+                    "cmpl",
+                    vec![asm::Const(lhs).into(), map.get(rhs).into()],
+                ));
+                b.emit(Instruction::new("setne", vec![reg.as_byte().into()]));
+                b.emit(Instruction::new(
+                    "andb",
+                    vec![asm::Const(1).into(), reg.as_byte().into()],
+                ));
+
+                b.emit(Instruction::new(
+                    "movzbl",
+                    vec![reg.as_byte().into(), reg.into()],
+                ));
+
+                b.emit(Instruction::new(
+                    "movl",
+                    vec![reg.into(), map.get(id.unwrap()).into()],
+                ));
+
+                b += unspill;
+            } else {
+                b.emit(Instruction::new(
+                    "cmpl",
+                    vec![asm::Const(lhs).into(), map.get(rhs).into()],
+                ));
+                b.emit(Instruction::new(
+                    "setne",
+                    vec![map.get(id.unwrap()).as_byte().into()],
+                ));
+                b.emit(Instruction::new(
+                    "andb",
+                    vec![asm::Const(1).into(), map.get(id.unwrap()).as_byte().into()],
+                ));
+
+                b.emit(Instruction::new(
+                    "movzbl",
+                    vec![
+                        map.get(id.unwrap()).as_byte().into(),
+                        map.get(id.unwrap()).into(),
+                    ],
+                ));
+            }
         }
         tac::Instruction::Op(tac::Op::Op(
             tac::TypeOp::Equality(tac::EqualityOp::NotEq),
@@ -2570,84 +2854,172 @@ fn translate(
             tac::Value::ID(lhs),
             tac::Value::ID(rhs),
         )) => {
-            // TODO: all relation operation such as this a bit broken since
-            // it's impossible to compare stack-offset with one more offset
-            b.emit(Instruction::new(
-                "cmpl",
-                vec![map.get(rhs).into(), map.get(lhs).into()],
-            ));
-            b.emit(Instruction::new(
-                "setl",
-                vec![map.get(id.unwrap()).as_byte().into()],
-            ));
-            b.emit(Instruction::new(
-                "andb",
-                vec![asm::Const(1).into(), map.get(id.unwrap()).as_byte().into()],
-            ));
+            if matches!(
+                map.get(id.unwrap()).rg,
+                asm::RegisterBackend::StackOffset(..)
+            ) {
+                let (reg, spill, unspill) = get_register(line, map);
+                let reg = asm::Register::machine(reg, asm::Size::Doubleword);
+                b += spill;
+                b += checked("cmpl", line, &mut map, rhs, lhs);
+                b.emit(Instruction::new("setl", vec![reg.as_byte().into()]));
+                b.emit(Instruction::new(
+                    "andb",
+                    vec![asm::Const(1).into(), reg.as_byte().into()],
+                ));
 
-            b.emit(Instruction::new(
-                "movzbl",
-                vec![
-                    map.get(id.unwrap()).as_byte().into(),
-                    map.get(id.unwrap()).into(),
-                ],
-            ));
+                b.emit(Instruction::new(
+                    "movzbl",
+                    vec![reg.as_byte().into(), reg.into()],
+                ));
+
+                b.emit(Instruction::new(
+                    "movl",
+                    vec![reg.into(), map.get(id.unwrap()).into()],
+                ));
+
+                b += unspill;
+            } else {
+                b += checked("cmpl", line, &mut map, rhs, lhs);
+                b.emit(Instruction::new(
+                    "setl",
+                    vec![map.get(id.unwrap()).as_byte().into()],
+                ));
+                b.emit(Instruction::new(
+                    "andb",
+                    vec![asm::Const(1).into(), map.get(id.unwrap()).as_byte().into()],
+                ));
+
+                b.emit(Instruction::new(
+                    "movzbl",
+                    vec![
+                        map.get(id.unwrap()).as_byte().into(),
+                        map.get(id.unwrap()).into(),
+                    ],
+                ));
+            }
         }
         tac::Instruction::Op(tac::Op::Op(
             tac::TypeOp::Relational(tac::RelationalOp::Less),
             tac::Value::ID(lhs),
             tac::Value::Const(tac::Const::Int(rhs)),
         )) => {
-            b.emit(Instruction::new(
-                "cmpl",
-                vec![asm::Const(rhs).into(), map.get(lhs).into()],
-            ));
-            b.emit(Instruction::new(
-                "setl",
-                vec![map.get(id.unwrap()).as_byte().into()],
-            ));
-            b.emit(Instruction::new(
-                "andb",
-                vec![asm::Const(1).into(), map.get(id.unwrap()).as_byte().into()],
-            ));
+            if matches!(
+                map.get(id.unwrap()).rg,
+                asm::RegisterBackend::StackOffset(..)
+            ) {
+                let (reg, spill, unspill) = get_register(line, map);
+                let reg = asm::Register::machine(reg, asm::Size::Doubleword);
+                b += spill;
 
-            b.emit(Instruction::new(
-                "movzbl",
-                vec![
-                    map.get(id.unwrap()).as_byte().into(),
-                    map.get(id.unwrap()).into(),
-                ],
-            ));
+                b.emit(Instruction::new(
+                    "cmpl",
+                    vec![asm::Const(rhs).into(), map.get(lhs).into()],
+                ));
+                b.emit(Instruction::new("setl", vec![reg.as_byte().into()]));
+                b.emit(Instruction::new(
+                    "andb",
+                    vec![asm::Const(1).into(), reg.as_byte().into()],
+                ));
+
+                b.emit(Instruction::new(
+                    "movzbl",
+                    vec![reg.as_byte().into(), reg.into()],
+                ));
+
+                b.emit(Instruction::new(
+                    "movl",
+                    vec![reg.into(), map.get(id.unwrap()).into()],
+                ));
+
+                b += unspill;
+            } else {
+                b.emit(Instruction::new(
+                    "cmpl",
+                    vec![asm::Const(rhs).into(), map.get(lhs).into()],
+                ));
+                b.emit(Instruction::new(
+                    "setl",
+                    vec![map.get(id.unwrap()).as_byte().into()],
+                ));
+                b.emit(Instruction::new(
+                    "andb",
+                    vec![asm::Const(1).into(), map.get(id.unwrap()).as_byte().into()],
+                ));
+
+                b.emit(Instruction::new(
+                    "movzbl",
+                    vec![
+                        map.get(id.unwrap()).as_byte().into(),
+                        map.get(id.unwrap()).into(),
+                    ],
+                ));
+            }
         }
         tac::Instruction::Op(tac::Op::Op(
             tac::TypeOp::Relational(tac::RelationalOp::Less),
             tac::Value::Const(tac::Const::Int(lhs)),
             tac::Value::ID(rhs),
         )) => {
-            b.emit(Instruction::new(
-                "movl",
-                vec![asm::Const(lhs).into(), map.get(id.unwrap()).into()],
-            ));
-            b.emit(Instruction::new(
-                "cmpl",
-                vec![map.get(rhs).into(), map.get(id.unwrap()).into()],
-            ));
-            b.emit(Instruction::new(
-                "setl",
-                vec![map.get(id.unwrap()).as_byte().into()],
-            ));
-            b.emit(Instruction::new(
-                "andb",
-                vec![asm::Const(1).into(), map.get(id.unwrap()).as_byte().into()],
-            ));
+            if matches!(
+                map.get(id.unwrap()).rg,
+                asm::RegisterBackend::StackOffset(..)
+            ) {
+                let (reg, spill, unspill) = get_register(line, map);
+                let reg = asm::Register::machine(reg, asm::Size::Doubleword);
+                b += spill;
 
-            b.emit(Instruction::new(
-                "movzbl",
-                vec![
-                    map.get(id.unwrap()).as_byte().into(),
-                    map.get(id.unwrap()).into(),
-                ],
-            ));
+                b.emit(Instruction::new(
+                    "movl",
+                    vec![asm::Const(lhs).into(), map.get(id.unwrap()).into()],
+                ));
+                b.emit(Instruction::new(
+                    "cmpl",
+                    vec![map.get(rhs).into(), map.get(id.unwrap()).into()],
+                ));
+                b.emit(Instruction::new("setl", vec![reg.as_byte().into()]));
+                b.emit(Instruction::new(
+                    "andb",
+                    vec![asm::Const(1).into(), reg.as_byte().into()],
+                ));
+
+                b.emit(Instruction::new(
+                    "movzbl",
+                    vec![reg.as_byte().into(), reg.into()],
+                ));
+
+                b.emit(Instruction::new(
+                    "movl",
+                    vec![reg.into(), map.get(id.unwrap()).into()],
+                ));
+
+                b += unspill;
+            } else {
+                b.emit(Instruction::new(
+                    "movl",
+                    vec![asm::Const(lhs).into(), map.get(id.unwrap()).into()],
+                ));
+                b.emit(Instruction::new(
+                    "cmpl",
+                    vec![map.get(rhs).into(), map.get(id.unwrap()).into()],
+                ));
+                b.emit(Instruction::new(
+                    "setl",
+                    vec![map.get(id.unwrap()).as_byte().into()],
+                ));
+                b.emit(Instruction::new(
+                    "andb",
+                    vec![asm::Const(1).into(), map.get(id.unwrap()).as_byte().into()],
+                ));
+
+                b.emit(Instruction::new(
+                    "movzbl",
+                    vec![
+                        map.get(id.unwrap()).as_byte().into(),
+                        map.get(id.unwrap()).into(),
+                    ],
+                ));
+            }
         }
         tac::Instruction::Op(tac::Op::Op(
             tac::TypeOp::Relational(tac::RelationalOp::Less),
@@ -2685,78 +3057,172 @@ fn translate(
             tac::Value::ID(lhs),
             tac::Value::ID(rhs),
         )) => {
-            b.emit(Instruction::new(
-                "cmpl",
-                vec![map.get(rhs).into(), map.get(lhs).into()],
-            ));
-            b.emit(Instruction::new(
-                "setle",
-                vec![map.get(id.unwrap()).as_byte().into()],
-            ));
-            b.emit(Instruction::new(
-                "andb",
-                vec![asm::Const(1).into(), map.get(id.unwrap()).as_byte().into()],
-            ));
+            if matches!(
+                map.get(id.unwrap()).rg,
+                asm::RegisterBackend::StackOffset(..)
+            ) {
+                let (reg, spill, unspill) = get_register(line, map);
+                let reg = asm::Register::machine(reg, asm::Size::Doubleword);
+                b += spill;
+                b += checked("cmpl", line, &mut map, rhs, lhs);
+                b.emit(Instruction::new("setle", vec![reg.as_byte().into()]));
+                b.emit(Instruction::new(
+                    "andb",
+                    vec![asm::Const(1).into(), reg.as_byte().into()],
+                ));
 
-            b.emit(Instruction::new(
-                "movzbl",
-                vec![
-                    map.get(id.unwrap()).as_byte().into(),
-                    map.get(id.unwrap()).into(),
-                ],
-            ));
+                b.emit(Instruction::new(
+                    "movzbl",
+                    vec![reg.as_byte().into(), reg.into()],
+                ));
+
+                b.emit(Instruction::new(
+                    "movl",
+                    vec![reg.into(), map.get(id.unwrap()).into()],
+                ));
+
+                b += unspill;
+            } else {
+                b += checked("cmpl", line, &mut map, rhs, lhs);
+                b.emit(Instruction::new(
+                    "setle",
+                    vec![map.get(id.unwrap()).as_byte().into()],
+                ));
+                b.emit(Instruction::new(
+                    "andb",
+                    vec![asm::Const(1).into(), map.get(id.unwrap()).as_byte().into()],
+                ));
+
+                b.emit(Instruction::new(
+                    "movzbl",
+                    vec![
+                        map.get(id.unwrap()).as_byte().into(),
+                        map.get(id.unwrap()).into(),
+                    ],
+                ));
+            }
         }
         tac::Instruction::Op(tac::Op::Op(
             tac::TypeOp::Relational(tac::RelationalOp::LessOrEq),
             tac::Value::ID(lhs),
             tac::Value::Const(tac::Const::Int(rhs)),
         )) => {
-            b.emit(Instruction::new(
-                "cmpl",
-                vec![asm::Const(rhs).into(), map.get(lhs).into()],
-            ));
-            b.emit(Instruction::new(
-                "setle",
-                vec![map.get(id.unwrap()).as_byte().into()],
-            ));
-            b.emit(Instruction::new(
-                "andb",
-                vec![asm::Const(1).into(), map.get(id.unwrap()).as_byte().into()],
-            ));
+            if matches!(
+                map.get(id.unwrap()).rg,
+                asm::RegisterBackend::StackOffset(..)
+            ) {
+                let (reg, spill, unspill) = get_register(line, map);
+                let reg = asm::Register::machine(reg, asm::Size::Doubleword);
+                b += spill;
 
-            b.emit(Instruction::new(
-                "movzbl",
-                vec![
-                    map.get(id.unwrap()).as_byte().into(),
-                    map.get(id.unwrap()).into(),
-                ],
-            ));
+                b.emit(Instruction::new(
+                    "cmpl",
+                    vec![asm::Const(rhs).into(), map.get(lhs).into()],
+                ));
+                b.emit(Instruction::new("setle", vec![reg.as_byte().into()]));
+                b.emit(Instruction::new(
+                    "andb",
+                    vec![asm::Const(1).into(), reg.as_byte().into()],
+                ));
+
+                b.emit(Instruction::new(
+                    "movzbl",
+                    vec![reg.as_byte().into(), reg.into()],
+                ));
+
+                b.emit(Instruction::new(
+                    "movl",
+                    vec![reg.into(), map.get(id.unwrap()).into()],
+                ));
+
+                b += unspill;
+            } else {
+                b.emit(Instruction::new(
+                    "cmpl",
+                    vec![asm::Const(rhs).into(), map.get(lhs).into()],
+                ));
+                b.emit(Instruction::new(
+                    "setle",
+                    vec![map.get(id.unwrap()).as_byte().into()],
+                ));
+                b.emit(Instruction::new(
+                    "andb",
+                    vec![asm::Const(1).into(), map.get(id.unwrap()).as_byte().into()],
+                ));
+
+                b.emit(Instruction::new(
+                    "movzbl",
+                    vec![
+                        map.get(id.unwrap()).as_byte().into(),
+                        map.get(id.unwrap()).into(),
+                    ],
+                ));
+            }
         }
         tac::Instruction::Op(tac::Op::Op(
             tac::TypeOp::Relational(tac::RelationalOp::LessOrEq),
             tac::Value::Const(tac::Const::Int(lhs)),
             tac::Value::ID(rhs),
         )) => {
-            b.emit(Instruction::new(
-                "cmpl",
-                vec![map.get(rhs).into(), asm::Const(lhs).into()],
-            ));
-            b.emit(Instruction::new(
-                "setle",
-                vec![map.get(id.unwrap()).as_byte().into()],
-            ));
-            b.emit(Instruction::new(
-                "andb",
-                vec![asm::Const(1).into(), map.get(id.unwrap()).as_byte().into()],
-            ));
+            if matches!(
+                map.get(id.unwrap()).rg,
+                asm::RegisterBackend::StackOffset(..)
+            ) {
+                let (reg, spill, unspill) = get_register(line, map);
+                let reg = asm::Register::machine(reg, asm::Size::Doubleword);
+                b += spill;
 
-            b.emit(Instruction::new(
-                "movzbl",
-                vec![
-                    map.get(id.unwrap()).as_byte().into(),
-                    map.get(id.unwrap()).into(),
-                ],
-            ));
+                b.emit(Instruction::new(
+                    "movl",
+                    vec![asm::Const(lhs).into(), map.get(id.unwrap()).into()],
+                ));
+                b.emit(Instruction::new(
+                    "cmpl",
+                    vec![map.get(rhs).into(), map.get(id.unwrap()).into()],
+                ));
+                b.emit(Instruction::new("setle", vec![reg.as_byte().into()]));
+                b.emit(Instruction::new(
+                    "andb",
+                    vec![asm::Const(1).into(), reg.as_byte().into()],
+                ));
+
+                b.emit(Instruction::new(
+                    "movzbl",
+                    vec![reg.as_byte().into(), reg.into()],
+                ));
+
+                b.emit(Instruction::new(
+                    "movl",
+                    vec![reg.into(), map.get(id.unwrap()).into()],
+                ));
+
+                b += unspill;
+            } else {
+                b.emit(Instruction::new(
+                    "movl",
+                    vec![asm::Const(lhs).into(), map.get(id.unwrap()).into()],
+                ));
+                b.emit(Instruction::new(
+                    "cmpl",
+                    vec![map.get(rhs).into(), map.get(id.unwrap()).into()],
+                ));
+                b.emit(Instruction::new(
+                    "setle",
+                    vec![map.get(id.unwrap()).as_byte().into()],
+                ));
+                b.emit(Instruction::new(
+                    "andb",
+                    vec![asm::Const(1).into(), map.get(id.unwrap()).as_byte().into()],
+                ));
+
+                b.emit(Instruction::new(
+                    "movzbl",
+                    vec![
+                        map.get(id.unwrap()).as_byte().into(),
+                        map.get(id.unwrap()).into(),
+                    ],
+                ));
+            }
         }
         tac::Instruction::Op(tac::Op::Op(
             tac::TypeOp::Relational(tac::RelationalOp::LessOrEq),
@@ -2794,83 +3260,173 @@ fn translate(
             tac::Value::ID(lhs),
             tac::Value::ID(rhs),
         )) => {
-            b.emit(Instruction::new(
-                "cmpl",
-                vec![map.get(rhs).into(), map.get(lhs).into()],
-            ));
-            b.emit(Instruction::new(
-                "setg",
-                vec![map.get(id.unwrap()).as_byte().into()],
-            ));
-            b.emit(Instruction::new(
-                "andb",
-                vec![asm::Const(1).into(), map.get(id.unwrap()).as_byte().into()],
-            ));
+            if matches!(
+                map.get(id.unwrap()).rg,
+                asm::RegisterBackend::StackOffset(..)
+            ) {
+                let (reg, spill, unspill) = get_register(line, map);
+                let reg = asm::Register::machine(reg, asm::Size::Doubleword);
+                b += spill;
+                b += checked("cmpl", line, &mut map, rhs, lhs);
+                b.emit(Instruction::new("setg", vec![reg.as_byte().into()]));
+                b.emit(Instruction::new(
+                    "andb",
+                    vec![asm::Const(1).into(), reg.as_byte().into()],
+                ));
 
-            b.emit(Instruction::new(
-                "movzbl",
-                vec![
-                    map.get(id.unwrap()).as_byte().into(),
-                    map.get(id.unwrap()).into(),
-                ],
-            ));
+                b.emit(Instruction::new(
+                    "movzbl",
+                    vec![reg.as_byte().into(), reg.into()],
+                ));
+
+                b.emit(Instruction::new(
+                    "movl",
+                    vec![reg.into(), map.get(id.unwrap()).into()],
+                ));
+
+                b += unspill;
+            } else {
+                b += checked("cmpl", line, &mut map, rhs, lhs);
+                b.emit(Instruction::new(
+                    "setg",
+                    vec![map.get(id.unwrap()).as_byte().into()],
+                ));
+                b.emit(Instruction::new(
+                    "andb",
+                    vec![asm::Const(1).into(), map.get(id.unwrap()).as_byte().into()],
+                ));
+
+                b.emit(Instruction::new(
+                    "movzbl",
+                    vec![
+                        map.get(id.unwrap()).as_byte().into(),
+                        map.get(id.unwrap()).into(),
+                    ],
+                ));
+            }
         }
         tac::Instruction::Op(tac::Op::Op(
             tac::TypeOp::Relational(tac::RelationalOp::Greater),
             tac::Value::ID(lhs),
             tac::Value::Const(tac::Const::Int(rhs)),
         )) => {
-            // IT's so easy to miss
-            b.emit(Instruction::new(
-                "cmpl",
-                vec![asm::Const(rhs).into(), map.get(lhs).into()],
-            ));
-            b.emit(Instruction::new(
-                "setg",
-                vec![map.get(id.unwrap()).as_byte().into()],
-            ));
-            b.emit(Instruction::new(
-                "andb",
-                vec![asm::Const(1).into(), map.get(id.unwrap()).as_byte().into()],
-            ));
+            if matches!(
+                map.get(id.unwrap()).rg,
+                asm::RegisterBackend::StackOffset(..)
+            ) {
+                let (reg, spill, unspill) = get_register(line, map);
+                let reg = asm::Register::machine(reg, asm::Size::Doubleword);
+                b += spill;
 
-            b.emit(Instruction::new(
-                "movzbl",
-                vec![
-                    map.get(id.unwrap()).as_byte().into(),
-                    map.get(id.unwrap()).into(),
-                ],
-            ));
+                b.emit(Instruction::new(
+                    "cmpl",
+                    vec![asm::Const(rhs).into(), map.get(lhs).into()],
+                ));
+                b.emit(Instruction::new("setg", vec![reg.as_byte().into()]));
+                b.emit(Instruction::new(
+                    "andb",
+                    vec![asm::Const(1).into(), reg.as_byte().into()],
+                ));
+
+                b.emit(Instruction::new(
+                    "movzbl",
+                    vec![reg.as_byte().into(), reg.into()],
+                ));
+
+                b.emit(Instruction::new(
+                    "movl",
+                    vec![reg.into(), map.get(id.unwrap()).into()],
+                ));
+
+                b += unspill;
+            } else {
+                b.emit(Instruction::new(
+                    "cmpl",
+                    vec![asm::Const(rhs).into(), map.get(lhs).into()],
+                ));
+                b.emit(Instruction::new(
+                    "setg",
+                    vec![map.get(id.unwrap()).as_byte().into()],
+                ));
+                b.emit(Instruction::new(
+                    "andb",
+                    vec![asm::Const(1).into(), map.get(id.unwrap()).as_byte().into()],
+                ));
+
+                b.emit(Instruction::new(
+                    "movzbl",
+                    vec![
+                        map.get(id.unwrap()).as_byte().into(),
+                        map.get(id.unwrap()).into(),
+                    ],
+                ));
+            }
         }
         tac::Instruction::Op(tac::Op::Op(
             tac::TypeOp::Relational(tac::RelationalOp::Greater),
             tac::Value::Const(tac::Const::Int(lhs)),
             tac::Value::ID(rhs),
         )) => {
-            b.emit(Instruction::new(
-                "movl",
-                vec![asm::Const(lhs).into(), map.get(id.unwrap()).into()],
-            ));
-            b.emit(Instruction::new(
-                "cmpl",
-                vec![map.get(rhs).into(), map.get(id.unwrap()).into()],
-            ));
-            b.emit(Instruction::new(
-                "setg",
-                vec![map.get(id.unwrap()).as_byte().into()],
-            ));
-            b.emit(Instruction::new(
-                "andb",
-                vec![asm::Const(1).into(), map.get(id.unwrap()).as_byte().into()],
-            ));
+            if matches!(
+                map.get(id.unwrap()).rg,
+                asm::RegisterBackend::StackOffset(..)
+            ) {
+                let (reg, spill, unspill) = get_register(line, map);
+                let reg = asm::Register::machine(reg, asm::Size::Doubleword);
+                b += spill;
 
-            b.emit(Instruction::new(
-                "movzbl",
-                vec![
-                    map.get(id.unwrap()).as_byte().into(),
-                    map.get(id.unwrap()).into(),
-                ],
-            ));
+                b.emit(Instruction::new(
+                    "movl",
+                    vec![asm::Const(lhs).into(), map.get(id.unwrap()).into()],
+                ));
+
+                b.emit(Instruction::new(
+                    "cmpl",
+                    vec![asm::Const(lhs).into(), map.get(id.unwrap()).into()],
+                ));
+                b.emit(Instruction::new("setg", vec![reg.as_byte().into()]));
+                b.emit(Instruction::new(
+                    "andb",
+                    vec![asm::Const(1).into(), reg.as_byte().into()],
+                ));
+
+                b.emit(Instruction::new(
+                    "movzbl",
+                    vec![reg.as_byte().into(), reg.into()],
+                ));
+
+                b.emit(Instruction::new(
+                    "movl",
+                    vec![reg.into(), map.get(id.unwrap()).into()],
+                ));
+
+                b += unspill;
+            } else {
+                b.emit(Instruction::new(
+                    "movl",
+                    vec![asm::Const(lhs).into(), map.get(id.unwrap()).into()],
+                ));
+                b.emit(Instruction::new(
+                    "cmpl",
+                    vec![map.get(rhs).into(), map.get(id.unwrap()).into()],
+                ));
+                b.emit(Instruction::new(
+                    "setg",
+                    vec![map.get(id.unwrap()).as_byte().into()],
+                ));
+                b.emit(Instruction::new(
+                    "andb",
+                    vec![asm::Const(1).into(), map.get(id.unwrap()).as_byte().into()],
+                ));
+
+                b.emit(Instruction::new(
+                    "movzbl",
+                    vec![
+                        map.get(id.unwrap()).as_byte().into(),
+                        map.get(id.unwrap()).into(),
+                    ],
+                ));
+            }
         }
         tac::Instruction::Op(tac::Op::Op(
             tac::TypeOp::Relational(tac::RelationalOp::Greater),
@@ -2908,82 +3464,174 @@ fn translate(
             tac::Value::ID(lhs),
             tac::Value::ID(rhs),
         )) => {
-            b.emit(Instruction::new(
-                "cmpl",
-                vec![map.get(rhs).into(), map.get(lhs).into()],
-            ));
-            b.emit(Instruction::new(
-                "setge",
-                vec![map.get(id.unwrap()).as_byte().into()],
-            ));
-            b.emit(Instruction::new(
-                "andb",
-                vec![asm::Const(1).into(), map.get(id.unwrap()).as_byte().into()],
-            ));
+            if matches!(
+                map.get(id.unwrap()).rg,
+                asm::RegisterBackend::StackOffset(..)
+            ) {
+                let (reg, spill, unspill) = get_register(line, map);
+                let reg = asm::Register::machine(reg, asm::Size::Doubleword);
+                b += spill;
+                b += checked("cmpl", line, &mut map, rhs, lhs);
+                b.emit(Instruction::new("setge", vec![reg.as_byte().into()]));
+                b.emit(Instruction::new(
+                    "andb",
+                    vec![asm::Const(1).into(), reg.as_byte().into()],
+                ));
 
-            b.emit(Instruction::new(
-                "movzbl",
-                vec![
-                    map.get(id.unwrap()).as_byte().into(),
-                    map.get(id.unwrap()).into(),
-                ],
-            ));
+                b.emit(Instruction::new(
+                    "movzbl",
+                    vec![reg.as_byte().into(), reg.into()],
+                ));
+
+                b.emit(Instruction::new(
+                    "movl",
+                    vec![reg.into(), map.get(id.unwrap()).into()],
+                ));
+
+                b += unspill;
+            } else {
+                b += checked("cmpl", line, &mut map, rhs, lhs);
+                b.emit(Instruction::new(
+                    "setge",
+                    vec![map.get(id.unwrap()).as_byte().into()],
+                ));
+                b.emit(Instruction::new(
+                    "andb",
+                    vec![asm::Const(1).into(), map.get(id.unwrap()).as_byte().into()],
+                ));
+
+                b.emit(Instruction::new(
+                    "movzbl",
+                    vec![
+                        map.get(id.unwrap()).as_byte().into(),
+                        map.get(id.unwrap()).into(),
+                    ],
+                ));
+            }
         }
         tac::Instruction::Op(tac::Op::Op(
             tac::TypeOp::Relational(tac::RelationalOp::GreaterOrEq),
             tac::Value::ID(lhs),
             tac::Value::Const(tac::Const::Int(rhs)),
         )) => {
-            b.emit(Instruction::new(
-                "cmpl",
-                vec![asm::Const(rhs).into(), map.get(lhs).into()],
-            ));
-            b.emit(Instruction::new(
-                "setge",
-                vec![map.get(id.unwrap()).as_byte().into()],
-            ));
-            b.emit(Instruction::new(
-                "andb",
-                vec![asm::Const(1).into(), map.get(id.unwrap()).as_byte().into()],
-            ));
+            if matches!(
+                map.get(id.unwrap()).rg,
+                asm::RegisterBackend::StackOffset(..)
+            ) {
+                let (reg, spill, unspill) = get_register(line, map);
+                let reg = asm::Register::machine(reg, asm::Size::Doubleword);
+                b += spill;
 
-            b.emit(Instruction::new(
-                "movzbl",
-                vec![
-                    map.get(id.unwrap()).as_byte().into(),
-                    map.get(id.unwrap()).into(),
-                ],
-            ));
+                b.emit(Instruction::new(
+                    "cmpl",
+                    vec![asm::Const(rhs).into(), map.get(lhs).into()],
+                ));
+                b.emit(Instruction::new("setge", vec![reg.as_byte().into()]));
+                b.emit(Instruction::new(
+                    "andb",
+                    vec![asm::Const(1).into(), reg.as_byte().into()],
+                ));
+
+                b.emit(Instruction::new(
+                    "movzbl",
+                    vec![reg.as_byte().into(), reg.into()],
+                ));
+
+                b.emit(Instruction::new(
+                    "movl",
+                    vec![reg.into(), map.get(id.unwrap()).into()],
+                ));
+
+                b += unspill;
+            } else {
+                b.emit(Instruction::new(
+                    "cmpl",
+                    vec![asm::Const(rhs).into(), map.get(lhs).into()],
+                ));
+                b.emit(Instruction::new(
+                    "setge",
+                    vec![map.get(id.unwrap()).as_byte().into()],
+                ));
+                b.emit(Instruction::new(
+                    "andb",
+                    vec![asm::Const(1).into(), map.get(id.unwrap()).as_byte().into()],
+                ));
+
+                b.emit(Instruction::new(
+                    "movzbl",
+                    vec![
+                        map.get(id.unwrap()).as_byte().into(),
+                        map.get(id.unwrap()).into(),
+                    ],
+                ));
+            }
         }
         tac::Instruction::Op(tac::Op::Op(
             tac::TypeOp::Relational(tac::RelationalOp::GreaterOrEq),
             tac::Value::Const(tac::Const::Int(lhs)),
             tac::Value::ID(rhs),
         )) => {
-            b.emit(Instruction::new(
-                "movl",
-                vec![asm::Const(lhs).into(), map.get(id.unwrap()).into()],
-            ));
-            b.emit(Instruction::new(
-                "cmpl",
-                vec![map.get(rhs).into(), map.get(id.unwrap()).into()],
-            ));
-            b.emit(Instruction::new(
-                "setge",
-                vec![map.get(id.unwrap()).as_byte().into()],
-            ));
-            b.emit(Instruction::new(
-                "andb",
-                vec![asm::Const(1).into(), map.get(id.unwrap()).as_byte().into()],
-            ));
+            if matches!(
+                map.get(id.unwrap()).rg,
+                asm::RegisterBackend::StackOffset(..)
+            ) {
+                let (reg, spill, unspill) = get_register(line, map);
+                let reg = asm::Register::machine(reg, asm::Size::Doubleword);
+                b += spill;
 
-            b.emit(Instruction::new(
-                "movzbl",
-                vec![
-                    map.get(id.unwrap()).as_byte().into(),
-                    map.get(id.unwrap()).into(),
-                ],
-            ));
+                b.emit(Instruction::new(
+                    "movl",
+                    vec![asm::Const(lhs).into(), map.get(id.unwrap()).into()],
+                ));
+
+                b.emit(Instruction::new(
+                    "cmpl",
+                    vec![map.get(rhs).into(), map.get(id.unwrap()).into()],
+                ));
+                b.emit(Instruction::new("setge", vec![reg.as_byte().into()]));
+                b.emit(Instruction::new(
+                    "andb",
+                    vec![asm::Const(1).into(), reg.as_byte().into()],
+                ));
+
+                b.emit(Instruction::new(
+                    "movzbl",
+                    vec![reg.as_byte().into(), reg.into()],
+                ));
+
+                b.emit(Instruction::new(
+                    "movl",
+                    vec![reg.into(), map.get(id.unwrap()).into()],
+                ));
+
+                b += unspill;
+            } else {
+                b.emit(Instruction::new(
+                    "movl",
+                    vec![asm::Const(lhs).into(), map.get(id.unwrap()).into()],
+                ));
+
+                b.emit(Instruction::new(
+                    "cmpl",
+                    vec![map.get(rhs).into(), map.get(id.unwrap()).into()],
+                ));
+                b.emit(Instruction::new(
+                    "setge",
+                    vec![map.get(id.unwrap()).as_byte().into()],
+                ));
+                b.emit(Instruction::new(
+                    "andb",
+                    vec![asm::Const(1).into(), map.get(id.unwrap()).as_byte().into()],
+                ));
+
+                b.emit(Instruction::new(
+                    "movzbl",
+                    vec![
+                        map.get(id.unwrap()).as_byte().into(),
+                        map.get(id.unwrap()).into(),
+                    ],
+                ));
+            }
         }
         tac::Instruction::Op(tac::Op::Op(
             tac::TypeOp::Relational(tac::RelationalOp::GreaterOrEq),

@@ -185,6 +185,13 @@ impl Register {
             _ => unimplemented!(),
         }
     }
+
+    pub fn as_machine(&self) -> MachineRegister {
+        match self.rg {
+            RegisterBackend::Machine(reg) => reg,
+            _ => unimplemented!(),
+        }
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
