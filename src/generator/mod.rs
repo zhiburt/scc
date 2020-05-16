@@ -694,7 +694,12 @@ fn translate(
         )) => {
             let (eax_spill, eax_un_spill) = {
                 if matches!(map.get(lhs).rg, asm::RegisterBackend::Machine("eax")) == false {
-                    if map.free_at(line).contains(&"eax") {
+                    if map.free_at(line).contains(&"eax")
+                        || matches!(
+                            map.get(id.unwrap()).rg,
+                            asm::RegisterBackend::Machine("eax")
+                        )
+                    {
                         let mut spill = asm::Block::new();
                         spill.emit(Instruction::new(
                             "movl",
@@ -864,7 +869,12 @@ fn translate(
         )) => {
             let (eax_spill, eax_un_spill) = {
                 if matches!(map.get(lhs).rg, asm::RegisterBackend::Machine("eax")) == false {
-                    if map.free_at(line).contains(&"eax") {
+                    if map.free_at(line).contains(&"eax")
+                        || matches!(
+                            map.get(id.unwrap()).rg,
+                            asm::RegisterBackend::Machine("eax")
+                        )
+                    {
                         let mut spill = asm::Block::new();
                         spill.emit(Instruction::new(
                             "movl",
@@ -1056,7 +1066,12 @@ fn translate(
             tac::Value::ID(rhs),
         )) => {
             let (eax_spill, eax_un_spill) = {
-                if map.free_at(line).contains(&"eax") {
+                if map.free_at(line).contains(&"eax")
+                    || matches!(
+                        map.get(id.unwrap()).rg,
+                        asm::RegisterBackend::Machine("eax")
+                    )
+                {
                     let mut spill = asm::Block::new();
                     spill.emit(Instruction::new(
                         "movl",
@@ -1234,7 +1249,12 @@ fn translate(
             tac::Value::Const(tac::Const::Int(rhs)),
         )) => {
             let (eax_spill, eax_un_spill) = {
-                if map.free_at(line).contains(&"eax") {
+                if map.free_at(line).contains(&"eax")
+                    || matches!(
+                        map.get(id.unwrap()).rg,
+                        asm::RegisterBackend::Machine("eax")
+                    )
+                {
                     let mut spill = asm::Block::new();
                     spill.emit(Instruction::new(
                         "movl",
@@ -1437,7 +1457,12 @@ fn translate(
         )) => {
             let (eax_spill, eax_un_spill) = {
                 if matches!(map.get(lhs).rg, asm::RegisterBackend::Machine("eax")) == false {
-                    if map.free_at(line).contains(&"eax") {
+                    if map.free_at(line).contains(&"eax")
+                        || matches!(
+                            map.get(id.unwrap()).rg,
+                            asm::RegisterBackend::Machine("eax")
+                        )
+                    {
                         let mut spill = asm::Block::new();
                         spill.emit(Instruction::new(
                             "movl",
@@ -1607,7 +1632,12 @@ fn translate(
         )) => {
             let (eax_spill, eax_un_spill) = {
                 if matches!(map.get(lhs).rg, asm::RegisterBackend::Machine("eax")) == false {
-                    if map.free_at(line).contains(&"eax") {
+                    if map.free_at(line).contains(&"eax")
+                        || matches!(
+                            map.get(id.unwrap()).rg,
+                            asm::RegisterBackend::Machine("eax")
+                        )
+                    {
                         let mut spill = asm::Block::new();
                         spill.emit(Instruction::new(
                             "movl",
@@ -1810,7 +1840,12 @@ fn translate(
             tac::Value::ID(rhs),
         )) => {
             let (eax_spill, eax_un_spill) = {
-                if map.free_at(line).contains(&"eax") {
+                if map.free_at(line).contains(&"eax")
+                    || matches!(
+                        map.get(id.unwrap()).rg,
+                        asm::RegisterBackend::Machine("eax")
+                    )
+                {
                     let mut spill = asm::Block::new();
                     spill.emit(Instruction::new(
                         "movl",
@@ -1976,7 +2011,12 @@ fn translate(
             tac::Value::Const(tac::Const::Int(rhs)),
         )) => {
             let (eax_spill, eax_un_spill) = {
-                if map.free_at(line).contains(&"eax") {
+                if map.free_at(line).contains(&"eax")
+                    || matches!(
+                        map.get(id.unwrap()).rg,
+                        asm::RegisterBackend::Machine("eax")
+                    )
+                {
                     let mut spill = asm::Block::new();
                     spill.emit(Instruction::new(
                         "movl",
