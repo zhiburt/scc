@@ -130,7 +130,7 @@ impl Lexer {
                 TokenDefinition::new(TokenType::Continue, r"^\bcontinue\b"),
                 TokenDefinition::new(TokenType::Break, r"^\bbreak\b"),
                 TokenDefinition::new(TokenType::Identifier, r"^[a-zA-Z]\w*"),
-                TokenDefinition::new(TokenType::IntegerLiteral, r"^-?\d+"),
+                TokenDefinition::new(TokenType::IntegerLiteral, r"^\d+"),
                 TokenDefinition::new(TokenType::OpenParenthesis, r"^\("),
                 TokenDefinition::new(TokenType::CloseParenthesis, r"^\)"),
                 TokenDefinition::new(TokenType::OpenBrace, r"^\{"),
