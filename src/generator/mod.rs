@@ -1,5 +1,6 @@
 mod allocator;
 mod asm;
+mod asm1;
 mod syntax;
 
 use asm::Instruction;
@@ -117,154 +118,6 @@ impl Generator {
     }
 }
 
-fn checked_mov(
-    line: usize,
-    al: &mut allocator::Allocator,
-    from: tac::ID,
-    to: tac::ID,
-) -> asm::Block {
-    let mut b = asm::Block::new();
-    if matches!(al.get(from).rg, asm::RegisterBackend::StackOffset(..))
-        && matches!(al.get(to).rg, asm::RegisterBackend::StackOffset(..))
-    {
-        match al.find_free_at(line) {
-            Some(reg) => {
-                b.emit(Instruction::new(
-                    "movl",
-                    vec![
-                        al.get(from).into(),
-                        asm::Register::machine(reg, asm::Size::Doubleword).into(),
-                    ],
-                ));
-                b.emit(Instruction::new(
-                    "movl",
-                    vec![
-                        asm::Register::machine(reg, asm::Size::Doubleword).into(),
-                        al.get(to).into(),
-                    ],
-                ));
-            }
-            None => {
-                let reg = al.live_at(line).first().unwrap().clone();
-                let offset = al.alloc_stack();
-                b.emit(Instruction::new(
-                    "movl",
-                    vec![
-                        reg.into(),
-                        asm::Register::new(
-                            asm::RegisterBackend::StackOffset(offset),
-                            asm::Size::Doubleword,
-                        )
-                        .into(),
-                    ],
-                ));
-
-                b.emit(Instruction::new(
-                    "movl",
-                    vec![al.get(from).into(), reg.into()],
-                ));
-
-                b.emit(Instruction::new(
-                    "movl",
-                    vec![reg.into(), al.get(to).into()],
-                ));
-
-                b.emit(Instruction::new(
-                    "movl",
-                    vec![
-                        asm::Register::new(
-                            asm::RegisterBackend::StackOffset(offset),
-                            asm::Size::Doubleword,
-                        )
-                        .into(),
-                        reg.into(),
-                    ],
-                ));
-            }
-        }
-    } else {
-        b.emit(Instruction::new(
-            "movl",
-            vec![al.get(from).into(), al.get(to).into()],
-        ));
-    }
-    b
-}
-
-fn checked_add(
-    line: usize,
-    al: &mut allocator::Allocator,
-    from: tac::ID,
-    to: tac::ID,
-) -> asm::Block {
-    let mut b = asm::Block::new();
-    if matches!(al.get(from).rg, asm::RegisterBackend::StackOffset(..))
-        && matches!(al.get(to).rg, asm::RegisterBackend::StackOffset(..))
-    {
-        match al.find_free_at(line) {
-            Some(reg) => {
-                b.emit(Instruction::new(
-                    "movl",
-                    vec![
-                        al.get(from).into(),
-                        asm::Register::machine(reg, asm::Size::Doubleword).into(),
-                    ],
-                ));
-                b.emit(Instruction::new(
-                    "addl",
-                    vec![
-                        asm::Register::machine(reg, asm::Size::Doubleword).into(),
-                        al.get(to).into(),
-                    ],
-                ));
-            }
-            None => {
-                let reg = al.live_at(line).first().unwrap().clone();
-                let offset = al.alloc_stack();
-                b.emit(Instruction::new(
-                    "movl",
-                    vec![
-                        reg.into(),
-                        asm::Register::new(
-                            asm::RegisterBackend::StackOffset(offset),
-                            asm::Size::Doubleword,
-                        )
-                        .into(),
-                    ],
-                ));
-
-                b.emit(Instruction::new(
-                    "movl",
-                    vec![al.get(from).into(), reg.into()],
-                ));
-
-                b.emit(Instruction::new(
-                    "addl",
-                    vec![reg.into(), al.get(to).into()],
-                ));
-
-                b.emit(Instruction::new(
-                    "movl",
-                    vec![
-                        asm::Register::new(
-                            asm::RegisterBackend::StackOffset(offset),
-                            asm::Size::Doubleword,
-                        )
-                        .into(),
-                        reg.into(),
-                    ],
-                ));
-            }
-        }
-    } else {
-        b.emit(Instruction::new(
-            "addl",
-            vec![al.get(from).into(), al.get(to).into()],
-        ));
-    }
-    b
-}
-
 fn checked(
     instr: &'static str,
     line: usize,
@@ -276,58 +129,23 @@ fn checked(
     if matches!(al.get(from).rg, asm::RegisterBackend::StackOffset(..))
         && matches!(al.get(to).rg, asm::RegisterBackend::StackOffset(..))
     {
-        match al.find_free_at(line) {
-            Some(reg) => {
-                b.emit(Instruction::new(
-                    "movl",
-                    vec![
-                        al.get(from).into(),
-                        asm::Register::machine(reg, asm::Size::Doubleword).into(),
-                    ],
-                ));
-                b.emit(Instruction::new(
-                    instr,
-                    vec![
-                        asm::Register::machine(reg, asm::Size::Doubleword).into(),
-                        al.get(to).into(),
-                    ],
-                ));
-            }
-            None => {
-                let reg = al.live_at(line).first().unwrap().clone();
-                let offset = al.alloc_stack();
-                b.emit(Instruction::new(
-                    "movl",
-                    vec![
-                        reg.into(),
-                        asm::Register::new(
-                            asm::RegisterBackend::StackOffset(offset),
-                            asm::Size::Doubleword,
-                        )
-                        .into(),
-                    ],
-                ));
-
-                b.emit(Instruction::new(
-                    "movl",
-                    vec![al.get(from).into(), reg.into()],
-                ));
-
-                b.emit(Instruction::new(instr, vec![reg.into(), al.get(to).into()]));
-
-                b.emit(Instruction::new(
-                    "movl",
-                    vec![
-                        asm::Register::new(
-                            asm::RegisterBackend::StackOffset(offset),
-                            asm::Size::Doubleword,
-                        )
-                        .into(),
-                        reg.into(),
-                    ],
-                ));
-            }
-        }
+        let (reg, spill, unspill) = get_register(line, al);
+        b += spill;
+        b.emit(Instruction::new(
+            "movl",
+            vec![
+                al.get(from).into(),
+                asm::Register::machine(reg, asm::Size::Doubleword).into(),
+            ],
+        ));
+        b.emit(Instruction::new(
+            instr,
+            vec![
+                asm::Register::machine(reg, asm::Size::Doubleword).into(),
+                al.get(to).into(),
+            ],
+        ));
+        b += unspill;
     } else {
         b.emit(Instruction::new(
             instr,
@@ -378,6 +196,257 @@ fn get_register(
     }
 }
 
+fn imul_constant(
+    line: usize,
+    al: &mut allocator::Allocator,
+    lhs: tac::ID,
+    rhs: i32,
+    id: tac::ID,
+) -> asm::Block {
+    let mut b = asm::Block::new();
+    if matches!(al.get(id).rg, asm::RegisterBackend::Machine(..)) {
+        b.emit(Instruction::new(
+            "imul",
+            vec![
+                asm::Const(rhs).into(),
+                al.get(lhs).into(),
+                al.get(id).into(),
+            ],
+        ));
+    } else {
+        let (reg, spill, unspill) = get_register(line, al);
+        b += spill;
+        b.emit(Instruction::new(
+            "movl",
+            vec![
+                al.get(id).into(),
+                asm::Register::machine(reg, asm::Size::Doubleword).into(),
+            ],
+        ));
+        b.emit(Instruction::new(
+            "imul",
+            vec![
+                asm::Const(rhs).into(),
+                al.get(lhs).into(),
+                asm::Register::machine(reg, asm::Size::Doubleword).into(),
+            ],
+        ));
+        b.emit(Instruction::new(
+            "movl",
+            vec![
+                asm::Register::machine(reg, asm::Size::Doubleword).into(),
+                al.get(id).into(),
+            ],
+        ));
+        b += unspill;
+    }
+
+    b
+}
+
+fn space_for_divisor(
+    line: usize,
+    al: &mut allocator::Allocator,
+    rhs: i32,
+) -> (asm::Register, asm::Block, asm::Block) {
+    if let Some(reg) = al
+        .free_at(line)
+        .iter()
+        .find(|&&reg| reg != "eax" && reg != "edx")
+    {
+        let mut spill = asm::Block::new();
+        spill.emit(Instruction::new(
+            "movl",
+            vec![
+                asm::Const(rhs).into(),
+                asm::Register::machine(reg, asm::Size::Doubleword).into(),
+            ],
+        ));
+
+        (
+            asm::Register::machine(reg, asm::Size::Doubleword).into(),
+            spill,
+            asm::Block::new(),
+        )
+    } else {
+        let offset = al.alloc_stack();
+        let reg = asm::Register::new(
+            asm::RegisterBackend::StackOffset(offset),
+            asm::Size::Doubleword,
+        );
+        let mut spill = asm::Block::new();
+        spill.emit(Instruction::new(
+            "movl",
+            vec![asm::Const(rhs).into(), reg.clone().into()],
+        ));
+
+        (reg, spill, asm::Block::new())
+    }
+}
+
+fn spill_eax(line: usize, al: &mut allocator::Allocator) -> (asm::Block, asm::Block) {
+    if al.free_at(line).contains(&"eax") {
+        (asm::Block::new(), asm::Block::new())
+    } else {
+        let offset = al.alloc_stack();
+        let mut spill = asm::Block::new();
+        spill.emit(Instruction::new(
+            "movl",
+            vec![
+                asm::Register::machine("eax", asm::Size::Doubleword).into(),
+                asm::Register::new(
+                    asm::RegisterBackend::StackOffset(offset),
+                    asm::Size::Doubleword,
+                )
+                .into(),
+            ],
+        ));
+
+        let mut unspill = asm::Block::new();
+        unspill.emit(Instruction::new(
+            "movl",
+            vec![
+                asm::Register::new(
+                    asm::RegisterBackend::StackOffset(offset),
+                    asm::Size::Doubleword,
+                )
+                .into(),
+                asm::Register::machine("eax", asm::Size::Doubleword).into(),
+            ],
+        ));
+
+        (spill, unspill)
+    }
+}
+
+fn spill_eax_div(
+    line: usize,
+    al: &mut allocator::Allocator,
+    lhs: tac::ID,
+    id: tac::ID,
+) -> (asm::Block, asm::Block) {
+    let (mut spill, unspill) = if matches!(al.get(lhs).rg, asm::RegisterBackend::Machine("eax"))
+        || al.free_at(line).contains(&"eax")
+        || matches!(al.get(id).rg, asm::RegisterBackend::Machine("eax"))
+    {
+        (asm::Block::new(), asm::Block::new())
+    } else {
+        spill_eax(line, al)
+    };
+
+    spill.emit(Instruction::new(
+        "movl",
+        vec![
+            al.get(lhs).into(),
+            asm::Register::machine("eax", asm::Size::Doubleword).into(),
+        ],
+    ));
+
+    (spill, unspill)
+}
+
+fn spill_edx_div(
+    line: usize,
+    al: &mut allocator::Allocator,
+    rhs: tac::ID,
+) -> (asm::Block, asm::Block) {
+    if matches!(al.get(rhs).rg, asm::RegisterBackend::Machine("edx")) {
+        (asm::Block::new(), asm::Block::new())
+    } else {
+        spill_edx_div_c(line, al)
+    }
+}
+
+fn spill_edx_div_c(line: usize, al: &mut allocator::Allocator) -> (asm::Block, asm::Block) {
+    if al
+        .live_at(line)
+        .contains(&asm::Register::machine("edx", asm::Size::Doubleword))
+    {
+        let offset = al.alloc_stack();
+        let mut spill = asm::Block::new();
+        spill.emit(Instruction::new(
+            "movl",
+            vec![
+                asm::Register::machine("edx", asm::Size::Doubleword).into(),
+                asm::Register::new(
+                    asm::RegisterBackend::StackOffset(offset),
+                    asm::Size::Doubleword,
+                )
+                .into(),
+            ],
+        ));
+
+        let mut unspill = asm::Block::new();
+        unspill.emit(Instruction::new(
+            "movl",
+            vec![
+                asm::Register::new(
+                    asm::RegisterBackend::StackOffset(offset),
+                    asm::Size::Doubleword,
+                )
+                .into(),
+                asm::Register::machine("edx", asm::Size::Doubleword).into(),
+            ],
+        ));
+
+        (spill, unspill)
+    } else {
+        (asm::Block::new(), asm::Block::new())
+    }
+}
+
+fn spill_eax_div_cc(
+    line: usize,
+    al: &mut allocator::Allocator,
+    lhs: i32,
+    rhs: tac::ID,
+    id: tac::ID,
+) -> (asm::Block, asm::Block) {
+    let (mut spill, unspill) = if matches!(al.get(rhs).rg, asm::RegisterBackend::Machine("eax"))
+        || al.free_at(line).contains(&"eax")
+        || matches!(al.get(id).rg, asm::RegisterBackend::Machine("eax"))
+    {
+        (asm::Block::new(), asm::Block::new())
+    } else {
+        spill_eax(line, al)
+    };
+
+    spill.emit(Instruction::new(
+        "movl",
+        vec![
+            asm::Const(lhs).into(),
+            asm::Register::machine("eax", asm::Size::Doubleword).into(),
+        ],
+    ));
+
+    (spill, unspill)
+}
+
+fn spill_eax_div_ccc(
+    line: usize,
+    al: &mut allocator::Allocator,
+    lhs: i32,
+    id: tac::ID,
+) -> (asm::Block, asm::Block) {
+    let (mut spill, unspill) = if al.free_at(line).contains(&"eax")
+        || matches!(al.get(id).rg, asm::RegisterBackend::Machine("eax"))
+    {
+        (asm::Block::new(), asm::Block::new())
+    } else {
+        spill_eax(line, al)
+    };
+
+    spill.emit(Instruction::new(
+        "movl",
+        vec![
+            asm::Const(lhs).into(),
+            asm::Register::machine("eax", asm::Size::Doubleword).into(),
+        ],
+    ));
+
+    (spill, unspill)
+}
+
 fn translate(
     line: usize,
     mut map: &mut allocator::Allocator,
@@ -391,15 +460,15 @@ fn translate(
             tac::Value::ID(lhs),
             tac::Value::ID(rhs),
         )) => {
-            b += checked_mov(line, &mut map, lhs, id.unwrap());
-            b += checked_add(line, &mut map, rhs, id.unwrap());
+            b += checked("movl", line, &mut map, lhs, id.unwrap());
+            b += checked("addl", line, &mut map, rhs, id.unwrap());
         }
         tac::Instruction::Op(tac::Op::Op(
             tac::TypeOp::Arithmetic(tac::ArithmeticOp::Add),
             tac::Value::ID(lhs),
             tac::Value::Const(tac::Const::Int(rhs)),
         )) => {
-            b += checked_mov(line, &mut map, lhs, id.unwrap());
+            b += checked("movl", line, &mut map, lhs, id.unwrap());
             b.emit(Instruction::new(
                 "addl",
                 vec![asm::Const(rhs).into(), map.get(id.unwrap()).into()],
@@ -439,7 +508,7 @@ fn translate(
             tac::Value::ID(lhs),
             tac::Value::ID(rhs),
         )) => {
-            b += checked_mov(line, &mut map, lhs, id.unwrap());
+            b += checked("movl", line, &mut map, lhs, id.unwrap());
             b.emit(Instruction::new(
                 "subl",
                 vec![map.get(rhs).into(), map.get(id.unwrap()).into()],
@@ -450,7 +519,7 @@ fn translate(
             tac::Value::ID(lhs),
             tac::Value::Const(tac::Const::Int(rhs)),
         )) => {
-            b += checked_mov(line, &mut map, lhs, id.unwrap());
+            b += checked("movl", line, &mut map, lhs, id.unwrap());
             b.emit(Instruction::new(
                 "subl",
                 vec![asm::Const(rhs).into(), map.get(id.unwrap()).into()],
@@ -490,7 +559,7 @@ fn translate(
             tac::Value::ID(lhs),
             tac::Value::ID(rhs),
         )) => {
-            b += checked_mov(line, &mut map, lhs, id.unwrap());
+            b += checked("movl", line, &mut map, lhs, id.unwrap());
             b.emit(Instruction::new(
                 "imul",
                 vec![map.get(rhs).into(), map.get(id.unwrap()).into()],
@@ -501,176 +570,14 @@ fn translate(
             tac::Value::ID(lhs),
             tac::Value::Const(tac::Const::Int(rhs)),
         )) => {
-            if matches!(map.get(id.unwrap()).rg, asm::RegisterBackend::Machine(..)) {
-                b.emit(Instruction::new(
-                    "imul",
-                    vec![
-                        asm::Const(rhs).into(),
-                        map.get(lhs).into(),
-                        map.get(id.unwrap()).into(),
-                    ],
-                ));
-            } else {
-                match map.find_free_at(line) {
-                    Some(reg) => {
-                        b.emit(Instruction::new(
-                            "movl",
-                            vec![
-                                map.get(id.unwrap()).into(),
-                                asm::Register::machine(reg, asm::Size::Doubleword).into(),
-                            ],
-                        ));
-                        b.emit(Instruction::new(
-                            "imul",
-                            vec![
-                                asm::Const(rhs).into(),
-                                map.get(lhs).into(),
-                                asm::Register::machine(reg, asm::Size::Doubleword).into(),
-                            ],
-                        ));
-                        b.emit(Instruction::new(
-                            "movl",
-                            vec![
-                                asm::Register::machine(reg, asm::Size::Doubleword).into(),
-                                map.get(id.unwrap()).into(),
-                            ],
-                        ));
-                    }
-                    None => {
-                        let reg = map.live_at(line).first().unwrap().clone();
-                        let offset = map.alloc_stack();
-
-                        b.emit(Instruction::new(
-                            "movl",
-                            vec![
-                                reg.into(),
-                                asm::Register::new(
-                                    asm::RegisterBackend::StackOffset(offset),
-                                    asm::Size::Doubleword,
-                                )
-                                .into(),
-                            ],
-                        ));
-
-                        b.emit(Instruction::new(
-                            "movl",
-                            vec![map.get(id.unwrap()).into(), reg.into()],
-                        ));
-                        b.emit(Instruction::new(
-                            "imul",
-                            vec![asm::Const(rhs).into(), map.get(lhs).into(), reg.into()],
-                        ));
-                        b.emit(Instruction::new(
-                            "movl",
-                            vec![reg.into(), map.get(id.unwrap()).into()],
-                        ));
-
-                        b.emit(Instruction::new(
-                            "movl",
-                            vec![
-                                asm::Register::new(
-                                    asm::RegisterBackend::StackOffset(offset),
-                                    asm::Size::Doubleword,
-                                )
-                                .into(),
-                                reg.into(),
-                            ],
-                        ));
-                        b.emit(Instruction::new(
-                            "movl",
-                            vec![reg.into(), map.get(id.unwrap()).into()],
-                        ));
-                    }
-                }
-            }
+            b += imul_constant(line, map, lhs, rhs, id.unwrap());
         }
         tac::Instruction::Op(tac::Op::Op(
             tac::TypeOp::Arithmetic(tac::ArithmeticOp::Mul),
             tac::Value::Const(tac::Const::Int(lhs)),
             tac::Value::ID(rhs),
         )) => {
-            if matches!(map.get(id.unwrap()).rg, asm::RegisterBackend::Machine(..)) {
-                b.emit(Instruction::new(
-                    "imul",
-                    vec![
-                        asm::Const(lhs).into(),
-                        map.get(rhs).into(),
-                        map.get(id.unwrap()).into(),
-                    ],
-                ));
-            } else {
-                match map.find_free_at(line) {
-                    Some(reg) => {
-                        b.emit(Instruction::new(
-                            "movl",
-                            vec![
-                                map.get(id.unwrap()).into(),
-                                asm::Register::machine(reg, asm::Size::Doubleword).into(),
-                            ],
-                        ));
-                        b.emit(Instruction::new(
-                            "imul",
-                            vec![
-                                asm::Const(lhs).into(),
-                                map.get(rhs).into(),
-                                asm::Register::machine(reg, asm::Size::Doubleword).into(),
-                            ],
-                        ));
-                        b.emit(Instruction::new(
-                            "movl",
-                            vec![
-                                asm::Register::machine(reg, asm::Size::Doubleword).into(),
-                                map.get(id.unwrap()).into(),
-                            ],
-                        ));
-                    }
-                    None => {
-                        let reg = map.live_at(line).first().unwrap().clone();
-                        let offset = map.alloc_stack();
-
-                        b.emit(Instruction::new(
-                            "movl",
-                            vec![
-                                reg.into(),
-                                asm::Register::new(
-                                    asm::RegisterBackend::StackOffset(offset),
-                                    asm::Size::Doubleword,
-                                )
-                                .into(),
-                            ],
-                        ));
-
-                        b.emit(Instruction::new(
-                            "movl",
-                            vec![map.get(id.unwrap()).into(), reg.into()],
-                        ));
-                        b.emit(Instruction::new(
-                            "imul",
-                            vec![asm::Const(lhs).into(), map.get(rhs).into(), reg.into()],
-                        ));
-                        b.emit(Instruction::new(
-                            "movl",
-                            vec![reg.into(), map.get(id.unwrap()).into()],
-                        ));
-
-                        b.emit(Instruction::new(
-                            "movl",
-                            vec![
-                                asm::Register::new(
-                                    asm::RegisterBackend::StackOffset(offset),
-                                    asm::Size::Doubleword,
-                                )
-                                .into(),
-                                reg.into(),
-                            ],
-                        ));
-                        b.emit(Instruction::new(
-                            "movl",
-                            vec![reg.into(), map.get(id.unwrap()).into()],
-                        ));
-                    }
-                }
-            }
+            b += imul_constant(line, map, rhs, lhs, id.unwrap());
         }
         tac::Instruction::Op(tac::Op::Op(
             tac::TypeOp::Arithmetic(tac::ArithmeticOp::Mul),
@@ -692,165 +599,14 @@ fn translate(
             tac::Value::ID(lhs),
             tac::Value::ID(rhs),
         )) => {
-            let (eax_spill, eax_un_spill) = {
-                if matches!(map.get(lhs).rg, asm::RegisterBackend::Machine("eax")) == false {
-                    if map.free_at(line).contains(&"eax")
-                        || matches!(
-                            map.get(id.unwrap()).rg,
-                            asm::RegisterBackend::Machine("eax")
-                        )
-                    {
-                        let mut spill = asm::Block::new();
-                        spill.emit(Instruction::new(
-                            "movl",
-                            vec![
-                                map.get(lhs).into(),
-                                asm::Register::machine("eax", asm::Size::Doubleword).into(),
-                            ],
-                        ));
-
-                        (spill, asm::Block::new())
-                    } else {
-                        let offset = map.alloc_stack();
-                        let mut spill = asm::Block::new();
-                        spill.emit(Instruction::new(
-                            "movl",
-                            vec![
-                                asm::Register::machine("eax", asm::Size::Doubleword).into(),
-                                asm::Register::new(
-                                    asm::RegisterBackend::StackOffset(offset),
-                                    asm::Size::Doubleword,
-                                )
-                                .into(),
-                            ],
-                        ));
-
-                        spill.emit(Instruction::new(
-                            "movl",
-                            vec![
-                                map.get(lhs).into(),
-                                asm::Register::machine("eax", asm::Size::Doubleword).into(),
-                            ],
-                        ));
-
-                        let mut unspill = asm::Block::new();
-                        unspill.emit(Instruction::new(
-                            "movl",
-                            vec![
-                                asm::Register::new(
-                                    asm::RegisterBackend::StackOffset(offset),
-                                    asm::Size::Doubleword,
-                                )
-                                .into(),
-                                asm::Register::machine("eax", asm::Size::Doubleword).into(),
-                            ],
-                        ));
-
-                        (spill, unspill)
-                    }
-                } else {
-                    (asm::Block::new(), asm::Block::new())
-                }
-            };
-
-            let (divisor, spill_edx, un_spill_edx) = {
-                if matches!(map.get(rhs).rg, asm::RegisterBackend::Machine("edx")) {
-                    if let Some(reg) = map.free_at(line).iter().find(|&&reg| reg != "eax") {
-                        let mut spill = asm::Block::new();
-                        spill.emit(Instruction::new(
-                            "movl",
-                            vec![
-                                map.get(rhs).into(),
-                                asm::Register::machine(reg, asm::Size::Doubleword).into(),
-                            ],
-                        ));
-
-                        (
-                            asm::Register::machine(reg, asm::Size::Doubleword).into(),
-                            spill,
-                            asm::Block::new(),
-                        )
-                    } else {
-                        let offset = map.alloc_stack();
-                        let mut spill = asm::Block::new();
-                        spill.emit(Instruction::new(
-                            "movl",
-                            vec![
-                                asm::Register::machine("edx", asm::Size::Doubleword).into(),
-                                asm::Register::new(
-                                    asm::RegisterBackend::StackOffset(offset),
-                                    asm::Size::Doubleword,
-                                )
-                                .into(),
-                            ],
-                        ));
-
-                        let mut unspill = asm::Block::new();
-                        unspill.emit(Instruction::new(
-                            "movl",
-                            vec![
-                                asm::Register::new(
-                                    asm::RegisterBackend::StackOffset(offset),
-                                    asm::Size::Doubleword,
-                                )
-                                .into(),
-                                asm::Register::machine("edx", asm::Size::Doubleword).into(),
-                            ],
-                        ));
-
-                        (
-                            asm::Register::new(
-                                asm::RegisterBackend::StackOffset(offset),
-                                asm::Size::Doubleword,
-                            ),
-                            spill,
-                            unspill,
-                        )
-                    }
-                } else {
-                    if map
-                        .live_at(line)
-                        .contains(&asm::Register::machine("edx", asm::Size::Doubleword))
-                    {
-                        let offset = map.alloc_stack();
-                        let mut spill = asm::Block::new();
-                        spill.emit(Instruction::new(
-                            "movl",
-                            vec![
-                                asm::Register::machine("edx", asm::Size::Doubleword).into(),
-                                asm::Register::new(
-                                    asm::RegisterBackend::StackOffset(offset),
-                                    asm::Size::Doubleword,
-                                )
-                                .into(),
-                            ],
-                        ));
-
-                        let mut unspill = asm::Block::new();
-                        unspill.emit(Instruction::new(
-                            "movl",
-                            vec![
-                                asm::Register::new(
-                                    asm::RegisterBackend::StackOffset(offset),
-                                    asm::Size::Doubleword,
-                                )
-                                .into(),
-                                asm::Register::machine("edx", asm::Size::Doubleword).into(),
-                            ],
-                        ));
-
-                        (map.get(rhs).into(), spill, unspill)
-                    } else {
-                        (map.get(rhs).into(), asm::Block::new(), asm::Block::new())
-                    }
-                }
-            };
+            let (eax_spill, eax_un_spill) = spill_eax_div(line, map, lhs, id.unwrap());
+            let (spill_edx, un_spill_edx) = spill_edx_div(line, map, rhs);
 
             b += eax_spill;
             b += spill_edx;
 
             b.emit(Instruction::new("cltd", vec![]));
-            b.emit(Instruction::new("idivl", vec![divisor.into()]));
+            b.emit(Instruction::new("idivl", vec![map.get(rhs).into()]));
             b.emit(Instruction::new(
                 "movl",
                 vec![
@@ -867,185 +623,13 @@ fn translate(
             tac::Value::ID(lhs),
             tac::Value::Const(tac::Const::Int(rhs)),
         )) => {
-            let (eax_spill, eax_un_spill) = {
-                if matches!(map.get(lhs).rg, asm::RegisterBackend::Machine("eax")) == false {
-                    if map.free_at(line).contains(&"eax")
-                        || matches!(
-                            map.get(id.unwrap()).rg,
-                            asm::RegisterBackend::Machine("eax")
-                        )
-                    {
-                        let mut spill = asm::Block::new();
-                        spill.emit(Instruction::new(
-                            "movl",
-                            vec![
-                                map.get(lhs).into(),
-                                asm::Register::machine("eax", asm::Size::Doubleword).into(),
-                            ],
-                        ));
-
-                        (spill, asm::Block::new())
-                    } else {
-                        let offset = map.alloc_stack();
-                        let mut spill = asm::Block::new();
-                        spill.emit(Instruction::new(
-                            "movl",
-                            vec![
-                                asm::Register::machine("eax", asm::Size::Doubleword).into(),
-                                asm::Register::new(
-                                    asm::RegisterBackend::StackOffset(offset),
-                                    asm::Size::Doubleword,
-                                )
-                                .into(),
-                            ],
-                        ));
-
-                        spill.emit(Instruction::new(
-                            "movl",
-                            vec![
-                                map.get(lhs).into(),
-                                asm::Register::machine("eax", asm::Size::Doubleword).into(),
-                            ],
-                        ));
-
-                        let mut unspill = asm::Block::new();
-                        unspill.emit(Instruction::new(
-                            "movl",
-                            vec![
-                                asm::Register::new(
-                                    asm::RegisterBackend::StackOffset(offset),
-                                    asm::Size::Doubleword,
-                                )
-                                .into(),
-                                asm::Register::machine("eax", asm::Size::Doubleword).into(),
-                            ],
-                        ));
-
-                        (spill, unspill)
-                    }
-                } else {
-                    (asm::Block::new(), asm::Block::new())
-                }
-            };
-
-            let (divisor, spill_edx, un_spill_edx) = {
-                if let Some(reg) = map
-                    .free_at(line)
-                    .iter()
-                    .find(|&&reg| reg != "eax" && reg != "edx")
-                {
-                    let mut spill = asm::Block::new();
-                    spill.emit(Instruction::new(
-                        "movl",
-                        vec![
-                            asm::Const(rhs).into(),
-                            asm::Register::machine(reg, asm::Size::Doubleword).into(),
-                        ],
-                    ));
-
-                    let unspill = if map
-                        .live_at(line)
-                        .contains(&asm::Register::machine("edx", asm::Size::Doubleword))
-                    {
-                        let offset = map.alloc_stack();
-                        spill.emit(Instruction::new(
-                            "movl",
-                            vec![
-                                asm::Register::machine("edx", asm::Size::Doubleword).into(),
-                                asm::Register::new(
-                                    asm::RegisterBackend::StackOffset(offset),
-                                    asm::Size::Doubleword,
-                                )
-                                .into(),
-                            ],
-                        ));
-
-                        let mut unspill = asm::Block::new();
-                        unspill.emit(Instruction::new(
-                            "movl",
-                            vec![
-                                asm::Register::new(
-                                    asm::RegisterBackend::StackOffset(offset),
-                                    asm::Size::Doubleword,
-                                )
-                                .into(),
-                                asm::Register::machine("edx", asm::Size::Doubleword).into(),
-                            ],
-                        ));
-
-                        unspill
-                    } else {
-                        asm::Block::new()
-                    };
-
-                    (
-                        asm::Register::machine(reg, asm::Size::Doubleword).into(),
-                        spill,
-                        unspill,
-                    )
-                } else {
-                    let offset = map.alloc_stack();
-                    let mut spill = asm::Block::new();
-                    spill.emit(Instruction::new(
-                        "movl",
-                        vec![
-                            asm::Const(rhs).into(),
-                            asm::Register::new(
-                                asm::RegisterBackend::StackOffset(offset),
-                                asm::Size::Doubleword,
-                            )
-                            .into(),
-                        ],
-                    ));
-
-                    let unspill = if map
-                        .live_at(line)
-                        .contains(&asm::Register::machine("edx", asm::Size::Doubleword))
-                    {
-                        let offset = map.alloc_stack();
-                        spill.emit(Instruction::new(
-                            "movl",
-                            vec![
-                                asm::Register::machine("edx", asm::Size::Doubleword).into(),
-                                asm::Register::new(
-                                    asm::RegisterBackend::StackOffset(offset),
-                                    asm::Size::Doubleword,
-                                )
-                                .into(),
-                            ],
-                        ));
-
-                        let mut unspill = asm::Block::new();
-                        unspill.emit(Instruction::new(
-                            "movl",
-                            vec![
-                                asm::Register::new(
-                                    asm::RegisterBackend::StackOffset(offset),
-                                    asm::Size::Doubleword,
-                                )
-                                .into(),
-                                asm::Register::machine("edx", asm::Size::Doubleword).into(),
-                            ],
-                        ));
-
-                        unspill
-                    } else {
-                        asm::Block::new()
-                    };
-
-                    (
-                        asm::Register::new(
-                            asm::RegisterBackend::StackOffset(offset),
-                            asm::Size::Doubleword,
-                        ),
-                        spill,
-                        unspill,
-                    )
-                }
-            };
+            let (eax_spill, eax_un_spill) = spill_eax_div(line, map, lhs, id.unwrap());
+            let (spill_edx, un_spill_edx) = spill_edx_div_c(line, map);
+            let (divisor, divisor_spill, divisor_unspill) = space_for_divisor(line, map, rhs);
 
             b += eax_spill;
             b += spill_edx;
+            b += divisor_spill;
 
             b.emit(Instruction::new("cltd", vec![]));
             b.emit(Instruction::new("idivl", vec![divisor.into()]));
@@ -1059,179 +643,21 @@ fn translate(
 
             b += eax_un_spill;
             b += un_spill_edx;
+            b += divisor_unspill;
         }
         tac::Instruction::Op(tac::Op::Op(
             tac::TypeOp::Arithmetic(tac::ArithmeticOp::Div),
             tac::Value::Const(tac::Const::Int(lhs)),
             tac::Value::ID(rhs),
         )) => {
-            let (eax_spill, eax_un_spill) = {
-                if map.free_at(line).contains(&"eax")
-                    || matches!(
-                        map.get(id.unwrap()).rg,
-                        asm::RegisterBackend::Machine("eax")
-                    )
-                {
-                    let mut spill = asm::Block::new();
-                    spill.emit(Instruction::new(
-                        "movl",
-                        vec![
-                            asm::Const(lhs).into(),
-                            asm::Register::machine("eax", asm::Size::Doubleword).into(),
-                        ],
-                    ));
-
-                    (spill, asm::Block::new())
-                } else {
-                    let offset = map.alloc_stack();
-                    let mut spill = asm::Block::new();
-                    spill.emit(Instruction::new(
-                        "movl",
-                        vec![
-                            asm::Register::machine("eax", asm::Size::Doubleword).into(),
-                            asm::Register::new(
-                                asm::RegisterBackend::StackOffset(offset),
-                                asm::Size::Doubleword,
-                            )
-                            .into(),
-                        ],
-                    ));
-
-                    spill.emit(Instruction::new(
-                        "movl",
-                        vec![
-                            asm::Const(lhs).into(),
-                            asm::Register::machine("eax", asm::Size::Doubleword).into(),
-                        ],
-                    ));
-
-                    let mut unspill = asm::Block::new();
-                    unspill.emit(Instruction::new(
-                        "movl",
-                        vec![
-                            asm::Register::new(
-                                asm::RegisterBackend::StackOffset(offset),
-                                asm::Size::Doubleword,
-                            )
-                            .into(),
-                            asm::Register::machine("eax", asm::Size::Doubleword).into(),
-                        ],
-                    ));
-
-                    (spill, unspill)
-                }
-            };
-
-            let (divisor, spill_edx, un_spill_edx) = {
-                if matches!(map.get(rhs).rg, asm::RegisterBackend::Machine("edx")) {
-                    if let Some(reg) = map.free_at(line).iter().find(|&&reg| reg != "eax") {
-                        let mut spill = asm::Block::new();
-                        spill.emit(Instruction::new(
-                            "movl",
-                            vec![
-                                map.get(rhs).into(),
-                                asm::Register::machine(reg, asm::Size::Doubleword).into(),
-                            ],
-                        ));
-
-                        (
-                            asm::Register::machine(reg, asm::Size::Doubleword).into(),
-                            spill,
-                            asm::Block::new(),
-                        )
-                    } else {
-                        let offset = map.alloc_stack();
-                        let mut spill = asm::Block::new();
-                        spill.emit(Instruction::new(
-                            "movl",
-                            vec![
-                                asm::Register::machine("edx", asm::Size::Doubleword).into(),
-                                asm::Register::new(
-                                    asm::RegisterBackend::StackOffset(offset),
-                                    asm::Size::Doubleword,
-                                )
-                                .into(),
-                            ],
-                        ));
-
-                        let mut unspill = asm::Block::new();
-                        if matches!(
-                            map.get(id.unwrap()).rg,
-                            asm::RegisterBackend::Machine("edx")
-                        ) == false
-                        {
-                            unspill.emit(Instruction::new(
-                                "movl",
-                                vec![
-                                    asm::Register::new(
-                                        asm::RegisterBackend::StackOffset(offset),
-                                        asm::Size::Doubleword,
-                                    )
-                                    .into(),
-                                    asm::Register::machine("edx", asm::Size::Doubleword).into(),
-                                ],
-                            ));
-                        }
-
-                        (
-                            asm::Register::new(
-                                asm::RegisterBackend::StackOffset(offset),
-                                asm::Size::Doubleword,
-                            ),
-                            spill,
-                            unspill,
-                        )
-                    }
-                } else {
-                    if map
-                        .live_at(line)
-                        .contains(&asm::Register::machine("edx", asm::Size::Doubleword))
-                    {
-                        let offset = map.alloc_stack();
-                        let mut spill = asm::Block::new();
-                        spill.emit(Instruction::new(
-                            "movl",
-                            vec![
-                                asm::Register::machine("edx", asm::Size::Doubleword).into(),
-                                asm::Register::new(
-                                    asm::RegisterBackend::StackOffset(offset),
-                                    asm::Size::Doubleword,
-                                )
-                                .into(),
-                            ],
-                        ));
-
-                        let mut unspill = asm::Block::new();
-                        if matches!(
-                            map.get(id.unwrap()).rg,
-                            asm::RegisterBackend::Machine("edx")
-                        ) == false
-                        {
-                            unspill.emit(Instruction::new(
-                                "movl",
-                                vec![
-                                    asm::Register::new(
-                                        asm::RegisterBackend::StackOffset(offset),
-                                        asm::Size::Doubleword,
-                                    )
-                                    .into(),
-                                    asm::Register::machine("edx", asm::Size::Doubleword).into(),
-                                ],
-                            ));
-                        }
-
-                        (map.get(rhs).into(), spill, unspill)
-                    } else {
-                        (map.get(rhs).into(), asm::Block::new(), asm::Block::new())
-                    }
-                }
-            };
+            let (eax_spill, eax_un_spill) = spill_eax_div_cc(line, map, lhs, rhs, id.unwrap());
+            let (spill_edx, un_spill_edx) = spill_edx_div_c(line, map);
 
             b += eax_spill;
             b += spill_edx;
 
             b.emit(Instruction::new("cltd", vec![]));
-            b.emit(Instruction::new("idivl", vec![divisor.into()]));
+            b.emit(Instruction::new("idivl", vec![map.get(rhs).into()]));
             b.emit(Instruction::new(
                 "movl",
                 vec![
@@ -1248,193 +674,13 @@ fn translate(
             tac::Value::Const(tac::Const::Int(lhs)),
             tac::Value::Const(tac::Const::Int(rhs)),
         )) => {
-            let (eax_spill, eax_un_spill) = {
-                if map.free_at(line).contains(&"eax")
-                    || matches!(
-                        map.get(id.unwrap()).rg,
-                        asm::RegisterBackend::Machine("eax")
-                    )
-                {
-                    let mut spill = asm::Block::new();
-                    spill.emit(Instruction::new(
-                        "movl",
-                        vec![
-                            asm::Const(lhs).into(),
-                            asm::Register::machine("eax", asm::Size::Doubleword).into(),
-                        ],
-                    ));
-
-                    (spill, asm::Block::new())
-                } else {
-                    let offset = map.alloc_stack();
-                    let mut spill = asm::Block::new();
-                    spill.emit(Instruction::new(
-                        "movl",
-                        vec![
-                            asm::Register::machine("eax", asm::Size::Doubleword).into(),
-                            asm::Register::new(
-                                asm::RegisterBackend::StackOffset(offset),
-                                asm::Size::Doubleword,
-                            )
-                            .into(),
-                        ],
-                    ));
-
-                    spill.emit(Instruction::new(
-                        "movl",
-                        vec![
-                            asm::Const(lhs).into(),
-                            asm::Register::machine("eax", asm::Size::Doubleword).into(),
-                        ],
-                    ));
-
-                    let mut unspill = asm::Block::new();
-                    unspill.emit(Instruction::new(
-                        "movl",
-                        vec![
-                            asm::Register::new(
-                                asm::RegisterBackend::StackOffset(offset),
-                                asm::Size::Doubleword,
-                            )
-                            .into(),
-                            asm::Register::machine("eax", asm::Size::Doubleword).into(),
-                        ],
-                    ));
-
-                    (spill, unspill)
-                }
-            };
-
-            let (divisor, spill_edx, un_spill_edx) = {
-                if let Some(reg) = map
-                    .free_at(line)
-                    .iter()
-                    .find(|&&reg| reg != "eax" && reg != "edx")
-                {
-                    let mut spill = asm::Block::new();
-                    spill.emit(Instruction::new(
-                        "movl",
-                        vec![
-                            asm::Const(rhs).into(),
-                            asm::Register::machine(reg, asm::Size::Doubleword).into(),
-                        ],
-                    ));
-
-                    let unspill = if map
-                        .live_at(line)
-                        .contains(&asm::Register::machine("edx", asm::Size::Doubleword))
-                    {
-                        let offset = map.alloc_stack();
-                        spill.emit(Instruction::new(
-                            "movl",
-                            vec![
-                                asm::Register::machine("edx", asm::Size::Doubleword).into(),
-                                asm::Register::new(
-                                    asm::RegisterBackend::StackOffset(offset),
-                                    asm::Size::Doubleword,
-                                )
-                                .into(),
-                            ],
-                        ));
-
-                        let mut unspill = asm::Block::new();
-                        if matches!(
-                            map.get(id.unwrap()).rg,
-                            asm::RegisterBackend::Machine("edx")
-                        ) == false
-                        {
-                            unspill.emit(Instruction::new(
-                                "movl",
-                                vec![
-                                    asm::Register::new(
-                                        asm::RegisterBackend::StackOffset(offset),
-                                        asm::Size::Doubleword,
-                                    )
-                                    .into(),
-                                    asm::Register::machine("edx", asm::Size::Doubleword).into(),
-                                ],
-                            ));
-                        }
-
-                        unspill
-                    } else {
-                        asm::Block::new()
-                    };
-
-                    (
-                        asm::Register::machine(reg, asm::Size::Doubleword).into(),
-                        spill,
-                        unspill,
-                    )
-                } else {
-                    let offset = map.alloc_stack();
-                    let mut spill = asm::Block::new();
-                    spill.emit(Instruction::new(
-                        "movl",
-                        vec![
-                            asm::Const(rhs).into(),
-                            asm::Register::new(
-                                asm::RegisterBackend::StackOffset(offset),
-                                asm::Size::Doubleword,
-                            )
-                            .into(),
-                        ],
-                    ));
-
-                    let unspill = if map
-                        .live_at(line)
-                        .contains(&asm::Register::machine("edx", asm::Size::Doubleword))
-                    {
-                        let offset = map.alloc_stack();
-                        spill.emit(Instruction::new(
-                            "movl",
-                            vec![
-                                asm::Register::machine("edx", asm::Size::Doubleword).into(),
-                                asm::Register::new(
-                                    asm::RegisterBackend::StackOffset(offset),
-                                    asm::Size::Doubleword,
-                                )
-                                .into(),
-                            ],
-                        ));
-
-                        let mut unspill = asm::Block::new();
-                        if matches!(
-                            map.get(id.unwrap()).rg,
-                            asm::RegisterBackend::Machine("edx")
-                        ) == false
-                        {
-                            unspill.emit(Instruction::new(
-                                "movl",
-                                vec![
-                                    asm::Register::new(
-                                        asm::RegisterBackend::StackOffset(offset),
-                                        asm::Size::Doubleword,
-                                    )
-                                    .into(),
-                                    asm::Register::machine("edx", asm::Size::Doubleword).into(),
-                                ],
-                            ));
-                        }
-
-                        unspill
-                    } else {
-                        asm::Block::new()
-                    };
-
-                    (
-                        asm::Register::new(
-                            asm::RegisterBackend::StackOffset(offset),
-                            asm::Size::Doubleword,
-                        ),
-                        spill,
-                        unspill,
-                    )
-                }
-            };
+            let (eax_spill, eax_un_spill) = spill_eax_div_ccc(line, map, lhs, id.unwrap());
+            let (spill_edx, un_spill_edx) = spill_edx_div_c(line, map);
+            let (divisor, divisor_spill, divisor_unspill) = space_for_divisor(line, map, rhs);
 
             b += eax_spill;
             b += spill_edx;
+            b += divisor_spill;
 
             b.emit(Instruction::new("cltd", vec![]));
             b.emit(Instruction::new("idivl", vec![divisor.into()]));
@@ -1448,6 +694,7 @@ fn translate(
 
             b += eax_un_spill;
             b += un_spill_edx;
+            b += divisor_unspill;
         }
         // MOD
         tac::Instruction::Op(tac::Op::Op(
@@ -1455,165 +702,14 @@ fn translate(
             tac::Value::ID(lhs),
             tac::Value::ID(rhs),
         )) => {
-            let (eax_spill, eax_un_spill) = {
-                if matches!(map.get(lhs).rg, asm::RegisterBackend::Machine("eax")) == false {
-                    if map.free_at(line).contains(&"eax")
-                        || matches!(
-                            map.get(id.unwrap()).rg,
-                            asm::RegisterBackend::Machine("eax")
-                        )
-                    {
-                        let mut spill = asm::Block::new();
-                        spill.emit(Instruction::new(
-                            "movl",
-                            vec![
-                                map.get(lhs).into(),
-                                asm::Register::machine("eax", asm::Size::Doubleword).into(),
-                            ],
-                        ));
-
-                        (spill, asm::Block::new())
-                    } else {
-                        let offset = map.alloc_stack();
-                        let mut spill = asm::Block::new();
-                        spill.emit(Instruction::new(
-                            "movl",
-                            vec![
-                                asm::Register::machine("eax", asm::Size::Doubleword).into(),
-                                asm::Register::new(
-                                    asm::RegisterBackend::StackOffset(offset),
-                                    asm::Size::Doubleword,
-                                )
-                                .into(),
-                            ],
-                        ));
-
-                        spill.emit(Instruction::new(
-                            "movl",
-                            vec![
-                                map.get(lhs).into(),
-                                asm::Register::machine("eax", asm::Size::Doubleword).into(),
-                            ],
-                        ));
-
-                        let mut unspill = asm::Block::new();
-                        unspill.emit(Instruction::new(
-                            "movl",
-                            vec![
-                                asm::Register::new(
-                                    asm::RegisterBackend::StackOffset(offset),
-                                    asm::Size::Doubleword,
-                                )
-                                .into(),
-                                asm::Register::machine("eax", asm::Size::Doubleword).into(),
-                            ],
-                        ));
-
-                        (spill, unspill)
-                    }
-                } else {
-                    (asm::Block::new(), asm::Block::new())
-                }
-            };
-
-            let (divisor, spill_edx, un_spill_edx) = {
-                if matches!(map.get(rhs).rg, asm::RegisterBackend::Machine("edx")) {
-                    if let Some(reg) = map.free_at(line).iter().find(|&&reg| reg != "eax") {
-                        let mut spill = asm::Block::new();
-                        spill.emit(Instruction::new(
-                            "movl",
-                            vec![
-                                map.get(rhs).into(),
-                                asm::Register::machine(reg, asm::Size::Doubleword).into(),
-                            ],
-                        ));
-
-                        (
-                            asm::Register::machine(reg, asm::Size::Doubleword).into(),
-                            spill,
-                            asm::Block::new(),
-                        )
-                    } else {
-                        let offset = map.alloc_stack();
-                        let mut spill = asm::Block::new();
-                        spill.emit(Instruction::new(
-                            "movl",
-                            vec![
-                                asm::Register::machine("edx", asm::Size::Doubleword).into(),
-                                asm::Register::new(
-                                    asm::RegisterBackend::StackOffset(offset),
-                                    asm::Size::Doubleword,
-                                )
-                                .into(),
-                            ],
-                        ));
-
-                        let mut unspill = asm::Block::new();
-                        unspill.emit(Instruction::new(
-                            "movl",
-                            vec![
-                                asm::Register::new(
-                                    asm::RegisterBackend::StackOffset(offset),
-                                    asm::Size::Doubleword,
-                                )
-                                .into(),
-                                asm::Register::machine("edx", asm::Size::Doubleword).into(),
-                            ],
-                        ));
-
-                        (
-                            asm::Register::new(
-                                asm::RegisterBackend::StackOffset(offset),
-                                asm::Size::Doubleword,
-                            ),
-                            spill,
-                            unspill,
-                        )
-                    }
-                } else {
-                    if map
-                        .live_at(line)
-                        .contains(&asm::Register::machine("edx", asm::Size::Doubleword))
-                    {
-                        let offset = map.alloc_stack();
-                        let mut spill = asm::Block::new();
-                        spill.emit(Instruction::new(
-                            "movl",
-                            vec![
-                                asm::Register::machine("edx", asm::Size::Doubleword).into(),
-                                asm::Register::new(
-                                    asm::RegisterBackend::StackOffset(offset),
-                                    asm::Size::Doubleword,
-                                )
-                                .into(),
-                            ],
-                        ));
-
-                        let mut unspill = asm::Block::new();
-                        unspill.emit(Instruction::new(
-                            "movl",
-                            vec![
-                                asm::Register::new(
-                                    asm::RegisterBackend::StackOffset(offset),
-                                    asm::Size::Doubleword,
-                                )
-                                .into(),
-                                asm::Register::machine("edx", asm::Size::Doubleword).into(),
-                            ],
-                        ));
-
-                        (map.get(rhs).into(), spill, unspill)
-                    } else {
-                        (map.get(rhs).into(), asm::Block::new(), asm::Block::new())
-                    }
-                }
-            };
+            let (eax_spill, eax_un_spill) = spill_eax_div(line, map, lhs, id.unwrap());
+            let (spill_edx, un_spill_edx) = spill_edx_div(line, map, rhs);
 
             b += eax_spill;
             b += spill_edx;
 
             b.emit(Instruction::new("cltd", vec![]));
-            b.emit(Instruction::new("idivl", vec![divisor.into()]));
+            b.emit(Instruction::new("idivl", vec![map.get(rhs).into()]));
             b.emit(Instruction::new(
                 "movl",
                 vec![
@@ -1630,196 +726,13 @@ fn translate(
             tac::Value::ID(lhs),
             tac::Value::Const(tac::Const::Int(rhs)),
         )) => {
-            let (eax_spill, eax_un_spill) = {
-                if matches!(map.get(lhs).rg, asm::RegisterBackend::Machine("eax")) == false {
-                    if map.free_at(line).contains(&"eax")
-                        || matches!(
-                            map.get(id.unwrap()).rg,
-                            asm::RegisterBackend::Machine("eax")
-                        )
-                    {
-                        let mut spill = asm::Block::new();
-                        spill.emit(Instruction::new(
-                            "movl",
-                            vec![
-                                map.get(lhs).into(),
-                                asm::Register::machine("eax", asm::Size::Doubleword).into(),
-                            ],
-                        ));
-
-                        (spill, asm::Block::new())
-                    } else {
-                        let offset = map.alloc_stack();
-                        let mut spill = asm::Block::new();
-                        spill.emit(Instruction::new(
-                            "movl",
-                            vec![
-                                asm::Register::machine("eax", asm::Size::Doubleword).into(),
-                                asm::Register::new(
-                                    asm::RegisterBackend::StackOffset(offset),
-                                    asm::Size::Doubleword,
-                                )
-                                .into(),
-                            ],
-                        ));
-
-                        spill.emit(Instruction::new(
-                            "movl",
-                            vec![
-                                map.get(lhs).into(),
-                                asm::Register::machine("eax", asm::Size::Doubleword).into(),
-                            ],
-                        ));
-
-                        let mut unspill = asm::Block::new();
-                        unspill.emit(Instruction::new(
-                            "movl",
-                            vec![
-                                asm::Register::new(
-                                    asm::RegisterBackend::StackOffset(offset),
-                                    asm::Size::Doubleword,
-                                )
-                                .into(),
-                                asm::Register::machine("eax", asm::Size::Doubleword).into(),
-                            ],
-                        ));
-
-                        (spill, unspill)
-                    }
-                } else {
-                    (asm::Block::new(), asm::Block::new())
-                }
-            };
-
-            let (divisor, spill_edx, un_spill_edx) = {
-                if let Some(reg) = map
-                    .free_at(line)
-                    .iter()
-                    .find(|&&reg| reg != "eax" && reg != "edx")
-                {
-                    let mut spill = asm::Block::new();
-                    spill.emit(Instruction::new(
-                        "movl",
-                        vec![
-                            asm::Const(rhs).into(),
-                            asm::Register::machine(reg, asm::Size::Doubleword).into(),
-                        ],
-                    ));
-
-                    let unspill = if map
-                        .live_at(line)
-                        .contains(&asm::Register::machine("edx", asm::Size::Doubleword))
-                    {
-                        let offset = map.alloc_stack();
-                        spill.emit(Instruction::new(
-                            "movl",
-                            vec![
-                                asm::Register::machine("edx", asm::Size::Doubleword).into(),
-                                asm::Register::new(
-                                    asm::RegisterBackend::StackOffset(offset),
-                                    asm::Size::Doubleword,
-                                )
-                                .into(),
-                            ],
-                        ));
-
-                        let mut unspill = asm::Block::new();
-                        if matches!(
-                            map.get(id.unwrap()).rg,
-                            asm::RegisterBackend::Machine("edx")
-                        ) == false
-                        {
-                            unspill.emit(Instruction::new(
-                                "movl",
-                                vec![
-                                    asm::Register::new(
-                                        asm::RegisterBackend::StackOffset(offset),
-                                        asm::Size::Doubleword,
-                                    )
-                                    .into(),
-                                    asm::Register::machine("edx", asm::Size::Doubleword).into(),
-                                ],
-                            ));
-                        }
-                        unspill
-                    } else {
-                        asm::Block::new()
-                    };
-
-                    (
-                        asm::Register::machine(reg, asm::Size::Doubleword).into(),
-                        spill,
-                        unspill,
-                    )
-                } else {
-                    let offset = map.alloc_stack();
-                    let mut spill = asm::Block::new();
-                    spill.emit(Instruction::new(
-                        "movl",
-                        vec![
-                            asm::Const(rhs).into(),
-                            asm::Register::new(
-                                asm::RegisterBackend::StackOffset(offset),
-                                asm::Size::Doubleword,
-                            )
-                            .into(),
-                        ],
-                    ));
-
-                    let unspill = if map
-                        .live_at(line)
-                        .contains(&asm::Register::machine("edx", asm::Size::Doubleword))
-                    {
-                        let offset = map.alloc_stack();
-                        spill.emit(Instruction::new(
-                            "movl",
-                            vec![
-                                asm::Register::machine("edx", asm::Size::Doubleword).into(),
-                                asm::Register::new(
-                                    asm::RegisterBackend::StackOffset(offset),
-                                    asm::Size::Doubleword,
-                                )
-                                .into(),
-                            ],
-                        ));
-
-                        let mut unspill = asm::Block::new();
-                        if matches!(
-                            map.get(id.unwrap()).rg,
-                            asm::RegisterBackend::Machine("edx")
-                        ) == false
-                        {
-                            unspill.emit(Instruction::new(
-                                "movl",
-                                vec![
-                                    asm::Register::new(
-                                        asm::RegisterBackend::StackOffset(offset),
-                                        asm::Size::Doubleword,
-                                    )
-                                    .into(),
-                                    asm::Register::machine("edx", asm::Size::Doubleword).into(),
-                                ],
-                            ));
-                        }
-
-                        unspill
-                    } else {
-                        asm::Block::new()
-                    };
-
-                    (
-                        asm::Register::new(
-                            asm::RegisterBackend::StackOffset(offset),
-                            asm::Size::Doubleword,
-                        ),
-                        spill,
-                        unspill,
-                    )
-                }
-            };
+            let (eax_spill, eax_un_spill) = spill_eax_div(line, map, lhs, id.unwrap());
+            let (spill_edx, un_spill_edx) = spill_edx_div_c(line, map);
+            let (divisor, divisor_spill, divisor_unspill) = space_for_divisor(line, map, rhs);
 
             b += eax_spill;
             b += spill_edx;
+            b += divisor_spill;
 
             b.emit(Instruction::new("cltd", vec![]));
             b.emit(Instruction::new("idivl", vec![divisor.into()]));
@@ -1833,167 +746,21 @@ fn translate(
 
             b += eax_un_spill;
             b += un_spill_edx;
+            b += divisor_unspill;
         }
         tac::Instruction::Op(tac::Op::Op(
             tac::TypeOp::Arithmetic(tac::ArithmeticOp::Mod),
             tac::Value::Const(tac::Const::Int(lhs)),
             tac::Value::ID(rhs),
         )) => {
-            let (eax_spill, eax_un_spill) = {
-                if map.free_at(line).contains(&"eax")
-                    || matches!(
-                        map.get(id.unwrap()).rg,
-                        asm::RegisterBackend::Machine("eax")
-                    )
-                {
-                    let mut spill = asm::Block::new();
-                    spill.emit(Instruction::new(
-                        "movl",
-                        vec![
-                            asm::Const(lhs).into(),
-                            asm::Register::machine("eax", asm::Size::Doubleword).into(),
-                        ],
-                    ));
-
-                    (spill, asm::Block::new())
-                } else {
-                    let offset = map.alloc_stack();
-                    let mut spill = asm::Block::new();
-                    spill.emit(Instruction::new(
-                        "movl",
-                        vec![
-                            asm::Register::machine("eax", asm::Size::Doubleword).into(),
-                            asm::Register::new(
-                                asm::RegisterBackend::StackOffset(offset),
-                                asm::Size::Doubleword,
-                            )
-                            .into(),
-                        ],
-                    ));
-
-                    spill.emit(Instruction::new(
-                        "movl",
-                        vec![
-                            asm::Const(lhs).into(),
-                            asm::Register::machine("eax", asm::Size::Doubleword).into(),
-                        ],
-                    ));
-
-                    let mut unspill = asm::Block::new();
-                    unspill.emit(Instruction::new(
-                        "movl",
-                        vec![
-                            asm::Register::new(
-                                asm::RegisterBackend::StackOffset(offset),
-                                asm::Size::Doubleword,
-                            )
-                            .into(),
-                            asm::Register::machine("eax", asm::Size::Doubleword).into(),
-                        ],
-                    ));
-
-                    (spill, unspill)
-                }
-            };
-
-            let (divisor, spill_edx, un_spill_edx) = {
-                if matches!(map.get(rhs).rg, asm::RegisterBackend::Machine("edx")) {
-                    if let Some(reg) = map.free_at(line).iter().find(|&&reg| reg != "eax") {
-                        let mut spill = asm::Block::new();
-                        spill.emit(Instruction::new(
-                            "movl",
-                            vec![
-                                map.get(rhs).into(),
-                                asm::Register::machine(reg, asm::Size::Doubleword).into(),
-                            ],
-                        ));
-
-                        (
-                            asm::Register::machine(reg, asm::Size::Doubleword).into(),
-                            spill,
-                            asm::Block::new(),
-                        )
-                    } else {
-                        let offset = map.alloc_stack();
-                        let mut spill = asm::Block::new();
-                        spill.emit(Instruction::new(
-                            "movl",
-                            vec![
-                                asm::Register::machine("edx", asm::Size::Doubleword).into(),
-                                asm::Register::new(
-                                    asm::RegisterBackend::StackOffset(offset),
-                                    asm::Size::Doubleword,
-                                )
-                                .into(),
-                            ],
-                        ));
-
-                        let mut unspill = asm::Block::new();
-                        unspill.emit(Instruction::new(
-                            "movl",
-                            vec![
-                                asm::Register::new(
-                                    asm::RegisterBackend::StackOffset(offset),
-                                    asm::Size::Doubleword,
-                                )
-                                .into(),
-                                asm::Register::machine("edx", asm::Size::Doubleword).into(),
-                            ],
-                        ));
-
-                        (
-                            asm::Register::new(
-                                asm::RegisterBackend::StackOffset(offset),
-                                asm::Size::Doubleword,
-                            ),
-                            spill,
-                            unspill,
-                        )
-                    }
-                } else {
-                    if map
-                        .live_at(line)
-                        .contains(&asm::Register::machine("edx", asm::Size::Doubleword))
-                    {
-                        let offset = map.alloc_stack();
-                        let mut spill = asm::Block::new();
-                        spill.emit(Instruction::new(
-                            "movl",
-                            vec![
-                                asm::Register::machine("edx", asm::Size::Doubleword).into(),
-                                asm::Register::new(
-                                    asm::RegisterBackend::StackOffset(offset),
-                                    asm::Size::Doubleword,
-                                )
-                                .into(),
-                            ],
-                        ));
-
-                        let mut unspill = asm::Block::new();
-                        unspill.emit(Instruction::new(
-                            "movl",
-                            vec![
-                                asm::Register::new(
-                                    asm::RegisterBackend::StackOffset(offset),
-                                    asm::Size::Doubleword,
-                                )
-                                .into(),
-                                asm::Register::machine("edx", asm::Size::Doubleword).into(),
-                            ],
-                        ));
-
-                        (map.get(rhs).into(), spill, unspill)
-                    } else {
-                        (map.get(rhs).into(), asm::Block::new(), asm::Block::new())
-                    }
-                }
-            };
+            let (eax_spill, eax_un_spill) = spill_eax_div_cc(line, map, lhs, rhs, id.unwrap());
+            let (spill_edx, un_spill_edx) = spill_edx_div_c(line, map);
 
             b += eax_spill;
             b += spill_edx;
 
             b.emit(Instruction::new("cltd", vec![]));
-            b.emit(Instruction::new("idivl", vec![divisor.into()]));
+            b.emit(Instruction::new("idivl", vec![map.get(rhs).into()]));
             b.emit(Instruction::new(
                 "movl",
                 vec![
@@ -2010,193 +777,13 @@ fn translate(
             tac::Value::Const(tac::Const::Int(lhs)),
             tac::Value::Const(tac::Const::Int(rhs)),
         )) => {
-            let (eax_spill, eax_un_spill) = {
-                if map.free_at(line).contains(&"eax")
-                    || matches!(
-                        map.get(id.unwrap()).rg,
-                        asm::RegisterBackend::Machine("eax")
-                    )
-                {
-                    let mut spill = asm::Block::new();
-                    spill.emit(Instruction::new(
-                        "movl",
-                        vec![
-                            asm::Const(lhs).into(),
-                            asm::Register::machine("eax", asm::Size::Doubleword).into(),
-                        ],
-                    ));
-
-                    (spill, asm::Block::new())
-                } else {
-                    let offset = map.alloc_stack();
-                    let mut spill = asm::Block::new();
-                    spill.emit(Instruction::new(
-                        "movl",
-                        vec![
-                            asm::Register::machine("eax", asm::Size::Doubleword).into(),
-                            asm::Register::new(
-                                asm::RegisterBackend::StackOffset(offset),
-                                asm::Size::Doubleword,
-                            )
-                            .into(),
-                        ],
-                    ));
-
-                    spill.emit(Instruction::new(
-                        "movl",
-                        vec![
-                            asm::Const(lhs).into(),
-                            asm::Register::machine("eax", asm::Size::Doubleword).into(),
-                        ],
-                    ));
-
-                    let mut unspill = asm::Block::new();
-                    unspill.emit(Instruction::new(
-                        "movl",
-                        vec![
-                            asm::Register::new(
-                                asm::RegisterBackend::StackOffset(offset),
-                                asm::Size::Doubleword,
-                            )
-                            .into(),
-                            asm::Register::machine("eax", asm::Size::Doubleword).into(),
-                        ],
-                    ));
-
-                    (spill, unspill)
-                }
-            };
-
-            let (divisor, spill_edx, un_spill_edx) = {
-                if let Some(reg) = map
-                    .free_at(line)
-                    .iter()
-                    .find(|&&reg| reg != "eax" && reg != "edx")
-                {
-                    let mut spill = asm::Block::new();
-                    spill.emit(Instruction::new(
-                        "movl",
-                        vec![
-                            asm::Const(rhs).into(),
-                            asm::Register::machine(reg, asm::Size::Doubleword).into(),
-                        ],
-                    ));
-
-                    let unspill = if map
-                        .live_at(line)
-                        .contains(&asm::Register::machine("edx", asm::Size::Doubleword))
-                    {
-                        let offset = map.alloc_stack();
-                        spill.emit(Instruction::new(
-                            "movl",
-                            vec![
-                                asm::Register::machine("edx", asm::Size::Doubleword).into(),
-                                asm::Register::new(
-                                    asm::RegisterBackend::StackOffset(offset),
-                                    asm::Size::Doubleword,
-                                )
-                                .into(),
-                            ],
-                        ));
-
-                        let mut unspill = asm::Block::new();
-                        if matches!(
-                            map.get(id.unwrap()).rg,
-                            asm::RegisterBackend::Machine("edx")
-                        ) == false
-                        {
-                            unspill.emit(Instruction::new(
-                                "movl",
-                                vec![
-                                    asm::Register::new(
-                                        asm::RegisterBackend::StackOffset(offset),
-                                        asm::Size::Doubleword,
-                                    )
-                                    .into(),
-                                    asm::Register::machine("edx", asm::Size::Doubleword).into(),
-                                ],
-                            ));
-                        }
-
-                        unspill
-                    } else {
-                        asm::Block::new()
-                    };
-
-                    (
-                        asm::Register::machine(reg, asm::Size::Doubleword).into(),
-                        spill,
-                        unspill,
-                    )
-                } else {
-                    let offset = map.alloc_stack();
-                    let mut spill = asm::Block::new();
-                    spill.emit(Instruction::new(
-                        "movl",
-                        vec![
-                            asm::Const(rhs).into(),
-                            asm::Register::new(
-                                asm::RegisterBackend::StackOffset(offset),
-                                asm::Size::Doubleword,
-                            )
-                            .into(),
-                        ],
-                    ));
-
-                    let unspill = if map
-                        .live_at(line)
-                        .contains(&asm::Register::machine("edx", asm::Size::Doubleword))
-                    {
-                        let offset = map.alloc_stack();
-                        spill.emit(Instruction::new(
-                            "movl",
-                            vec![
-                                asm::Register::machine("edx", asm::Size::Doubleword).into(),
-                                asm::Register::new(
-                                    asm::RegisterBackend::StackOffset(offset),
-                                    asm::Size::Doubleword,
-                                )
-                                .into(),
-                            ],
-                        ));
-
-                        let mut unspill = asm::Block::new();
-                        if matches!(
-                            map.get(id.unwrap()).rg,
-                            asm::RegisterBackend::Machine("edx")
-                        ) == false
-                        {
-                            unspill.emit(Instruction::new(
-                                "movl",
-                                vec![
-                                    asm::Register::new(
-                                        asm::RegisterBackend::StackOffset(offset),
-                                        asm::Size::Doubleword,
-                                    )
-                                    .into(),
-                                    asm::Register::machine("edx", asm::Size::Doubleword).into(),
-                                ],
-                            ));
-                        }
-
-                        unspill
-                    } else {
-                        asm::Block::new()
-                    };
-
-                    (
-                        asm::Register::new(
-                            asm::RegisterBackend::StackOffset(offset),
-                            asm::Size::Doubleword,
-                        ),
-                        spill,
-                        unspill,
-                    )
-                }
-            };
+            let (eax_spill, eax_un_spill) = spill_eax_div_ccc(line, map, lhs, id.unwrap());
+            let (spill_edx, un_spill_edx) = spill_edx_div_c(line, map);
+            let (divisor, divisor_spill, divisor_unspill) = space_for_divisor(line, map, rhs);
 
             b += eax_spill;
             b += spill_edx;
+            b += divisor_spill;
 
             b.emit(Instruction::new("cltd", vec![]));
             b.emit(Instruction::new("idivl", vec![divisor.into()]));
@@ -2210,6 +797,7 @@ fn translate(
 
             b += eax_un_spill;
             b += un_spill_edx;
+            b += divisor_unspill;
         }
         // NEG
         tac::Instruction::Op(tac::Op::Unary(tac::UnOp::Neg, tac::Value::ID(v))) => {
@@ -2260,50 +848,10 @@ fn translate(
                 map.get(id.unwrap()).rg,
                 asm::RegisterBackend::StackOffset(..)
             ) {
-                let (reg, spill, unspill) = match map.find_free_at(line) {
-                    Some(reg) => (
-                        asm::Register::machine(reg, asm::Size::Doubleword),
-                        asm::Block::new(),
-                        asm::Block::new(),
-                    ),
-                    None => {
-                        let reg = map.live_at(line).first().unwrap().clone();
-                        let offset = map.alloc_stack();
-
-                        let mut spill = asm::Block::new();
-
-                        spill.emit(Instruction::new(
-                            "movl",
-                            vec![
-                                reg.into(),
-                                asm::Register::new(
-                                    asm::RegisterBackend::StackOffset(offset),
-                                    asm::Size::Doubleword,
-                                )
-                                .into(),
-                            ],
-                        ));
-
-                        let mut unspill = asm::Block::new();
-
-                        unspill.emit(Instruction::new(
-                            "movl",
-                            vec![
-                                asm::Register::new(
-                                    asm::RegisterBackend::StackOffset(offset),
-                                    asm::Size::Doubleword,
-                                )
-                                .into(),
-                                reg.into(),
-                            ],
-                        ));
-
-                        (reg, spill, unspill)
-                    }
-                };
+                let (reg, spill, unspill) = get_register(line, map);
+                let reg = asm::Register::machine(reg, asm::Size::Doubleword);
 
                 b += spill;
-
                 b.emit(Instruction::new(
                     "cmpl",
                     vec![asm::Const(0).into(), map.get(v).into()],
@@ -2328,7 +876,6 @@ fn translate(
                     "movl",
                     vec![reg.into(), map.get(id.unwrap()).into()],
                 ));
-
                 b += unspill;
             } else {
                 let reg = map.get(id.unwrap());
@@ -2362,50 +909,9 @@ fn translate(
                 map.get(id.unwrap()).rg,
                 asm::RegisterBackend::StackOffset(..)
             ) {
-                let (reg, spill, unspill) = match map.find_free_at(line) {
-                    Some(reg) => (
-                        asm::Register::machine(reg, asm::Size::Doubleword),
-                        asm::Block::new(),
-                        asm::Block::new(),
-                    ),
-                    None => {
-                        let reg = map.live_at(line).first().unwrap().clone();
-                        let offset = map.alloc_stack();
-
-                        let mut spill = asm::Block::new();
-
-                        spill.emit(Instruction::new(
-                            "movl",
-                            vec![
-                                reg.into(),
-                                asm::Register::new(
-                                    asm::RegisterBackend::StackOffset(offset),
-                                    asm::Size::Doubleword,
-                                )
-                                .into(),
-                            ],
-                        ));
-
-                        let mut unspill = asm::Block::new();
-
-                        unspill.emit(Instruction::new(
-                            "movl",
-                            vec![
-                                asm::Register::new(
-                                    asm::RegisterBackend::StackOffset(offset),
-                                    asm::Size::Doubleword,
-                                )
-                                .into(),
-                                reg.into(),
-                            ],
-                        ));
-
-                        (reg, spill, unspill)
-                    }
-                };
-
+                let (reg, spill, unspill) = get_register(line, map);
+                let reg = asm::Register::machine(reg, asm::Size::Doubleword);
                 b += spill;
-
                 b.emit(Instruction::new(
                     "movl",
                     vec![asm::Const(v).into(), reg.into()],
@@ -3717,7 +2223,7 @@ fn translate(
             ));
         }
         tac::Instruction::Alloc(tac::Value::ID(v)) => {
-            b += checked_mov(line, &mut map, v, id.unwrap());
+            b += checked("movl", line, &mut map, v, id.unwrap());
         }
         // ASSIGN
         tac::Instruction::Assignment(id, tac::Value::Const(tac::Const::Int(v))) => {
@@ -3727,7 +2233,7 @@ fn translate(
             ));
         }
         tac::Instruction::Assignment(id, tac::Value::ID(v)) => {
-            b += checked_mov(line, &mut map, v, id);
+            b += checked("movl", line, &mut map, v, id);
         }
         // RETURN
         tac::Instruction::ControlOp(tac::ControlOp::Return(tac::Value::ID(id))) => {
