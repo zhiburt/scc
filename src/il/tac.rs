@@ -127,6 +127,13 @@ impl Context {
             .map_or(false, |_| true)
     }
 
+    pub fn ident_by_id(&self, id: ID) -> Option<&str> {
+        self.list_symbols
+            .iter()
+            .find(|(.., ids)| ids.iter().find(|&&i| i == id).is_some())
+            .map(|(ident, ..)| ident.as_str())
+    }
+
     /*
         NOTION: could we store in context more useful information?
         e.g variables context

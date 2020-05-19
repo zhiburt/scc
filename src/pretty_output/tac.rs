@@ -1,10 +1,15 @@
-use std::collections::HashMap;
 use std::io::Write;
 
 use simple_c_compiler::il::tac;
 
 pub fn pretty<W: Write>(mut w: W, fun: &tac::FuncDef) {
     writeln!(w, "{}:", pretty_fun_name(&fun.name));
+    fun.parameters
+        .iter()
+        .map(|id| format!("param {}", pretty_id(id, &fun.ctx)))
+        .for_each(|p| {
+            writeln!(w, "  {}", p);
+        });
     writeln!(w, "  BeginFunc {}", fun.frame_size);
 
     for tac::InstructionLine(inst, id) in &fun.instructions {
@@ -13,23 +18,28 @@ pub fn pretty<W: Write>(mut w: W, fun: &tac::FuncDef) {
                 writeln!(
                     w,
                     "  {}: {}",
-                    pretty_id(id.as_ref().unwrap()),
-                    pretty_value(val),
+                    pretty_id(id.as_ref().unwrap(), &fun.ctx),
+                    pretty_value(val, &fun.ctx),
                 )
                 .unwrap();
             }
             tac::Instruction::Assignment(id1, v) => {
-                writeln!(w, "  {}: {}", pretty_id(id1), pretty_value(v),);
+                writeln!(
+                    w,
+                    "  {}: {}",
+                    pretty_id(id1, &fun.ctx),
+                    pretty_value(v, &fun.ctx),
+                );
             }
             tac::Instruction::Call(call) => {
                 for p in call.params.iter() {
-                    writeln!(w, "  PushParam {}", pretty_value(p));
+                    writeln!(w, "  PushParam {}", pretty_value(p, &fun.ctx));
                 }
 
                 writeln!(
                     w,
                     "  {}: LCall {}",
-                    pretty_id(id.as_ref().unwrap()),
+                    pretty_id(id.as_ref().unwrap(), &fun.ctx),
                     pretty_fun_name(&call.name)
                 );
                 writeln!(w, "  PopParams {}", call.pop_size);
@@ -40,19 +50,19 @@ pub fn pretty<W: Write>(mut w: W, fun: &tac::FuncDef) {
                         writeln!(
                             w,
                             "  {}: {} {} {}",
-                            pretty_id(id.as_ref().unwrap()),
-                            pretty_value(v1),
+                            pretty_id(id.as_ref().unwrap(), &fun.ctx),
+                            pretty_value(v1, &fun.ctx),
                             pretty_type(t),
-                            pretty_value(v2)
+                            pretty_value(v2, &fun.ctx)
                         );
                     }
                     tac::Op::Unary(op, v1) => {
                         writeln!(
                             w,
                             "  {}: {} {}",
-                            pretty_id(id.as_ref().unwrap()),
+                            pretty_id(id.as_ref().unwrap(), &fun.ctx),
                             pretty_unary_op(op),
-                            pretty_value(v1),
+                            pretty_value(v1, &fun.ctx),
                         );
                     }
                 };
@@ -66,24 +76,34 @@ pub fn pretty<W: Write>(mut w: W, fun: &tac::FuncDef) {
                         writeln!(w, "  Goto {}", pretty_label(label));
                     }
                     tac::Branch::IfGOTO(v, label) => {
-                        writeln!(w, "  IfZ {} Goto {}", pretty_value(v), pretty_label(label));
+                        writeln!(
+                            w,
+                            "  IfZ {} Goto {}",
+                            pretty_value(v, &fun.ctx),
+                            pretty_label(label)
+                        );
                     }
                 },
-                tac::ControlOp::Return(v) => writeln!(w, "  Return {}", pretty_value(v)).unwrap(),
+                tac::ControlOp::Return(v) => {
+                    writeln!(w, "  Return {}", pretty_value(v, &fun.ctx)).unwrap()
+                }
             },
         }
     }
 }
 
-pub fn pretty_value(v: &tac::Value) -> String {
+pub fn pretty_value(v: &tac::Value, ctx: &tac::Context) -> String {
     match v {
         tac::Value::Const(tac::Const::Int(c)) => format!("{}", c),
-        tac::Value::ID(id) => pretty_id(id),
+        tac::Value::ID(id) => pretty_id(id, &ctx),
     }
 }
 
-pub fn pretty_id(id: &tac::ID) -> String {
-    format!("%{}", id)
+pub fn pretty_id(id: &tac::ID, ctx: &tac::Context) -> String {
+    match ctx.ident_by_id(*id) {
+        Some(name) => format!("{}", name),
+        None => format!("t{}", id),
+    }
 }
 
 pub fn pretty_label(label: &tac::Label) -> String {
