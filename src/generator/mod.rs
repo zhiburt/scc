@@ -535,11 +535,11 @@ fn translate(
         )) => {
             b.emit(Instruction::new(
                 "movl",
-                vec![map.get(rhs).into(), map.get(id.unwrap()).into()],
+                vec![asm::Const(lhs).into(), map.get(id.unwrap()).into()],
             ));
             b.emit(Instruction::new(
                 "subl",
-                vec![asm::Const(lhs).into(), map.get(id.unwrap()).into()],
+                vec![map.get(rhs).into(), map.get(id.unwrap()).into()],
             ));
         }
         tac::Instruction::Op(tac::Op::Op(
