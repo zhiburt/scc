@@ -819,7 +819,11 @@ fn translate(
             tac::UnOp::Neg,
             tac::Value::Const(tac::Const::Int(v)),
         )) => {
-            panic!("it's impossible as our lexer distinguish '-1' lexemes as just negative values")
+            b.emit(Instruction::new(
+                "movl",
+                vec![asm::Const(v).into(), map.get(id.unwrap()).into()],
+            ));
+            b.emit(Instruction::new("negl", vec![map.get(id.unwrap()).into()]));
         }
         // Bitwise
         tac::Instruction::Op(tac::Op::Unary(tac::UnOp::BitComplement, tac::Value::ID(v))) => {
