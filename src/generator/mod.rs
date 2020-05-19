@@ -345,12 +345,15 @@ fn spill_eax_div(
     (spill, unspill)
 }
 
-fn spill_edx_div(
+fn spill_edx_if_not(
     line: usize,
     al: &mut allocator::Allocator,
-    rhs: tac::ID,
+    not_in: &[tac::ID],
 ) -> (asm::Block, asm::Block) {
-    if matches!(al.get(rhs).rg, asm::RegisterBackend::Machine("edx")) {
+    if not_in
+        .iter()
+        .any(|id| matches!(al.get(*id).rg, asm::RegisterBackend::Machine("edx")))
+    {
         (asm::Block::new(), asm::Block::new())
     } else {
         spill_edx_div_c(line, al)
@@ -600,7 +603,7 @@ fn translate(
             tac::Value::ID(rhs),
         )) => {
             let (eax_spill, eax_un_spill) = spill_eax_div(line, map, lhs, id.unwrap());
-            let (spill_edx, un_spill_edx) = spill_edx_div(line, map, rhs);
+            let (spill_edx, un_spill_edx) = spill_edx_if_not(line, map, &[rhs, id.unwrap()]);
 
             b += eax_spill;
             b += spill_edx;
@@ -624,7 +627,7 @@ fn translate(
             tac::Value::Const(tac::Const::Int(rhs)),
         )) => {
             let (eax_spill, eax_un_spill) = spill_eax_div(line, map, lhs, id.unwrap());
-            let (spill_edx, un_spill_edx) = spill_edx_div_c(line, map);
+            let (spill_edx, un_spill_edx) = spill_edx_if_not(line, map, &[id.unwrap()]);
             let (divisor, divisor_spill, divisor_unspill) = space_for_divisor(line, map, rhs);
 
             b += eax_spill;
@@ -651,7 +654,7 @@ fn translate(
             tac::Value::ID(rhs),
         )) => {
             let (eax_spill, eax_un_spill) = spill_eax_div_cc(line, map, lhs, rhs, id.unwrap());
-            let (spill_edx, un_spill_edx) = spill_edx_div_c(line, map);
+            let (spill_edx, un_spill_edx) = spill_edx_if_not(line, map, &[id.unwrap()]);
 
             b += eax_spill;
             b += spill_edx;
@@ -675,7 +678,7 @@ fn translate(
             tac::Value::Const(tac::Const::Int(rhs)),
         )) => {
             let (eax_spill, eax_un_spill) = spill_eax_div_ccc(line, map, lhs, id.unwrap());
-            let (spill_edx, un_spill_edx) = spill_edx_div_c(line, map);
+            let (spill_edx, un_spill_edx) = spill_edx_if_not(line, map, &[id.unwrap()]);
             let (divisor, divisor_spill, divisor_unspill) = space_for_divisor(line, map, rhs);
 
             b += eax_spill;
@@ -703,7 +706,7 @@ fn translate(
             tac::Value::ID(rhs),
         )) => {
             let (eax_spill, eax_un_spill) = spill_eax_div(line, map, lhs, id.unwrap());
-            let (spill_edx, un_spill_edx) = spill_edx_div(line, map, rhs);
+            let (spill_edx, un_spill_edx) = spill_edx_if_not(line, map, &[rhs, id.unwrap()]);
 
             b += eax_spill;
             b += spill_edx;
@@ -727,7 +730,7 @@ fn translate(
             tac::Value::Const(tac::Const::Int(rhs)),
         )) => {
             let (eax_spill, eax_un_spill) = spill_eax_div(line, map, lhs, id.unwrap());
-            let (spill_edx, un_spill_edx) = spill_edx_div_c(line, map);
+            let (spill_edx, un_spill_edx) = spill_edx_if_not(line, map, &[id.unwrap()]);
             let (divisor, divisor_spill, divisor_unspill) = space_for_divisor(line, map, rhs);
 
             b += eax_spill;
@@ -754,7 +757,7 @@ fn translate(
             tac::Value::ID(rhs),
         )) => {
             let (eax_spill, eax_un_spill) = spill_eax_div_cc(line, map, lhs, rhs, id.unwrap());
-            let (spill_edx, un_spill_edx) = spill_edx_div_c(line, map);
+            let (spill_edx, un_spill_edx) = spill_edx_if_not(line, map, &[id.unwrap()]);
 
             b += eax_spill;
             b += spill_edx;
@@ -778,7 +781,7 @@ fn translate(
             tac::Value::Const(tac::Const::Int(rhs)),
         )) => {
             let (eax_spill, eax_un_spill) = spill_eax_div_ccc(line, map, lhs, id.unwrap());
-            let (spill_edx, un_spill_edx) = spill_edx_div_c(line, map);
+            let (spill_edx, un_spill_edx) = spill_edx_if_not(line, map, &[id.unwrap()]);
             let (divisor, divisor_spill, divisor_unspill) = space_for_divisor(line, map, rhs);
 
             b += eax_spill;
