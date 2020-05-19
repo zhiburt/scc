@@ -959,8 +959,8 @@ impl<'a> ast::Visitor<'a> for ReturnCounter {
         }
 
         self.2 += 1;
-
         ast::visitor::visit_statement(self, st);
+        self.2 -= 1;
     }
 }
 
