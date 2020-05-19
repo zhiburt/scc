@@ -34,7 +34,7 @@ pub struct Context {
     /*
         NOTION: take away from ID as a dependency
     */
-    symbols: HashMap<String, Vec<ID>>, // todo: why we are using Vec<ID> here? 
+    symbols: HashMap<String, Vec<ID>>, // todo: why we are using Vec<ID> here?
     list_symbols: HashMap<String, Vec<ID>>,
     symbols_counter: usize,
     scopes: Vec<HashSet<String>>,
@@ -121,7 +121,7 @@ impl Context {
     }
 
     pub fn is_variable(&self, id: ID) -> bool {
-        self.symbols
+        self.list_symbols
             .values()
             .find(|ids| ids.iter().find(|&&i| i == id).map_or(false, |_| true))
             .map_or(false, |_| true)
