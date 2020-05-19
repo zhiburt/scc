@@ -8,8 +8,6 @@ pub fn il(p: &ast::Program) -> Vec<FuncDef> {
     let mut funcs = Vec::new();
     for fun in &p.0 {
         if let Some(mut func) = gen.parse(fun) {
-            constant_fold::fold(&mut func.instructions);
-            func = unused_code::remove_unused(func);
             funcs.push(func);
         }
         gen = Generator::from(&gen);

@@ -3,7 +3,12 @@ use std::path::PathBuf;
 
 use clap::Clap;
 
-use simple_c_compiler::{checks, generator, il::tac, lexer::Lexer, parser};
+use simple_c_compiler::{
+    checks, generator,
+    il::{self, tac},
+    lexer::Lexer,
+    parser,
+};
 
 mod pretty_output;
 
@@ -28,6 +33,8 @@ struct Opt {
     pretty_ast: bool,
     #[clap(short = "tac", long = "pretty-tac")]
     pretty_tac: bool,
+    #[clap(short = "O")]
+    optimization: bool,
     #[clap(parse(from_os_str))]
     input_file: PathBuf,
     #[clap(short = "o", parse(from_os_str))]
@@ -53,7 +60,18 @@ fn main() {
         println!("\n{}", pretty_output::pretty_prog(&ast));
     }
 
-    let tac = tac::il(&ast);
+    let mut tac = tac::il(&ast);
+    if opt.optimization {
+        tac = tac
+            .into_iter()
+            .map(|mut f| {
+                il::constant_fold::fold(&mut f.instructions);
+                f = il::unused_code::remove_unused(f);
+                f
+            })
+            .collect();
+    }
+
     if opt.pretty_tac {
         for f in &tac {
             println!();
