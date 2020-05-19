@@ -1,4 +1,5 @@
 use super::constant_fold;
+use super::unused_code;
 use crate::ast;
 use std::collections::{HashMap, HashSet};
 
@@ -8,6 +9,7 @@ pub fn il(p: &ast::Program) -> Vec<FuncDef> {
     for fun in &p.0 {
         if let Some(mut func) = gen.parse(fun) {
             constant_fold::fold(&mut func.instructions);
+            func = unused_code::remove_unused(func);
             funcs.push(func);
         }
         gen = Generator::from(&gen);
