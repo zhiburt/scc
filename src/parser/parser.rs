@@ -594,9 +594,19 @@ pub fn parse_func(mut tokens: Vec<Token>) -> Result<(ast::FuncDecl, Vec<Token>)>
 pub fn parse(mut tokens: Vec<Token>) -> Result<ast::Program> {
     let mut functions = Vec::new();
     while !tokens.is_empty() {
-        let (decl, toks) = parse_func(tokens)?;
-        tokens = toks;
-        functions.push(decl);
+        // distinguish declaration and function by parentheses
+        match tokens.get(2) {
+            Some(token) if token.is_type(TokenType::OpenParenthesis) => {
+                let (decl, toks) = parse_func(tokens)?;
+                tokens = toks;
+                functions.push(ast::TopLevel::Function(decl));
+            }
+            _ => {
+                let (decl, toks) = parse_decl(tokens)?;
+                tokens = toks;
+                functions.push(ast::TopLevel::Declaration(decl));
+            }
+        }
     }
 
     Ok(ast::Program(functions))

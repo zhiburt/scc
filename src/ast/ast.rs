@@ -134,5 +134,9 @@ pub struct FuncDecl {
     pub blocks: Option<Vec<BlockItem>>,
 }
 
-// Add block node which is decl
-pub struct Program(pub Vec<FuncDecl>);
+pub enum TopLevel {
+    Function(FuncDecl),
+    Declaration(Declaration),
+}
+
+pub struct Program(pub Vec<TopLevel>);

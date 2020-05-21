@@ -60,9 +60,32 @@ fn main() {
         println!("\n{}", pretty_output::pretty_prog(&ast));
     }
 
+
+    if !checks::function_checks::func_check(&ast) {
+        eprintln!("invalid function declaration or definition");
+        std::process::exit(120);
+    }
+
+    if !checks::global_vars::name_check(&ast) {
+        eprintln!("global variable can not have the same name as function");
+        std::process::exit(-121);
+    }
+
+    if !checks::global_vars::multi_definition(&ast) {
+        eprintln!("global variable defined several times");
+        std::process::exit(-122);
+    }
+
+    if !checks::global_vars::use_before_definition(&ast) {
+        eprintln!("usage before declaration");
+        std::process::exit(-123);
+    }
+
+
     let mut tac = tac::il(&ast);
     if opt.optimization {
-        tac = tac
+        tac.code = tac
+            .code
             .into_iter()
             .map(|mut f| {
                 il::constant_fold::fold(&mut f.instructions);
@@ -73,7 +96,7 @@ fn main() {
     }
 
     if opt.pretty_tac {
-        for f in &tac {
+        for f in &tac.code {
             println!();
             pretty_output::pretty_tac(std::io::stdout(), f);
             println!();
@@ -82,11 +105,6 @@ fn main() {
             writeln!(std::io::stdout(), "intervals {}\n{:?}", f.name, intervals.0).unwrap();
             println!();
         }
-    }
-
-    if !checks::function_checks::func_check(&ast) {
-        eprintln!("invalid function declaration or definition");
-        std::process::exit(120);
     }
 
     let mut asm_file = std::fs::File::create(output_file).expect("Cannot create output file");

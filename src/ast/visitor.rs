@@ -1,6 +1,10 @@
-use super::{FuncDecl, Statement, Declaration, Exp, BlockItem};
+use super::{BlockItem, Declaration, Exp, FuncDecl, Statement, TopLevel};
 
 pub trait Visitor<'ast> {
+    fn visit_global_item(&mut self, item: &'ast TopLevel) {
+        visit_global_item(self, item);
+    }
+
     fn visit_function(&mut self, func: &'ast FuncDecl) {
         visit_function(self, func);
     }
@@ -137,5 +141,12 @@ pub fn visit_function<'ast, V: Visitor<'ast> + ?Sized>(v: &mut V, func: &'ast Fu
         for b in body {
             v.visit_block(b);
         }
+    }
+}
+
+pub fn visit_global_item<'ast, V: Visitor<'ast> + ?Sized>(v: &mut V, item: &'ast TopLevel) {
+    match item {
+        TopLevel::Declaration(decl) => visit_decl(v, decl),
+        TopLevel::Function(func) => visit_function(v, func),
     }
 }

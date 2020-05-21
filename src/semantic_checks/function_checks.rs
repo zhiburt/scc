@@ -11,26 +11,31 @@ pub fn func_check(prog: &ast::Program) -> bool {
 
 fn global_check(prog: &ast::Program) -> bool {
     let mut functions: HashMap<String, &ast::FuncDecl> = HashMap::new();
-    for func in &prog.0 {
-        if let Some(f) = functions.get(&func.name) {
-            // redefine function
-            // 
-            // todo: not complete yet as if there's one signature and several realization we
-            // possible miss it since we save only one function and then compare every one with this.
-            //
-            // possible solution is to store all functions in HashMap<String, Vec<&ast::FuncDecl>>
-            // and after compare them
-            //
-            // In a way that multiply definitions is possible but implementations is not 
-            //  
-            if f.blocks.is_some() && func.blocks.is_some() {
-                return false;
+    for top in &prog.0 {
+        match top {
+            ast::TopLevel::Function(func) => {
+                if let Some(f) = functions.get(&func.name) {
+                    // redefine function
+                    //
+                    // todo: not complete yet as if there's one signature and several realization we
+                    // possible miss it since we save only one function and then compare every one with this.
+                    //
+                    // possible solution is to store all functions in HashMap<String, Vec<&ast::FuncDecl>>
+                    // and after compare them
+                    //
+                    // In a way that multiply definitions is possible but implementations is not
+                    //
+                    if f.blocks.is_some() && func.blocks.is_some() {
+                        return false;
+                    }
+                    if f.parameters.len() != func.parameters.len() {
+                        return false;
+                    }
+                } else {
+                    functions.insert(func.name.clone(), func);
+                }
             }
-            if f.parameters.len() != func.parameters.len() {
-                return false;
-            }
-        } else {
-            functions.insert(func.name.clone(), func);
+            _ => {}
         }
     }
 
@@ -40,28 +45,33 @@ fn global_check(prog: &ast::Program) -> bool {
 fn calls_precidence_check(prog: &ast::Program) -> bool {
     let mut used_funcs = Vec::new();
     let mut declared_funcs = HashSet::new();
-    for func in &prog.0 {
-        declared_funcs.insert((&func.name, func.parameters.len()));
-        match &func.blocks {
-            Some(blocks) => {
-                for block in blocks {
-                    let mut check = |exp: &ast::Exp| match exp {
-                        ast::Exp::FuncCall(name, params) => {
-                            used_funcs.push((name.clone(), params.len()))
+    for top in &prog.0 {
+        match top {
+            ast::TopLevel::Function(func) => {
+                declared_funcs.insert((&func.name, func.parameters.len()));
+                match &func.blocks {
+                    Some(blocks) => {
+                        for block in blocks {
+                            let mut check = |exp: &ast::Exp| match exp {
+                                ast::Exp::FuncCall(name, params) => {
+                                    used_funcs.push((name.clone(), params.len()))
+                                }
+                                _ => (),
+                            };
+
+                            _block_check(block, &mut check);
                         }
-                        _ => (),
-                    };
 
-                    _block_check(block, &mut check);
-                }
-
-                for (f_name, param_size) in used_funcs.iter() {
-                    if !declared_funcs.contains(&(&f_name, *param_size)) {
-                        return false;
+                        for (f_name, param_size) in used_funcs.iter() {
+                            if !declared_funcs.contains(&(&f_name, *param_size)) {
+                                return false;
+                            }
+                        }
                     }
+                    None => (),
                 }
             }
-            None => (),
+            ast::TopLevel::Declaration(..) => {},
         }
     }
 

@@ -1,12 +1,19 @@
-use simple_c_compiler::ast::{BlockItem, Declaration, Exp, FuncDecl, Program, Statement, Visitor};
+use simple_c_compiler::ast::{BlockItem, Declaration, Exp, FuncDecl, Program, Statement, Visitor, TopLevel};
 
 pub fn pretty_prog(prog: &Program) -> String {
     let mut printer = Printer::new(0);
 
     let mut out = Vec::new();
-    for func in &prog.0 {
-        out.push(printer.function(func));
-        printer.clear();
+    for top in &prog.0 {
+        match top {
+            TopLevel::Function(func) => {
+                out.push(printer.function(func));
+                printer.clear();
+            }
+            TopLevel::Declaration(..) => {
+                
+            }
+        }
     }
 
     out.join("\n\n")

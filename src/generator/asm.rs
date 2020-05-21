@@ -3,12 +3,14 @@ use std::collections::HashMap;
 
 pub struct Assembly {
     funcs: HashMap<String, Func>,
+    data: Block,
 }
 
 impl Assembly {
     pub fn new() -> Self {
         Self {
             funcs: HashMap::new(),
+            data: Block::new(),
         }
     }
 
@@ -16,8 +18,18 @@ impl Assembly {
         self.funcs.insert(name.to_owned(), Func::new(code));
     }
 
+    pub fn set_data(&mut self, data: Block) {
+        self.data = data;
+    }
+
     pub fn code(&self) -> String {
         let mut buf = String::new();
+
+        for i in self.data.into_iter() {
+            buf.push_str(&translate(i));
+            buf.push('\n');
+        }
+
         for func in self.funcs.values() {
             for i in func.instructions() {
                 buf.push_str(&translate(i));
@@ -169,7 +181,7 @@ impl Const {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Register {
     pub(crate) rg: RegisterBackend,
     pub(crate) size: Size,
@@ -194,10 +206,11 @@ impl Register {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub enum RegisterBackend {
     Machine(MachineRegister),
     StackOffset(usize),
+    Label(String),
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

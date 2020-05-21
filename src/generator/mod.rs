@@ -3,12 +3,12 @@ mod asm;
 mod asm1;
 mod syntax;
 
+use super::il::tac::{self, File, FuncDef, InstructionLine};
 use asm::Instruction;
+use std::collections::HashMap;
 
-use super::il::tac::{self, FuncDef, InstructionLine};
-
-pub fn gen(code: Vec<FuncDef>) -> String {
-    let g = Generator::new(code);
+pub fn gen(ir: File) -> String {
+    let g = Generator::new(ir);
     let mut asm = g.gen();
     // allocator::alloc(&mut asm);
 
@@ -16,20 +16,20 @@ pub fn gen(code: Vec<FuncDef>) -> String {
 }
 
 struct Generator {
-    ir: Vec<FuncDef>,
+    ir: File,
     code: asm::Assembly,
 }
 
 impl Generator {
-    fn new(code: Vec<FuncDef>) -> Self {
+    fn new(ir: File) -> Self {
         Self {
-            ir: code,
+            ir,
             code: asm::Assembly::new(),
         }
     }
 
     fn gen_function(&mut self, func: tac::FuncDef) {
-        let mut memory_map = allocator::Allocator::new(&func);
+        let mut memory_map = allocator::Allocator::new(&self.ir, &func);
         let mut code = Vec::new();
 
         for (line, i) in func.instructions.into_iter().enumerate() {
@@ -39,6 +39,7 @@ impl Generator {
         let header = {
             let mut header = asm::Block::new();
             header.emit_directive(&format!(".globl {}", func.name));
+            header.emit_directive(&format!(".text"));
             header.emit_label(&func.name);
             header
         };
@@ -108,11 +109,40 @@ impl Generator {
         self.code.emit_function(&func.name, c);
     }
 
+    fn gen_data_section(data: &HashMap<tac::ID, Option<tac::Const>>) -> asm::Block {
+        let mut block = asm::Block::new();
+        for (var, value) in data {
+            match value {
+                Some(tac::Const::Int(value)) => {
+                    block.emit_directive(&format!(".globl _var_{}", var));
+                    block.emit_directive(&format!(".data"));
+                    block.emit_directive(&format!(".align 8"));
+                    block.emit_directive(&format!("_var_{}:", var));
+                    block.emit_directive(&format!(".long {}", value));
+                }
+                None => {
+                    block.emit_directive(&format!(".globl _var_{}", var));
+                    block.emit_directive(&format!(".bss"));
+                    block.emit_directive(&format!(".align 8"));
+                    block.emit_directive(&format!("_var_{}:", var));
+                    block.emit_directive(&format!(".zero 4"));
+                }
+            }
+        }
+
+        block
+    }
+
     fn gen(mut self) -> asm::Assembly {
-        let ir = std::mem::replace(&mut self.ir, Vec::new());
-        for func in ir {
+        let data = Self::gen_data_section(&self.ir.global_data);
+
+        self.code.set_data(data);
+
+        let code = std::mem::replace(&mut self.ir.code, Vec::new());
+        for func in code {
             self.gen_function(func);
         }
+
 
         self.code
     }
@@ -169,7 +199,7 @@ fn get_register(
             spill.emit(Instruction::new(
                 "movl",
                 vec![
-                    reg.into(),
+                    reg.clone().into(),
                     asm::Register::new(
                         asm::RegisterBackend::StackOffset(offset),
                         asm::Size::Doubleword,
@@ -187,7 +217,7 @@ fn get_register(
                         asm::Size::Doubleword,
                     )
                     .into(),
-                    reg.into(),
+                    reg.clone().into(),
                 ],
             ));
 
@@ -876,12 +906,12 @@ fn translate(
 
                 b.emit(Instruction::new(
                     "movzbl",
-                    vec![reg.as_byte().into(), reg.into()],
+                    vec![reg.as_byte().into(), reg.clone().into()],
                 ));
 
                 b.emit(Instruction::new(
                     "movl",
-                    vec![reg.into(), map.get(id.unwrap()).into()],
+                    vec![reg.clone().into(), map.get(id.unwrap()).into()],
                 ));
                 b += unspill;
             } else {
@@ -904,7 +934,7 @@ fn translate(
 
                 b.emit(Instruction::new(
                     "movzbl",
-                    vec![reg.as_byte().into(), reg.into()],
+                    vec![reg.as_byte().into(), reg.clone().into()],
                 ));
             }
         }
@@ -921,14 +951,14 @@ fn translate(
                 b += spill;
                 b.emit(Instruction::new(
                     "movl",
-                    vec![asm::Const(v).into(), reg.into()],
+                    vec![asm::Const(v).into(), reg.clone().into()],
                 ));
 
                 b.emit(Instruction::new(
                     "cmpl",
-                    vec![asm::Const(0).into(), reg.into()],
+                    vec![asm::Const(0).into(), reg.clone().into()],
                 ));
-                b.emit(Instruction::new("setne", vec![reg.as_byte().into()]));
+                b.emit(Instruction::new("setne", vec![reg.clone().as_byte().into()]));
                 b.emit(Instruction::new(
                     "xorb",
                     vec![asm::Const(-1).into(), reg.as_byte().into()],
@@ -941,12 +971,12 @@ fn translate(
 
                 b.emit(Instruction::new(
                     "movzbl",
-                    vec![reg.as_byte().into(), reg.into()],
+                    vec![reg.as_byte().into(), reg.clone().into()],
                 ));
 
                 b.emit(Instruction::new(
                     "movl",
-                    vec![reg.into(), map.get(id.unwrap()).into()],
+                    vec![reg.clone().into(), map.get(id.unwrap()).into()],
                 ));
 
                 b += unspill;
@@ -955,12 +985,12 @@ fn translate(
 
                 b.emit(Instruction::new(
                     "movl",
-                    vec![asm::Const(v).into(), reg.into()],
+                    vec![asm::Const(v).into(), reg.clone().into()],
                 ));
 
                 b.emit(Instruction::new(
                     "cmpl",
-                    vec![asm::Const(0).into(), reg.into()],
+                    vec![asm::Const(0).into(), reg.clone().into()],
                 ));
                 b.emit(Instruction::new("setne", vec![reg.as_byte().into()]));
                 b.emit(Instruction::new(
@@ -975,7 +1005,7 @@ fn translate(
 
                 b.emit(Instruction::new(
                     "movzbl",
-                    vec![reg.as_byte().into(), reg.into()],
+                    vec![reg.as_byte().into(), reg.clone().into()],
                 ));
             }
         }
@@ -1001,12 +1031,12 @@ fn translate(
 
                 b.emit(Instruction::new(
                     "movzbl",
-                    vec![reg.as_byte().into(), reg.into()],
+                    vec![reg.as_byte().into(), reg.clone().into()],
                 ));
 
                 b.emit(Instruction::new(
                     "movl",
-                    vec![reg.into(), map.get(id.unwrap()).into()],
+                    vec![reg.clone().into(), map.get(id.unwrap()).into()],
                 ));
 
                 b += unspill;
@@ -1055,12 +1085,12 @@ fn translate(
 
                 b.emit(Instruction::new(
                     "movzbl",
-                    vec![reg.as_byte().into(), reg.into()],
+                    vec![reg.as_byte().into(), reg.clone().into()],
                 ));
 
                 b.emit(Instruction::new(
                     "movl",
-                    vec![reg.into(), map.get(id.unwrap()).into()],
+                    vec![reg.clone().into(), map.get(id.unwrap()).into()],
                 ));
 
                 b += unspill;
@@ -1112,12 +1142,12 @@ fn translate(
 
                 b.emit(Instruction::new(
                     "movzbl",
-                    vec![reg.as_byte().into(), reg.into()],
+                    vec![reg.as_byte().into(), reg.clone().into()],
                 ));
 
                 b.emit(Instruction::new(
                     "movl",
-                    vec![reg.into(), map.get(id.unwrap()).into()],
+                    vec![reg.clone().into(), map.get(id.unwrap()).into()],
                 ));
 
                 b += unspill;
@@ -1212,12 +1242,12 @@ fn translate(
 
                 b.emit(Instruction::new(
                     "movzbl",
-                    vec![reg.as_byte().into(), reg.into()],
+                    vec![reg.as_byte().into(), reg.clone().into()],
                 ));
 
                 b.emit(Instruction::new(
                     "movl",
-                    vec![reg.into(), map.get(id.unwrap()).into()],
+                    vec![reg.clone().into(), map.get(id.unwrap()).into()],
                 ));
 
                 b += unspill;
@@ -1266,12 +1296,12 @@ fn translate(
 
                 b.emit(Instruction::new(
                     "movzbl",
-                    vec![reg.as_byte().into(), reg.into()],
+                    vec![reg.as_byte().into(), reg.clone().into()],
                 ));
 
                 b.emit(Instruction::new(
                     "movl",
-                    vec![reg.into(), map.get(id.unwrap()).into()],
+                    vec![reg.clone().into(), map.get(id.unwrap()).into()],
                 ));
 
                 b += unspill;
@@ -1323,12 +1353,12 @@ fn translate(
 
                 b.emit(Instruction::new(
                     "movzbl",
-                    vec![reg.as_byte().into(), reg.into()],
+                    vec![reg.as_byte().into(), reg.clone().into()],
                 ));
 
                 b.emit(Instruction::new(
                     "movl",
-                    vec![reg.into(), map.get(id.unwrap()).into()],
+                    vec![reg.clone().into(), map.get(id.unwrap()).into()],
                 ));
 
                 b += unspill;
@@ -1423,12 +1453,12 @@ fn translate(
 
                 b.emit(Instruction::new(
                     "movzbl",
-                    vec![reg.as_byte().into(), reg.into()],
+                    vec![reg.as_byte().into(), reg.clone().into()],
                 ));
 
                 b.emit(Instruction::new(
                     "movl",
-                    vec![reg.into(), map.get(id.unwrap()).into()],
+                    vec![reg.clone().into(), map.get(id.unwrap()).into()],
                 ));
 
                 b += unspill;
@@ -1477,12 +1507,12 @@ fn translate(
 
                 b.emit(Instruction::new(
                     "movzbl",
-                    vec![reg.as_byte().into(), reg.into()],
+                    vec![reg.as_byte().into(), reg.clone().into()],
                 ));
 
                 b.emit(Instruction::new(
                     "movl",
-                    vec![reg.into(), map.get(id.unwrap()).into()],
+                    vec![reg.clone().into(), map.get(id.unwrap()).into()],
                 ));
 
                 b += unspill;
@@ -1538,12 +1568,12 @@ fn translate(
 
                 b.emit(Instruction::new(
                     "movzbl",
-                    vec![reg.as_byte().into(), reg.into()],
+                    vec![reg.as_byte().into(), reg.clone().into()],
                 ));
 
                 b.emit(Instruction::new(
                     "movl",
-                    vec![reg.into(), map.get(id.unwrap()).into()],
+                    vec![reg.clone().into(), map.get(id.unwrap()).into()],
                 ));
 
                 b += unspill;
@@ -1626,12 +1656,12 @@ fn translate(
 
                 b.emit(Instruction::new(
                     "movzbl",
-                    vec![reg.as_byte().into(), reg.into()],
+                    vec![reg.as_byte().into(), reg.clone().into()],
                 ));
 
                 b.emit(Instruction::new(
                     "movl",
-                    vec![reg.into(), map.get(id.unwrap()).into()],
+                    vec![reg.clone().into(), map.get(id.unwrap()).into()],
                 ));
 
                 b += unspill;
@@ -1680,12 +1710,12 @@ fn translate(
 
                 b.emit(Instruction::new(
                     "movzbl",
-                    vec![reg.as_byte().into(), reg.into()],
+                    vec![reg.as_byte().into(), reg.clone().into()],
                 ));
 
                 b.emit(Instruction::new(
                     "movl",
-                    vec![reg.into(), map.get(id.unwrap()).into()],
+                    vec![reg.clone().into(), map.get(id.unwrap()).into()],
                 ));
 
                 b += unspill;
@@ -1741,12 +1771,12 @@ fn translate(
 
                 b.emit(Instruction::new(
                     "movzbl",
-                    vec![reg.as_byte().into(), reg.into()],
+                    vec![reg.as_byte().into(), reg.clone().into()],
                 ));
 
                 b.emit(Instruction::new(
                     "movl",
-                    vec![reg.into(), map.get(id.unwrap()).into()],
+                    vec![reg.clone().into(), map.get(id.unwrap()).into()],
                 ));
 
                 b += unspill;
@@ -1829,12 +1859,12 @@ fn translate(
 
                 b.emit(Instruction::new(
                     "movzbl",
-                    vec![reg.as_byte().into(), reg.into()],
+                    vec![reg.as_byte().into(), reg.clone().into()],
                 ));
 
                 b.emit(Instruction::new(
                     "movl",
-                    vec![reg.into(), map.get(id.unwrap()).into()],
+                    vec![reg.clone().into(), map.get(id.unwrap()).into()],
                 ));
 
                 b += unspill;
@@ -1883,12 +1913,12 @@ fn translate(
 
                 b.emit(Instruction::new(
                     "movzbl",
-                    vec![reg.as_byte().into(), reg.into()],
+                    vec![reg.as_byte().into(), reg.clone().into()],
                 ));
 
                 b.emit(Instruction::new(
                     "movl",
-                    vec![reg.into(), map.get(id.unwrap()).into()],
+                    vec![reg.clone().into(), map.get(id.unwrap()).into()],
                 ));
 
                 b += unspill;
@@ -1945,12 +1975,12 @@ fn translate(
 
                 b.emit(Instruction::new(
                     "movzbl",
-                    vec![reg.as_byte().into(), reg.into()],
+                    vec![reg.as_byte().into(), reg.clone().into()],
                 ));
 
                 b.emit(Instruction::new(
                     "movl",
-                    vec![reg.into(), map.get(id.unwrap()).into()],
+                    vec![reg.clone().into(), map.get(id.unwrap()).into()],
                 ));
 
                 b += unspill;
@@ -2033,12 +2063,12 @@ fn translate(
 
                 b.emit(Instruction::new(
                     "movzbl",
-                    vec![reg.as_byte().into(), reg.into()],
+                    vec![reg.as_byte().into(), reg.clone().into()],
                 ));
 
                 b.emit(Instruction::new(
                     "movl",
-                    vec![reg.into(), map.get(id.unwrap()).into()],
+                    vec![reg.clone().into(), map.get(id.unwrap()).into()],
                 ));
 
                 b += unspill;
@@ -2087,12 +2117,12 @@ fn translate(
 
                 b.emit(Instruction::new(
                     "movzbl",
-                    vec![reg.as_byte().into(), reg.into()],
+                    vec![reg.as_byte().into(), reg.clone().into()],
                 ));
 
                 b.emit(Instruction::new(
                     "movl",
-                    vec![reg.into(), map.get(id.unwrap()).into()],
+                    vec![reg.clone().into(), map.get(id.unwrap()).into()],
                 ));
 
                 b += unspill;
@@ -2149,12 +2179,12 @@ fn translate(
 
                 b.emit(Instruction::new(
                     "movzbl",
-                    vec![reg.as_byte().into(), reg.into()],
+                    vec![reg.as_byte().into(), reg.clone().into()],
                 ));
 
                 b.emit(Instruction::new(
                     "movl",
-                    vec![reg.into(), map.get(id.unwrap()).into()],
+                    vec![reg.clone().into(), map.get(id.unwrap()).into()],
                 ));
 
                 b += unspill;

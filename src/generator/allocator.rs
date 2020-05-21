@@ -11,7 +11,7 @@ pub struct Allocator {
 }
 
 impl Allocator {
-    pub fn new(f: &tac::FuncDef) -> Self {
+    pub fn new(ir: &tac::File, f: &tac::FuncDef) -> Self {
         let REGISTERS: &'static [asm::MachineRegister] = {
             if f.name == "main" {
                 &["eax", "ebx", "ecx", "edx"]
@@ -32,6 +32,13 @@ impl Allocator {
 
         let intervals = lifeinterval::LiveIntervals::new(&f.instructions);
         let (mut s, stack_start) = Self::recognize_params(&f.parameters);
+
+        for (id, ..) in &ir.global_data {
+            s.insert(*id, asm::Register::new(
+                asm::RegisterBackend::Label(format!("_var_{}(%rip)", id)),
+                asm::Size::Doubleword,
+            ));
+        }
 
         let mut free = REGISTERS.to_vec();
         let mut allocated: HashMap<&str, tac::ID> = HashMap::new();
@@ -98,7 +105,7 @@ impl Allocator {
     }
 
     pub fn get(&self, id: usize) -> asm::Register {
-        self.m[&id]
+        self.m[&id].clone()
     }
 
     pub fn find_free_at(&self, index: usize) -> Option<asm::MachineRegister> {

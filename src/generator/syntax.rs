@@ -25,6 +25,7 @@ fn translate_arg(arg: &Arg) -> String {
         Arg::Register(Register { rg, .. }) => match rg {
             Machine(reg) => format!("%{}", reg),
             StackOffset(offset) => format!("-{}(%rbp)", offset),
+            Label(label) => label.to_string(),
         },
         Arg::Const(Const(c)) => format!("${}", c),
         Arg::Label(label) => format!("{}", label),

@@ -3,17 +3,34 @@ use super::unused_code;
 use crate::ast;
 use std::collections::{HashMap, HashSet};
 
-pub fn il(p: &ast::Program) -> Vec<FuncDef> {
+pub struct File {
+    pub code: Vec<FuncDef>,
+    pub global_data: HashMap<ID, Option<Const>>,
+}
+
+pub fn il(p: &ast::Program) -> File {
     let mut gen = Generator::new();
     let mut funcs = Vec::new();
-    for fun in &p.0 {
-        if let Some(mut func) = gen.parse(fun) {
-            funcs.push(func);
+    for top in &p.0 {
+        match top {
+            ast::TopLevel::Function(fun) => {
+                gen.context.push_scope();
+                if let Some(mut func) = gen.parse(fun) {
+                    funcs.push(func);
+                }
+                gen.context.pop_scope();
+                gen = Generator::from(&gen);
+            }
+            ast::TopLevel::Declaration(decl) => {
+                gen.global_decl(decl);
+            }
         }
-        gen = Generator::from(&gen);
     }
 
-    funcs
+    File {
+        code: funcs,
+        global_data: gen.context.globals,
+    }
 }
 
 struct Generator {
@@ -36,6 +53,7 @@ pub struct Context {
     */
     symbols: HashMap<String, Vec<ID>>, // todo: why we are using Vec<ID> here?
     list_symbols: HashMap<String, Vec<ID>>,
+    globals: HashMap<ID, Option<Const>>,
     symbols_counter: usize,
     scopes: Vec<HashSet<String>>,
     loop_ctx: Vec<LoopContext>,
@@ -47,6 +65,7 @@ impl Context {
         Context {
             symbols: HashMap::new(),
             list_symbols: HashMap::new(),
+            globals: HashMap::new(),
             symbols_counter: 0,
             scopes: vec![HashSet::new()],
             loop_ctx: Vec::new(),
@@ -97,6 +116,12 @@ impl Context {
             .push(id.clone());
 
         id
+    }
+
+    fn add_gl_symbol(&mut self, name: &str, value: Option<Const>) {
+        // todo: shadowing globals working?
+        let id = self.add_symbol(name);
+        self.globals.insert(id, value);
     }
 
     // add_tmp method was developed in regard to have the same counter for id
@@ -191,6 +216,21 @@ impl Generator {
         let mut generator = Generator::new();
         // check is it copy or clone in sense of references.
         generator.label_counter = g.label_counter;
+        generator.context.globals = g.context.globals.clone();
+
+        // copy global vars
+        for (id, val) in &generator.context.globals {
+            let name = g.context.ident_by_id(*id).unwrap();
+            generator.context.symbols
+                .entry(name.to_owned())
+                .or_default()
+                .push(id.clone());
+            generator.context.list_symbols
+                .entry(name.to_owned())
+                .or_default()
+                .push(id.clone());
+        }
+
         generator
     }
 
@@ -647,6 +687,20 @@ impl Generator {
         }
     }
 
+    fn global_decl(&mut self, decl: &ast::Declaration) {
+        match decl {
+            ast::Declaration::Declare { name, exp } => match exp {
+                Some(ast::Exp::Const(ast::Const::Int(value))) => {
+                    self.alloc_gl_var(name, Some(Const::Int(*value as i32)));
+                }
+                None => {
+                    self.alloc_gl_var(name, None);
+                }
+                Some(..) => unimplemented!(), // todo: constant evaluation ast:Expr // todo: check if this is a constant expr, otherwise error
+            },
+        }
+    }
+
     fn scoped<Scoped: FnOnce(&mut Self)>(&mut self, f: Scoped) {
         self.context.push_scope();
         f(self);
@@ -687,6 +741,10 @@ impl Generator {
     fn alloc_var(&mut self, name: &str) -> ID {
         self.allocated += 1;
         self.remember_var(name)
+    }
+
+    fn alloc_gl_var(&mut self, name: &str, value: Option<Const>) {
+        self.context.add_gl_symbol(name, value)
     }
 
     fn remember_var(&mut self, name: &str) -> ID {
@@ -787,7 +845,7 @@ pub enum ControlOp {
 
 type BytesSize = usize;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Const {
     Int(i32),
 }
