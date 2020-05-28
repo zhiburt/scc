@@ -1,30 +1,33 @@
-use super::asm;
+use super::asm::{Indirect, Part, Place, Register, RegisterX64, Size};
 use crate::il::lifeinterval;
 use crate::il::tac;
 use std::collections::HashMap;
 
 pub struct Allocator {
-    m: HashMap<tac::ID, asm::Register>,
+    m: HashMap<tac::ID, Place>,
     intervals: lifeinterval::LiveIntervals,
     pub stack_size: usize,
-    REGISTERS: &'static [asm::MachineRegister],
+    REGISTERS: &'static [RegisterX64],
 }
 
 impl Allocator {
     pub fn new(ir: &tac::File, f: &tac::FuncDef) -> Self {
-        let REGISTERS: &'static [asm::MachineRegister] = {
+        use RegisterX64::*;
+        use Size::*;
+
+        let REGISTERS: &'static [RegisterX64] = {
             if f.name == "main" {
-                &["eax", "ebx", "ecx", "edx"]
+                &[RAX, RBX, RCX, RDX]
             } else {
                 // let params_regs = ["edi", "esi", "edx", "ecx", "r8d", "r9d"];
                 match f.parameters.len() {
-                    6..=std::usize::MAX => &["edi", "esi", "edx", "ecx", "r8d", "r9d", "ebx"],
-                    5 => &["edi", "esi", "edx", "ecx", "r8d", "ebx", "eax"],
-                    4 => &["edi", "esi", "edx", "ecx", "eax"],
-                    3 => &["edi", "esi", "edx", "eax"],
-                    2 => &["edi", "esi", "eax"],
-                    1 => &["edi", "eax"],
-                    0 => &["eax"],
+                    6..=std::usize::MAX => &[RDI, RSI, RDX, RCX, R8, R9, RBX],
+                    5 => &[RDI, RSI, RDX, RCX, R8, RBX, RAX],
+                    4 => &[RDI, RSI, RDX, RCX, RAX],
+                    3 => &[RDI, RSI, RDX, RAX],
+                    2 => &[RDI, RSI, RAX],
+                    1 => &[RDI, RAX],
+                    0 => &[RAX],
                     _ => unreachable!(),
                 }
             }
@@ -34,41 +37,43 @@ impl Allocator {
         let (mut s, stack_start) = Self::recognize_params(&f.parameters);
 
         for (id, ..) in &ir.global_data {
-            s.insert(*id, asm::Register::new(
-                asm::RegisterBackend::Label(format!("_var_{}(%rip)", id)),
-                asm::Size::Doubleword,
-            ));
+            s.insert(
+                *id,
+                Place::Static(format!("_var_{}(%rip)", id), Size::Doubleword),
+            );
         }
 
         let mut free = REGISTERS.to_vec();
-        let mut allocated: HashMap<&str, tac::ID> = HashMap::new();
+        let mut allocated: HashMap<RegisterX64, tac::ID> = HashMap::new();
 
-        for (id, reg) in s.iter() {
-            let reg = match reg.rg {
-                asm::RegisterBackend::Machine(reg) => reg,
+        for (_, reg) in s.iter() {
+            let reg = match reg {
+                Place::Register(Register::Register(reg)) => reg,
+                Place::Register(Register::Sub(reg, ..)) => reg,
                 _ => continue,
             };
-            if free.contains(&reg) {
-                free.remove(free.iter().position(|r| r == &reg).unwrap());
+            if free.contains(reg) {
+                free.remove(free.iter().position(|r| r == reg).unwrap());
             }
         }
 
-        let mut used_registers = free.clone();
+        let used_registers = free.clone();
         let mut stack_ptr = stack_start;
         for (index, tac::InstructionLine(i, id)) in f.instructions.iter().enumerate() {
             if matches!(i, tac::Instruction::Assignment(..)) && f.ctx.is_variable(id.unwrap()) {
                 stack_ptr += 4;
                 s.insert(
                     id.unwrap(),
-                    asm::Register::new(
-                        asm::RegisterBackend::StackOffset(stack_ptr),
-                        asm::Size::Doubleword,
-                    ),
+                    Place::Indirect(Indirect {
+                        offset: stack_ptr,
+                        reg: Register::Register(RBP),
+                        size: Doubleword,
+                    }),
                 );
             } else if let Some(id) = id {
                 allocated.retain(|reg, id| {
                     if index > intervals.get(*id).end {
-                        free.push(reg);
+                        free.push(reg.clone());
                         false
                     } else {
                         true
@@ -78,21 +83,20 @@ impl Allocator {
                 if free.is_empty() {
                     let reg = used_registers.first().unwrap();
                     let id = allocated.remove(reg).unwrap();
-                    free.push(reg);
+                    free.push(reg.clone());
 
                     stack_ptr += 4;
-                    *s.get_mut(&id).unwrap() = asm::Register::new(
-                        asm::RegisterBackend::StackOffset(stack_ptr),
-                        asm::Size::Doubleword,
-                    );
+                    *s.get_mut(&id).unwrap() = Place::Indirect(Indirect {
+                        offset: stack_ptr,
+                        reg: Register::Register(RBP),
+                        size: Doubleword,
+                    });
                 }
 
                 let reg = free.pop().unwrap();
-                allocated.insert(reg, *id);
-                s.entry(*id).or_insert(asm::Register::new(
-                    asm::RegisterBackend::Machine(reg),
-                    asm::Size::Doubleword,
-                ));
+                allocated.insert(reg.clone(), *id);
+                s.entry(*id)
+                    .or_insert(Place::Register(Register::Sub(reg, Part::Doubleword)));
             }
         }
 
@@ -104,17 +108,17 @@ impl Allocator {
         }
     }
 
-    pub fn get(&self, id: usize) -> asm::Register {
+    pub fn get(&self, id: usize) -> Place {
         self.m[&id].clone()
     }
 
-    pub fn find_free_at(&self, index: usize) -> Option<asm::MachineRegister> {
+    pub fn find_free_at(&self, index: usize) -> Option<RegisterX64> {
         let free = self.free_at(index);
         free.first().cloned()
     }
 
     // alive_at is a better name
-    pub fn live_at(&self, index: usize) -> Vec<asm::Register> {
+    pub fn live_at(&self, index: usize) -> Vec<Place> {
         self.intervals
             .live_at(index)
             .iter()
@@ -122,13 +126,13 @@ impl Allocator {
             .collect()
     }
 
-    pub fn free_at(&self, index: usize) -> Vec<asm::MachineRegister> {
+    pub fn free_at(&self, index: usize) -> Vec<RegisterX64> {
         let live_at = self.intervals.live_at(index);
         let occupied = live_at
             .iter()
             .map(|id| self.m[id].clone())
             .flat_map(|reg| {
-                if let asm::RegisterBackend::Machine(reg) = reg.rg {
+                if let Place::Register(reg) = reg {
                     Some(reg)
                 } else {
                     None
@@ -137,7 +141,10 @@ impl Allocator {
             .collect::<Vec<_>>();
 
         let mut regs = self.REGISTERS.to_vec();
-        regs.retain(|reg| !occupied.contains(reg));
+        regs.retain(|reg| {
+            occupied.contains(&Register::Register(reg.clone()))
+                || occupied.contains(&Register::Sub(reg.clone(), Part::Doubleword)) == false
+        });
         regs
     }
 
@@ -146,14 +153,20 @@ impl Allocator {
         self.stack_size
     }
 
-    fn recognize_params(params: &[tac::ID]) -> (HashMap<tac::ID, asm::Register>, usize) {
-        let regs = ["edi", "esi", "edx", "ecx", "r8d", "r9d"];
+    fn recognize_params(params: &[tac::ID]) -> (HashMap<tac::ID, Place>, usize) {
+        use RegisterX64::*;
+        let regs = [RDI, RSI, RDX, RCX, R8, R9];
         let mut p = params
             .iter()
             .take(regs.len())
             .enumerate()
-            .map(|(i, id)| (*id, asm::Register::machine(regs[i], asm::Size::Doubleword)))
-            .collect::<HashMap<tac::ID, asm::Register>>();
+            .map(|(i, id)| {
+                (
+                    *id,
+                    Place::Register(Register::Sub(regs[i].clone(), Part::Doubleword)),
+                )
+            })
+            .collect::<HashMap<tac::ID, Place>>();
 
         if params.len() > regs.len() {
             const PLATFORM_WORD_SIZE: usize = 8;
@@ -165,15 +178,16 @@ impl Allocator {
                     .take(params.len() - regs.len())
                     .rev()
                     .map(|id| {
-                        let reg = asm::Register::new(
-                            asm::RegisterBackend::StackOffset(param_offset),
-                            asm::Size::Doubleword,
-                        );
+                        let reg = Place::Indirect(Indirect {
+                            offset: param_offset,
+                            reg: Register::Register(RBP),
+                            size: Size::Doubleword,
+                        });
                         param_offset += PLATFORM_WORD_SIZE;
 
                         (*id, reg)
                     })
-                    .collect::<HashMap<tac::ID, asm::Register>>(),
+                    .collect::<HashMap<tac::ID, Place>>(),
             );
 
             (p, param_offset)

@@ -1,8 +1,9 @@
-use super::syntax::translate;
+use super::syntax::GASM;
 use std::collections::HashMap;
 
 pub struct Assembly {
     funcs: HashMap<String, Func>,
+
     data: Block,
 }
 
@@ -10,6 +11,7 @@ impl Assembly {
     pub fn new() -> Self {
         Self {
             funcs: HashMap::new(),
+
             data: Block::new(),
         }
     }
@@ -24,15 +26,14 @@ impl Assembly {
 
     pub fn code(&self) -> String {
         let mut buf = String::new();
-
         for i in self.data.into_iter() {
-            buf.push_str(&translate(i));
+            buf.push_str(&GASM::translate(i));
             buf.push('\n');
         }
 
         for func in self.funcs.values() {
             for i in func.instructions() {
-                buf.push_str(&translate(i));
+                buf.push_str(&GASM::translate(i));
                 buf.push('\n');
             }
 
@@ -40,10 +41,6 @@ impl Assembly {
         }
 
         buf
-    }
-
-    pub fn funcs_mut(&mut self) -> impl Iterator<Item = &mut Func> {
-        self.funcs.values_mut()
     }
 }
 
@@ -56,17 +53,13 @@ impl Func {
         Self { blocks: code }
     }
 
-    pub fn instructions(&self) -> impl Iterator<Item = &InstructionLine> {
+    pub fn instructions(&self) -> impl Iterator<Item = &Line> {
         self.blocks.iter().map(|b| b.into_iter()).flatten()
-    }
-
-    pub fn blocks_mut(&mut self) -> impl Iterator<Item = &mut Block> {
-        self.blocks.iter_mut()
     }
 }
 
 pub struct Block {
-    pub code: Vec<InstructionLine>,
+    pub code: Vec<Line>,
 }
 
 impl Block {
@@ -74,16 +67,16 @@ impl Block {
         Self { code: Vec::new() }
     }
 
-    pub fn emit<Line: Into<InstructionLine>>(&mut self, l: Line) {
-        self.code.push(l.into());
+    pub fn emit(&mut self, i: AsmX32) {
+        self.code.push(Line::Instruction(i));
     }
 
     pub fn emit_directive(&mut self, s: &str) {
-        self.code.push(InstructionLine::Directive(s.to_owned()));
+        self.code.push(Line::Directive(s.to_owned()));
     }
 
     pub fn emit_label(&mut self, s: &str) {
-        self.code.push(InstructionLine::Label(s.to_owned()));
+        self.code.push(Line::Label(s.to_owned()));
     }
 }
 
@@ -93,151 +86,271 @@ impl std::ops::AddAssign<Block> for Block {
     }
 }
 
-impl std::ops::AddAssign<InstructionLine> for Block {
-    fn add_assign(&mut self, i: InstructionLine) {
+impl std::ops::AddAssign<Line> for Block {
+    fn add_assign(&mut self, i: Line) {
         self.code.push(i);
     }
 }
 
 impl<'a> IntoIterator for &'a Block {
-    type Item = &'a InstructionLine;
-    type IntoIter = std::slice::Iter<'a, InstructionLine>;
+    type Item = &'a Line;
+    type IntoIter = std::slice::Iter<'a, Line>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.code.iter()
     }
 }
-
-#[derive(Clone)]
-pub enum InstructionLine {
-    Instruction(Instruction),
+pub enum Line {
+    Instruction(AsmX32),
     Directive(Directive),
     Label(Label),
 }
 
-impl InstructionLine {
-    pub fn instruction_mut(&mut self) -> Option<&mut Instruction> {
+impl Line {
+    pub fn instruction_mut(&mut self) -> Option<&mut AsmX32> {
         match self {
-            InstructionLine::Instruction(i) => Some(i),
+            Line::Instruction(i) => Some(i),
             _ => None,
         }
     }
 }
 
-impl Into<InstructionLine> for Instruction {
-    fn into(self) -> InstructionLine {
-        InstructionLine::Instruction(self)
-    }
+pub enum AsmX32 {
+    Metadata(String),
+    Label(String),
+    Mov(Place, Value),
+    Movzx(Place, Value),
+    And(Place, Value),
+    Or(Place, Value),
+    Xor(Place, Value),
+    Add(Place, Value),
+    Sub(Place, Value),
+    Mul(Place, Value),
+    Imul(Const, Value, Register),
+    Div(Place),
+    Neg(Place),
+    Not(Place),
+    Convert(Size),
+    Sete(Place),
+    Setne(Place),
+    Setl(Place),
+    Setle(Place),
+    Setg(Place),
+    Setge(Place),
+    Jmp(String),
+    Je(String),
+    Jne(String),
+    Cmp(Place, Value),
+    Push(Value),
+    Pop(Place),
+    Call(String),
+    Ret,
 }
 
-#[derive(Clone)]
-pub struct Instruction {
-    pub mnemonic: &'static str,
-    pub args: Vec<Arg>,
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Value {
+    Register(Register),
+    Indirect(Indirect),
+    Const(Const),
+    Static(Label, Size),
 }
 
-impl Instruction {
-    pub fn new<Iter>(mnemonic: &'static str, args: Iter) -> Self
-    where
-        Iter: IntoIterator<Item = Arg>,
-    {
-        Self {
-            mnemonic,
-            args: args.into_iter().collect(),
+impl Value {
+    pub fn size(&self) -> Size {
+        match self {
+            Self::Register(Register::Register(..)) => Size::Quadword,
+            Self::Register(Register::Sub(.., Part::Doubleword)) => Size::Doubleword,
+            Self::Register(Register::Sub(.., Part::Word)) => Size::Word,
+            Self::Register(Register::Sub(.., Part::Byte)) => Size::Byte,
+            Self::Indirect(Indirect { size, .. }) => size.clone(),
+            Self::Const(..) => Size::Doubleword,
+            Self::Static(.., size) => size.clone(),
         }
     }
 }
 
-#[derive(Clone)]
-pub enum Arg {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Place {
     Register(Register),
-    Const(Const),
-    Label(Label),
+    Indirect(Indirect),
+    Static(Label, Size),
 }
 
-impl Into<Arg> for Register {
-    fn into(self) -> Arg {
-        Arg::Register(self)
+impl Place {
+    pub fn size(&self) -> Size {
+        match self {
+            Self::Register(Register::Register(..)) => Size::Quadword,
+            Self::Register(Register::Sub(.., Part::Doubleword)) => Size::Doubleword,
+            Self::Register(Register::Sub(.., Part::Word)) => Size::Word,
+            Self::Register(Register::Sub(.., Part::Byte)) => Size::Byte,
+            Self::Indirect(Indirect { size, .. }) => size.clone(),
+            Self::Static(.., size) => size.clone(),
+        }
     }
 }
 
-impl Into<Arg> for Const {
-    fn into(self) -> Arg {
-        Arg::Const(self)
-    }
-}
-
-#[derive(Clone)]
-pub struct Const(pub(crate) i32);
-
+pub type Const = i32;
 pub type Label = String;
 pub type Directive = String;
 
-pub type MachineRegister = &'static str;
-
-impl Const {
-    fn size(&self) -> Size {
-        Size::Doubleword
-    }
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Register {
+    Register(RegisterX64),
+    Sub(RegisterX64, Part),
 }
 
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub struct Register {
-    pub(crate) rg: RegisterBackend,
-    pub(crate) size: Size,
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Indirect {
+    pub reg: Register,
+    pub offset: usize,
+    pub size: Size,
 }
 
-impl Register {
-    pub fn as_byte(&self) -> Register {
-        match self.rg {
-            RegisterBackend::Machine("eax") => Register::machine("al", Size::Byte),
-            RegisterBackend::Machine("ebx") => Register::machine("bl", Size::Byte),
-            RegisterBackend::Machine("ecx") => Register::machine("cl", Size::Byte),
-            RegisterBackend::Machine("edx") => Register::machine("dl", Size::Byte),
-            _ => unimplemented!(),
-        }
-    }
-
-    pub fn as_machine(&self) -> MachineRegister {
-        match self.rg {
-            RegisterBackend::Machine(reg) => reg,
-            _ => unimplemented!(),
-        }
-    }
+#[derive(Debug, Clone, PartialEq, Eq, std::hash::Hash)]
+pub enum RegisterX64 {
+    RAX,
+    RBX,
+    RCX,
+    RDX,
+    RSI,
+    RDI,
+    R8,
+    R9,
+    R10,
+    R11,
+    R12,
+    R13,
+    R14,
+    R15,
+    RSP,
+    RBP,
 }
 
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub enum RegisterBackend {
-    Machine(MachineRegister),
-    StackOffset(usize),
-    Label(String),
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Size {
-    Byte,
-    Word,
-    Doubleword,
     Quadword,
+    Doubleword,
+    Word,
+    Byte,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Part {
+    Doubleword,
+    Word,
+    Byte,
+}
+
+impl std::fmt::Display for Register {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Sub(reg, part) => {
+                use Part::*;
+                use RegisterX64::*;
+                let reg = match reg {
+                    RAX => match part {
+                        Doubleword => "eax",
+                        Word => "ax",
+                        Byte => "al",
+                    },
+                    RBX => match part {
+                        Doubleword => "ebx",
+                        Word => "bx",
+                        Byte => "bl",
+                    },
+                    RCX => match part {
+                        Doubleword => "ecx",
+                        Word => "cx",
+                        Byte => "cl",
+                    },
+                    RDX => match part {
+                        Doubleword => "edx",
+                        Word => "dx",
+                        Byte => "dl",
+                    },
+                    RSI => match part {
+                        Doubleword => "esi",
+                        Word => "si",
+                        Byte => "sil",
+                    },
+                    RDI => match part {
+                        Doubleword => "edi",
+                        Word => "di",
+                        Byte => "dil",
+                    },
+                    RBP => match part {
+                        Doubleword => "ebp",
+                        Word => "bp",
+                        Byte => "bpl",
+                    },
+                    RSP => match part {
+                        Doubleword => "esp",
+                        Word => "sp",
+                        Byte => "spl",
+                    },
+                    R8 => match part {
+                        Doubleword => "r8d",
+                        Word => "r8w",
+                        Byte => "r8b",
+                    },
+                    R9 => match part {
+                        Doubleword => "r9d",
+                        Word => "r9w",
+                        Byte => "r9b",
+                    },
+                    R10 => match part {
+                        Doubleword => "r10d",
+                        Word => "r10w",
+                        Byte => "r10b",
+                    },
+                    R11 => match part {
+                        Doubleword => "r11d",
+                        Word => "r11w",
+                        Byte => "r11b",
+                    },
+                    R12 => match part {
+                        Doubleword => "r12d",
+                        Word => "r12w",
+                        Byte => "r12b",
+                    },
+                    R13 => match part {
+                        Doubleword => "r13d",
+                        Word => "r13w",
+                        Byte => "r13b",
+                    },
+                    R14 => match part {
+                        Doubleword => "r14d",
+                        Word => "r14w",
+                        Byte => "r14b",
+                    },
+                    R15 => match part {
+                        Doubleword => "r15d",
+                        Word => "r15w",
+                        Byte => "r15b",
+                    },
+                };
+
+                write!(f, "{}", reg)
+            }
+            Self::Register(reg) => write!(f, "{}", format!("{:?}", reg).to_lowercase()),
+        }
+    }
 }
 
 impl Register {
-    pub fn new(rg: RegisterBackend, size: Size) -> Self {
-        Self { rg, size }
-    }
-
-    pub fn machine(r: MachineRegister, size: Size) -> Self {
-        Self {
-            rg: RegisterBackend::Machine(r),
-            size,
+    pub fn base(&self) -> RegisterX64 {
+        match self {
+            Self::Sub(reg, ..) | Self::Register(reg) => reg.clone(),
         }
     }
+}
 
-    pub fn size(&self) -> Size {
-        self.size.clone()
-    }
-
-    pub fn base(&self) -> &RegisterBackend {
-        &self.rg
+impl Into<Value> for Place {
+    fn into(self) -> Value {
+        match self {
+            Place::Indirect(i) => Value::Indirect(i),
+            Place::Register(reg) => Value::Register(reg),
+            Place::Static(label, size) => Value::Static(label, size),
+        }
     }
 }
