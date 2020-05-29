@@ -1,48 +1,57 @@
-# scc(simple-c-compiler)
+# scc
 
-A compiler of C code to assembly. The great part of which is done with consideration to [this artical compilation](https://norasandler.com/2017/11/29/Write-a-Compiler.html)
+It is a compiler for a subset of C programing language. The target platform is `x86_64`.
 
-It uses `gasm` sytaxis for assembly files.
+## Build
 
+The command below produces a binary in `~/.cargo/bin`. Or you can build by `cargo build` which will produce a binary in `./target` folder.
 
-> An SCC may be valuable for someone who has a blazing interest in compilers. It might be used for educational purposes as well on practice to take around compilers and bring an understanding of how some things work and why. And also we undoubtedly should not forget simple things not so bad as they are said :):)
->
-> This project takes its origin from education goals.
+```
+cargo install --path .
+```
 
 ## Usage
 
-The compiler generates `asm.s` file by default.
+```man
+USAGE:
+    simple-c-compiler [FLAGS] [OPTIONS] <input-file>
 
-```
-cargo run main.c
+ARGS:
+    <input-file>    The input file, written in C programming language
+
+FLAGS:
+    -h, --help          Prints help information
+    -O                  Activate optimizations
+    -a, --pretty-ast    Prints AST which are produced by syntax analyse stage to stdout
+    -l, --pretty-lex    Prints tokens which are produced by lexical analyzer to stdout
+    -t, --pretty-tac    Prints IR(Three Address Code) to stdout
+    -V, --version       Prints version information
+
+OPTIONS:
+    -o <out-file>                  The output file, in which will be carried out a compilation
+    -s, --syntax <[intel|gasm]>    Assembly syntax of the output file
 ```
 
-There's a bash script which imitates a mature compiler to generate binary.
+You can run it by `cargo run` or use the built binary.
+
+There's a bash script which imitates a mature compiler which generates binary.
 The command below will produce binary file.
 
 ```
 bash compiler.sh main.c
 ```
 
-## Current state
+## :negative_squared_cross_mark: Not supported yet
 
-At present it works only with `int` type and does not have support of global variables and macros.
+- macros
+- basic types `long`, `short`, `char`, etc.
+- structures
+- arrays
+- pointers
+- `char*`
 
-There are a lot of things that should be done by the book to craft it in appropriate shape.
+## References
 
-
-### :soon: roadmap 
-
-- Refactoring
-- Enhancement in error handling
-- Lifetime calculation
-  - Allocation algorithm
-  - Alignment callucation
-- A bunch of optimizations (e.g remove unused code, calculate const expressions)
-- Support `char*` type
-- ? Structures
-- ? Arrays
-- ? Support more basic types such as `long`, `char` etc.
-- ? support `arm` assembly?
-- ? support `x32`
-- ? support `NASM` syntax for `x32/64`
+- A good list of articles how to create a compiler step by step. The whole process is laid on naturally in a methodical way. — https://norasandler.com/2017/11/29/Write-a-Compiler.html
+- Openly available slides of cs143 standford compilers class. It had an influence on a allocation stage. — https://web.stanford.edu/class/archive/cs/cs143/cs143.1128/
+- Some notes about IR — https://cs.lmu.edu/~ray/notes/ir/
