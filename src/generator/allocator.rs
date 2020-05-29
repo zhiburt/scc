@@ -1,4 +1,4 @@
-use super::asm::{Indirect, Part, Place, Register, RegisterX64, Size};
+use super::asm::{Indirect, Offset, Part, Place, Register, RegisterX64, Size};
 use crate::il::lifeinterval;
 use crate::il::tac;
 use std::collections::HashMap;
@@ -39,7 +39,11 @@ impl Allocator {
         for (id, ..) in &ir.global_data {
             s.insert(
                 *id,
-                Place::Static(format!("_var_{}(%rip)", id), Size::Doubleword),
+                Place::Indirect(Indirect {
+                    reg: Register::Register(RIP),
+                    offset: Offset::Label(format!("_var_{}", id)),
+                    size: Size::Doubleword,
+                }),
             );
         }
 
@@ -64,11 +68,11 @@ impl Allocator {
                 stack_ptr += 4;
                 s.insert(
                     id.unwrap(),
-                    Place::Indirect(Indirect {
-                        offset: stack_ptr,
-                        reg: Register::Register(RBP),
-                        size: Doubleword,
-                    }),
+                    Place::Indirect(Indirect::new(
+                        Register::Register(RBP),
+                        stack_ptr,
+                        Doubleword,
+                    )),
                 );
             } else if let Some(id) = id {
                 allocated.retain(|reg, id| {
@@ -86,11 +90,11 @@ impl Allocator {
                     free.push(reg.clone());
 
                     stack_ptr += 4;
-                    *s.get_mut(&id).unwrap() = Place::Indirect(Indirect {
-                        offset: stack_ptr,
-                        reg: Register::Register(RBP),
-                        size: Doubleword,
-                    });
+                    *s.get_mut(&id).unwrap() = Place::Indirect(Indirect::new(
+                        Register::Register(RBP),
+                        stack_ptr,
+                        Doubleword,
+                    ));
                 }
 
                 let reg = free.pop().unwrap();
@@ -178,11 +182,11 @@ impl Allocator {
                     .take(params.len() - regs.len())
                     .rev()
                     .map(|id| {
-                        let reg = Place::Indirect(Indirect {
-                            offset: param_offset,
-                            reg: Register::Register(RBP),
-                            size: Size::Doubleword,
-                        });
+                        let reg = Place::Indirect(Indirect::new(
+                            Register::Register(RBP),
+                            param_offset,
+                            Size::Doubleword,
+                        ));
                         param_offset += PLATFORM_WORD_SIZE;
 
                         (*id, reg)

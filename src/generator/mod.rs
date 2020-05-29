@@ -1,6 +1,6 @@
 mod allocator;
 mod asm;
-mod syntax;
+pub mod syntax;
 
 use super::il::tac::{self, File, InstructionLine};
 use asm::{AsmX32, Indirect, Part, Place, Register, RegisterX64, Size, Value};
@@ -226,22 +226,22 @@ fn get_register(
 
             let mut spill = asm::Block::new();
             spill.emit(AsmX32::Mov(
-                Place::Indirect(Indirect {
-                    size: Size::Doubleword,
-                    offset: offset,
-                    reg: Register::Register(RegisterX64::RBP),
-                }),
+                Place::Indirect(Indirect::new(
+                    Register::Register(RegisterX64::RBP),
+                    offset,
+                    Size::Doubleword,
+                )),
                 Value::Register(reg.clone()),
             ));
 
             let mut unspill = asm::Block::new();
             unspill.emit(AsmX32::Mov(
                 Place::Register(reg.clone()),
-                Value::Indirect(Indirect {
-                    size: Size::Doubleword,
-                    offset: offset,
-                    reg: Register::Register(RegisterX64::RBP),
-                }),
+                Value::Indirect(Indirect::new(
+                    Register::Register(RegisterX64::RBP),
+                    offset,
+                    Size::Doubleword,
+                )),
             ));
 
             (reg.base(), spill, unspill)
@@ -302,11 +302,11 @@ fn space_for_divisor(
     } else {
         let offset = al.alloc_stack();
         let mut spill = asm::Block::new();
-        let place = Place::Indirect(Indirect {
-            reg: Register::Register(RegisterX64::RBP),
-            size: Size::Doubleword,
+        let place = Place::Indirect(Indirect::new(
+            Register::Register(RegisterX64::RBP),
             offset,
-        });
+            Size::Doubleword,
+        ));
         spill.emit(AsmX32::Mov(place.clone(), Value::Const(rhs)));
 
         (place, spill, asm::Block::new())
@@ -320,22 +320,22 @@ fn spill_eax(line: usize, al: &mut allocator::Allocator) -> (asm::Block, asm::Bl
         let offset = al.alloc_stack();
         let mut spill = asm::Block::new();
         spill.emit(AsmX32::Mov(
-            Place::Indirect(Indirect {
-                reg: Register::Register(RegisterX64::RBP),
-                size: Size::Doubleword,
+            Place::Indirect(Indirect::new(
+                Register::Register(RegisterX64::RBP),
                 offset,
-            }),
+                Size::Doubleword,
+            )),
             Value::Register(Register::Sub(RegisterX64::RAX, Part::Doubleword)),
         ));
 
         let mut unspill = asm::Block::new();
         unspill.emit(AsmX32::Mov(
             Place::Register(Register::Sub(RegisterX64::RAX, Part::Doubleword)),
-            Value::Indirect(Indirect {
-                reg: Register::Register(RegisterX64::RBP),
-                size: Size::Doubleword,
+            Value::Indirect(Indirect::new(
+                Register::Register(RegisterX64::RBP),
                 offset,
-            }),
+                Size::Doubleword,
+            )),
         ));
 
         (spill, unspill)
@@ -394,22 +394,22 @@ fn spill_edx_div_c(line: usize, al: &mut allocator::Allocator) -> (asm::Block, a
         let offset = al.alloc_stack();
         let mut spill = asm::Block::new();
         spill.emit(AsmX32::Mov(
-            Place::Indirect(Indirect {
+            Place::Indirect(Indirect::new(
+                Register::Register(RegisterX64::RBP),
                 offset,
-                size: Size::Doubleword,
-                reg: Register::Register(RegisterX64::RBP),
-            }),
+                Size::Doubleword,
+            )),
             Value::Register(Register::Sub(RegisterX64::RDX, Part::Doubleword)),
         ));
 
         let mut unspill = asm::Block::new();
         unspill.emit(AsmX32::Mov(
             Place::Register(Register::Sub(RegisterX64::RDX, Part::Doubleword)),
-            Value::Indirect(Indirect {
+            Value::Indirect(Indirect::new(
+                Register::Register(RegisterX64::RBP),
                 offset,
-                size: Size::Doubleword,
-                reg: Register::Register(RegisterX64::RBP),
-            }),
+                Size::Doubleword,
+            )),
         ));
 
         (spill, unspill)
@@ -994,11 +994,11 @@ fn translate(
             };
 
             let offset = map.alloc_stack();
-            let tmp = Place::Indirect(Indirect {
-                size: Size::Doubleword,
-                offset: offset,
-                reg: Register::Register(RegisterX64::RBP),
-            });
+            let tmp = Place::Indirect(Indirect::new(
+                Register::Register(RegisterX64::RBP),
+                offset,
+                Size::Doubleword,
+            ));
 
             b += spill;
 
@@ -1143,11 +1143,11 @@ fn translate(
             };
 
             let offset = map.alloc_stack();
-            let tmp = Place::Indirect(Indirect {
-                size: Size::Doubleword,
-                offset: offset,
-                reg: Register::Register(RegisterX64::RBP),
-            });
+            let tmp = Place::Indirect(Indirect::new(
+                Register::Register(RegisterX64::RBP),
+                offset,
+                Size::Doubleword,
+            ));
 
             b += spill;
 
@@ -1299,11 +1299,11 @@ fn translate(
             };
 
             let offset = map.alloc_stack();
-            let tmp = Place::Indirect(Indirect {
-                size: Size::Doubleword,
-                offset: offset,
-                reg: Register::Register(RegisterX64::RBP),
-            });
+            let tmp = Place::Indirect(Indirect::new(
+                Register::Register(RegisterX64::RBP),
+                offset,
+                Size::Doubleword,
+            ));
 
             b += spill;
 
@@ -1455,11 +1455,11 @@ fn translate(
             };
 
             let offset = map.alloc_stack();
-            let tmp = Place::Indirect(Indirect {
-                size: Size::Doubleword,
-                offset: offset,
-                reg: Register::Register(RegisterX64::RBP),
-            });
+            let tmp = Place::Indirect(Indirect::new(
+                Register::Register(RegisterX64::RBP),
+                offset,
+                Size::Doubleword,
+            ));
 
             b += spill;
 
@@ -1611,11 +1611,11 @@ fn translate(
             };
 
             let offset = map.alloc_stack();
-            let tmp = Place::Indirect(Indirect {
-                size: Size::Doubleword,
-                offset: offset,
-                reg: Register::Register(RegisterX64::RBP),
-            });
+            let tmp = Place::Indirect(Indirect::new(
+                Register::Register(RegisterX64::RBP),
+                offset,
+                Size::Doubleword,
+            ));
 
             b += spill;
 
@@ -1767,11 +1767,11 @@ fn translate(
             };
 
             let offset = map.alloc_stack();
-            let tmp = Place::Indirect(Indirect {
-                size: Size::Doubleword,
-                offset: offset,
-                reg: Register::Register(RegisterX64::RBP),
-            });
+            let tmp = Place::Indirect(Indirect::new(
+                Register::Register(RegisterX64::RBP),
+                offset,
+                Size::Doubleword,
+            ));
 
             b += spill;
 
@@ -1852,11 +1852,11 @@ fn translate(
             label,
         ))) => {
             let offset = map.alloc_stack();
-            let tmp = Place::Indirect(Indirect {
-                size: Size::Doubleword,
-                offset: offset,
-                reg: Register::Register(RegisterX64::RBP),
-            });
+            let tmp = Place::Indirect(Indirect::new(
+                Register::Register(RegisterX64::RBP),
+                offset,
+                Size::Doubleword,
+            ));
             b.emit(AsmX32::Mov(tmp.clone(), Value::Const(c).into()));
             b.emit(AsmX32::Cmp(tmp, Value::Const(0)));
             b.emit(AsmX32::Je(format!("_L{}", label)));
@@ -1883,11 +1883,11 @@ fn translate(
                     }
                 } {
                     let offset = map.alloc_stack();
-                    let tmp = Place::Indirect(Indirect {
-                        size: Size::Doubleword,
-                        offset: offset,
-                        reg: Register::Register(RegisterX64::RBP),
-                    });
+                    let tmp = Place::Indirect(Indirect::new(
+                        Register::Register(RegisterX64::RBP),
+                        offset,
+                        Size::Doubleword,
+                    ));
                     let mut spill = asm::Block::new();
                     spill.emit(AsmX32::Mov(
                         tmp.clone(),
@@ -1941,11 +1941,11 @@ fn translate(
                 != Place::Register(Register::Sub(RegisterX64::RAX, Part::Doubleword))
             {
                 let offset = map.alloc_stack();
-                let tmp = Place::Indirect(Indirect {
-                    size: Size::Doubleword,
-                    offset: offset,
-                    reg: Register::Register(RegisterX64::RBP),
-                });
+                let tmp = Place::Indirect(Indirect::new(
+                    Register::Register(RegisterX64::RBP),
+                    offset,
+                    Size::Doubleword,
+                ));
                 let mut spill = asm::Block::new();
                 spill.emit(AsmX32::Mov(
                     tmp.clone(),

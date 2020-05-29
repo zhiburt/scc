@@ -1,4 +1,4 @@
-use super::asm::{AsmX32, Indirect, Line, Place, Size, Value};
+use super::asm::{AsmX32, Indirect, Line, Place, Size, Value, Offset};
 // TODO: it's better to be pure structure
 pub struct GASM;
 
@@ -112,7 +112,10 @@ impl GASM {
 fn format_place(p: &Place) -> String {
     match p {
         Place::Register(reg) => format!("%{}", reg),
-        Place::Indirect(Indirect { offset, reg, .. }) => format!("-{}(%{})", offset, reg),
+        Place::Indirect(Indirect { offset, reg, .. }) => match offset {
+            Offset::Static(offset) => format!("-{}(%{})", offset, reg),
+            Offset::Label(offset) => format!("-{}(%{})", offset, reg),
+        }
         Place::Static(label, ..) => label.to_owned(),
     }
 }

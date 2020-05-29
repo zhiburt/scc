@@ -2,16 +2,14 @@ use super::syntax::GASM;
 use std::collections::HashMap;
 
 pub struct Assembly {
-    funcs: HashMap<String, Func>,
-
-    data: Block,
+    pub funcs: HashMap<String, Func>,
+    pub data: Block,
 }
 
 impl Assembly {
     pub fn new() -> Self {
         Self {
             funcs: HashMap::new(),
-
             data: Block::new(),
         }
     }
@@ -202,8 +200,24 @@ pub enum Register {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Indirect {
     pub reg: Register,
-    pub offset: usize,
+    pub offset: Offset,
     pub size: Size,
+}
+
+impl Indirect {
+    pub fn new(reg: Register, offset: usize, size: Size) -> Self {
+        Self {
+            offset: Offset::Static(offset),
+            reg,
+            size,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Offset {
+    Static(usize),
+    Label(Label),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, std::hash::Hash)]
@@ -224,6 +238,7 @@ pub enum RegisterX64 {
     R15,
     RSP,
     RBP,
+    RIP,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -327,6 +342,10 @@ impl std::fmt::Display for Register {
                         Doubleword => "r15d",
                         Word => "r15w",
                         Byte => "r15b",
+                    },
+                    RIP => match part {
+                        Doubleword => "eip",
+                        _ => unreachable!(),
                     },
                 };
 
