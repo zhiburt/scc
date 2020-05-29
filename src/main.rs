@@ -4,7 +4,11 @@ use std::path::PathBuf;
 use clap::Clap;
 
 use simple_c_compiler::{
-    checks, generator,
+    checks,
+    generator::{
+        self,
+        syntax::{Intel, GASM},
+    },
     il::{self, tac},
     lexer::Lexer,
     parser,
@@ -35,6 +39,9 @@ struct Opt {
     pretty_tac: bool,
     #[clap(short = "O")]
     optimization: bool,
+    /// Assembly syntax of the output file
+    #[clap(short, long, value_name="[intel|gasm]")]
+    syntax: Option<String>,
     #[clap(parse(from_os_str))]
     input_file: PathBuf,
     #[clap(short = "o", parse(from_os_str))]
@@ -60,7 +67,6 @@ fn main() {
         println!("\n{}", pretty_output::pretty_prog(&ast));
     }
 
-
     if !checks::function_checks::func_check(&ast) {
         eprintln!("invalid function declaration or definition");
         std::process::exit(120);
@@ -80,7 +86,6 @@ fn main() {
         eprintln!("usage before declaration");
         std::process::exit(-123);
     }
-
 
     let mut tac = tac::il(&ast);
     if opt.optimization {
@@ -107,6 +112,11 @@ fn main() {
         }
     }
 
+    let asm = match opt.syntax {
+        Some(s) if s == "intel" => generator::gen::<Intel>(tac),
+        _ => generator::gen::<GASM>(tac),
+    };
+
     let mut asm_file = std::fs::File::create(output_file).expect("Cannot create output file");
-    writeln!(asm_file, "{}", generator::gen(tac)).unwrap();
+    writeln!(asm_file, "{}", asm).unwrap();
 }

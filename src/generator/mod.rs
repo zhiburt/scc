@@ -6,12 +6,12 @@ use super::il::tac::{self, File, InstructionLine};
 use asm::{AsmX32, Indirect, Part, Place, Register, RegisterX64, Size, Value};
 use std::collections::HashMap;
 
-pub fn gen(ir: File) -> String {
+pub fn gen<S: syntax::Syntax>(ir: File) -> String {
     let g = Generator::new(ir);
     let asm = g.gen();
     // allocator::alloc(&mut asm);
 
-    asm.code()
+    asm.code::<S>()
 }
 
 struct Generator {

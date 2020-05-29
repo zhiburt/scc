@@ -1,4 +1,4 @@
-use super::syntax::GASM;
+use super::syntax::Syntax;
 use std::collections::HashMap;
 
 pub struct Assembly {
@@ -22,23 +22,8 @@ impl Assembly {
         self.data = data;
     }
 
-    pub fn code(&self) -> String {
-        let mut buf = String::new();
-        for i in self.data.into_iter() {
-            buf.push_str(&GASM::translate(i));
-            buf.push('\n');
-        }
-
-        for func in self.funcs.values() {
-            for i in func.instructions() {
-                buf.push_str(&GASM::translate(i));
-                buf.push('\n');
-            }
-
-            buf.push('\n');
-        }
-
-        buf
+    pub fn code<S: Syntax>(&self) -> String {
+        S::asm(self)
     }
 }
 
