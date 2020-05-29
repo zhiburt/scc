@@ -19,31 +19,32 @@ mod pretty_output;
 #[derive(Clap)]
 #[clap(
     name = "scc",
-    version = "0.0.2",
-    about = "
-        A handcrafted compiler of programs written in C to assembler language.
+    version = "0.1.0",
+    author = "Maxim Zhiburt <zhiburt@gmail.com>",
+    about = "A handcrafted C compiler to assembler language
 
-        To start use it pass the file name as an argument and then
-        the result of compilation appears in asm.s file by default.
-
-        It uses GASM syntax for Assembly.
-    ",
-    author = "Maxim Z."
+!Supports only int type, the other basic types will cause an error"
 )]
 struct Opt {
+    /// Prints tokens which are produced by lexical analyzer to stdout
     #[clap(short = "lex", long = "pretty-lex")]
     pretty_lex: bool,
+    /// Prints AST which are produced by syntax analyse stage to stdout
     #[clap(short = "ast", long = "pretty-ast")]
     pretty_ast: bool,
+    /// Prints IR(Three Address Code) to stdout
     #[clap(short = "tac", long = "pretty-tac")]
     pretty_tac: bool,
+    /// Activate optimizations
     #[clap(short = "O")]
     optimization: bool,
     /// Assembly syntax of the output file
-    #[clap(short, long, value_name="[intel|gasm]")]
+    #[clap(short, long, value_name = "[intel|gasm]")]
     syntax: Option<String>,
+    /// The input file, written in C programming language
     #[clap(parse(from_os_str))]
     input_file: PathBuf,
+    /// The output file, in which will be carried out a compilation
     #[clap(short = "o", parse(from_os_str))]
     out_file: Option<PathBuf>,
 }
