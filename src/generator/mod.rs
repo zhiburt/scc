@@ -155,6 +155,31 @@ fn checked_add(
     b
 }
 
+fn checked_sub(
+    line: usize,
+    al: &mut allocator::Allocator,
+    from: tac::ID,
+    to: tac::ID,
+) -> asm::Block {
+    let mut b = asm::Block::new();
+    if matches!(al.get(from), Place::Indirect(..)) && matches!(al.get(to), Place::Indirect(..)) {
+        let (reg, spill, unspill) = get_register(line, al);
+        b += spill;
+        b.emit(AsmX32::Mov(
+            Place::Register(Register::Sub(reg.clone(), Part::Doubleword)),
+            al.get(from).into(),
+        ));
+        b.emit(AsmX32::Sub(
+            al.get(to),
+            Value::Register(Register::Sub(reg, Part::Doubleword)),
+        ));
+        b += unspill;
+    } else {
+        b.emit(AsmX32::Add(al.get(to), al.get(from).into()));
+    }
+    b
+}
+
 fn checked_mov(
     line: usize,
     al: &mut allocator::Allocator,
@@ -517,7 +542,7 @@ fn translate(
             tac::Value::ID(rhs),
         )) => {
             b += checked_mov(line, &mut map, lhs, id.unwrap());
-            b.emit(AsmX32::Sub(map.get(id.unwrap()), map.get(rhs).into()));
+            b += checked_sub(line, &mut map, rhs, id.unwrap());
         }
         tac::Instruction::Op(tac::Op::Op(
             tac::TypeOp::Arithmetic(tac::ArithmeticOp::Sub),
