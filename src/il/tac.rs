@@ -11,19 +11,25 @@ pub struct File {
 pub fn il(p: &ast::Program) -> File {
     let mut gen = Generator::new();
     let mut funcs = Vec::new();
+
+    p.0.iter().filter_map(|top| match top {
+        ast::TopLevel::Declaration(decl) => match decl { ast::Declaration::Declare{name, ..} => Some((name, decl))},
+        _ => None,
+    }).collect::<HashMap<_, _>>()
+    .into_iter()
+    .for_each(|(_, decl)| gen.global_decl(decl));
+
     for top in &p.0 {
         match top {
             ast::TopLevel::Function(fun) => {
                 gen.context.push_scope();
-                if let Some(mut func) = gen.parse(fun) {
+                if let Some(func) = gen.parse(fun) {
                     funcs.push(func);
                 }
                 gen.context.pop_scope();
                 gen = Generator::from(&gen);
             }
-            ast::TopLevel::Declaration(decl) => {
-                gen.global_decl(decl);
-            }
+            ast::TopLevel::Declaration(decl) => (),
         }
     }
 
@@ -216,6 +222,7 @@ impl Generator {
         let mut generator = Generator::new();
         // check is it copy or clone in sense of references.
         generator.label_counter = g.label_counter;
+        generator.context.symbols_counter = g.context.symbols_counter;
         generator.context.globals = g.context.globals.clone();
 
         // copy global vars
