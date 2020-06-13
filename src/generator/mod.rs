@@ -28,11 +28,12 @@ impl Generator {
     }
 
     fn gen_function(&mut self, func: tac::FuncDef) {
-        let mut memory_map = allocator::Allocator::new(&self.ir, &func);
+        let (mut allocator, params) = allocator::Allocator::new(&self.ir, &func);
         let mut code = Vec::new();
+        code.push(params);
 
         for (line, i) in func.instructions.into_iter().enumerate() {
-            code.push(translate(line, &mut memory_map, i));
+            code.push(translate(line, &mut allocator, i));
         }
 
         let header = {
@@ -57,7 +58,7 @@ impl Generator {
             if func.has_function_call {
                 // todo: stack alignment
                 // comment: now it's always allocated by 4 bytes so its got to be ok
-                let stack_size = memory_map.stack_size;
+                let stack_size = allocator.stack_size;
                 prologue.emit(AsmX32::Sub(
                     Place::Register(Register::Register(RegisterX64::RSP)),
                     Value::Const(stack_size as i32),
@@ -175,7 +176,7 @@ fn checked_sub(
         ));
         b += unspill;
     } else {
-        b.emit(AsmX32::Add(al.get(to), al.get(from).into()));
+        b.emit(AsmX32::Sub(al.get(to), al.get(from).into()));
     }
     b
 }

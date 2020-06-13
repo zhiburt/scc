@@ -1,4 +1,4 @@
-use super::asm::{Indirect, Offset, Part, Place, Register, RegisterX64, Size};
+use super::asm::{Indirect, Offset, Part, Place, Register, RegisterX64, Size, Block, AsmX32};
 use crate::il::lifeinterval;
 use crate::il::tac;
 use std::collections::HashMap;
@@ -11,7 +11,7 @@ pub struct Allocator {
 }
 
 impl Allocator {
-    pub fn new(ir: &tac::File, f: &tac::FuncDef) -> Self {
+    pub fn new(ir: &tac::File, f: &tac::FuncDef) -> (Self, Block) {
         use RegisterX64::*;
         use Size::*;
 
@@ -34,7 +34,23 @@ impl Allocator {
         };
 
         let intervals = lifeinterval::LiveIntervals::new(&f.instructions);
-        let (mut s, stack_start) = Self::recognize_params(&f.parameters);
+        let (mut s, mut stack_start) = Self::recognize_params(&f.parameters);
+
+        let mut params = Block::new();
+        for (param, place) in s.iter_mut() {
+            stack_start += 4;
+            let stack = Place::Indirect(Indirect::new(
+                Register::Register(RegisterX64::RBP),
+                stack_start,
+                Size::Doubleword,
+            ));
+            params.emit(AsmX32::Mov(
+                stack.clone(),
+                place.clone().into(),
+            ));
+
+            *place = stack;
+        }
 
         for (id, ..) in &ir.global_data {
             s.insert(
@@ -49,22 +65,10 @@ impl Allocator {
 
         let mut free = REGISTERS.to_vec();
         let mut allocated: HashMap<RegisterX64, tac::ID> = HashMap::new();
-
-        for (_, reg) in s.iter() {
-            let reg = match reg {
-                Place::Register(Register::Register(reg)) => reg,
-                Place::Register(Register::Sub(reg, ..)) => reg,
-                _ => continue,
-            };
-            if free.contains(reg) {
-                free.remove(free.iter().position(|r| r == reg).unwrap());
-            }
-        }
-
         let used_registers = free.clone();
         let mut stack_ptr = stack_start;
         for (index, tac::InstructionLine(i, id)) in f.instructions.iter().enumerate() {
-            if matches!(i, tac::Instruction::Assignment(..)) && f.ctx.is_variable(id.unwrap()) {
+            if matches!(i, tac::Instruction::Alloc(..)) && f.ctx.is_variable(id.unwrap()) {
                 stack_ptr += 4;
                 s.insert(
                     id.unwrap(),
@@ -104,12 +108,12 @@ impl Allocator {
             }
         }
 
-        Allocator {
+        (Allocator {
             m: s,
             stack_size: stack_ptr,
             intervals,
             REGISTERS,
-        }
+        }, params)
     }
 
     pub fn get(&self, id: usize) -> Place {
