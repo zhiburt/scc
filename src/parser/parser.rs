@@ -93,7 +93,7 @@ fn map_inc_dec_token(t: TokenType, postfix: bool) -> Option<ast::IncOrDec> {
     if postfix {
         match t {
             TokenType::Increment => Some(ast::IncOrDec::Inc(ast::OperationSide::Postfix)),
-            TokenType::Decrement => Some(ast::IncOrDec::Inc(ast::OperationSide::Postfix)),
+            TokenType::Decrement => Some(ast::IncOrDec::Dec(ast::OperationSide::Postfix)),
             _ => None,
         }
     } else {
