@@ -304,7 +304,6 @@ foo:
 <td style="vertical-align: top;">
 
 ```asm
-
 	.intel_syntax noprefix
 	.globl main
 	.text
