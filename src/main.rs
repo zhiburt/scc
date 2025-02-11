@@ -1,9 +1,9 @@
 use std::io::Write;
 use std::path::PathBuf;
 
-use clap::Clap;
+use clap::Parser;
 
-use simple_c_compiler::{
+use scc::{
     checks,
     generator::{
         self,
@@ -16,36 +16,35 @@ use simple_c_compiler::{
 
 mod pretty_output;
 
-#[derive(Clap)]
-#[clap(
+#[derive(Parser)]
+#[command(
     name = "scc",
     version = "0.1.0",
     author = "Maxim Zhiburt <zhiburt@gmail.com>",
     about = "A handcrafted C compiler to assembler language
 
-!Supports only int type, the other basic types will cause an error"
+!Supports only int type, other basic types will cause an error"
 )]
 struct Opt {
     /// Prints tokens which are produced by lexical analyzer to stdout
-    #[clap(short = "lex", long = "pretty-lex")]
+    #[arg(short = 'l', long = "pretty-lex")]
     pretty_lex: bool,
     /// Prints AST which are produced by syntax analyse stage to stdout
-    #[clap(short = "ast", long = "pretty-ast")]
+    #[arg(short = 'a', long = "pretty-ast")]
     pretty_ast: bool,
     /// Prints IR(Three Address Code) to stdout
-    #[clap(short = "tac", long = "pretty-tac")]
+    #[clap(short = 't', long = "pretty-tac")]
     pretty_tac: bool,
     /// Activate optimizations
-    #[clap(short = "O")]
+    #[clap(short = 'O')]
     optimization: bool,
     /// Assembly syntax of the output file
     #[clap(short, long, value_name = "[intel|gasm]")]
     syntax: Option<String>,
     /// The input file, written in C programming language
-    #[clap(parse(from_os_str))]
     input_file: PathBuf,
     /// The output file, in which will be carried out a compilation
-    #[clap(short = "o", parse(from_os_str))]
+    #[clap(short = 'o')]
     out_file: Option<PathBuf>,
 }
 
@@ -106,8 +105,7 @@ fn main() {
             println!();
             pretty_output::pretty_tac(std::io::stdout(), f);
             println!();
-            let intervals =
-                simple_c_compiler::il::lifeinterval::LiveIntervals::new(&f.instructions);
+            let intervals = il::lifeinterval::LiveIntervals::new(&f.instructions);
             writeln!(std::io::stdout(), "intervals {}\n{:?}", f.name, intervals.0).unwrap();
             println!();
         }
