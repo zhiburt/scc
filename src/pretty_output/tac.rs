@@ -1,112 +1,106 @@
-use std::io::Write;
+use std::{io::Result, io::Write};
 
-use simple_c_compiler::il::tac;
+use scc::il::tac::{
+    self, ArithmeticOp, BitwiseOp, Const, Context, EqualityOp, FuncDef, Instruction,
+    InstructionLine, Label, RelationalOp, TypeOp, UnOp, Value, ID,
+};
 
-pub fn pretty<W: Write>(mut w: W, fun: &tac::FuncDef) {
-    writeln!(w, "{}:", pretty_fun_name(&fun.name));
-    fun.parameters
-        .iter()
-        .map(|id| format!("param {}", pretty_id(id, &fun.ctx)))
-        .for_each(|p| {
-            writeln!(w, "  {}", p);
-        });
-    writeln!(w, "  BeginFunc {}", fun.frame_size);
+pub fn pretty<W>(mut w: W, fun: &FuncDef) -> Result<()>
+where
+    W: Write,
+{
+    writeln!(w, "{}:", pretty_fun_name(&fun.name))?;
 
-    for tac::InstructionLine(inst, id) in &fun.instructions {
+    for id in &fun.parameters {
+        let id = pretty_id(id, &fun.ctx);
+        writeln!(w, "  param {}", id)?;
+    }
+
+    writeln!(w, "  BeginFunc {}", fun.frame_size)?;
+
+    for InstructionLine(inst, id) in &fun.instructions {
         match inst {
-            tac::Instruction::Alloc(val) => {
-                writeln!(
-                    w,
-                    "  {}: {}",
-                    pretty_id(id.as_ref().unwrap(), &fun.ctx),
-                    pretty_value(val, &fun.ctx),
-                )
-                .unwrap();
+            Instruction::Alloc(val) => {
+                let id = pretty_id(id.as_ref().unwrap(), &fun.ctx);
+                let value = pretty_value(val, &fun.ctx);
+                writeln!(w, "  {}: {}", id, value,)?;
             }
-            tac::Instruction::Assignment(id1, v) => {
-                writeln!(
-                    w,
-                    "  {}: {}",
-                    pretty_id(id1, &fun.ctx),
-                    pretty_value(v, &fun.ctx),
-                );
+            Instruction::Assignment(id1, v) => {
+                let id = pretty_id(id1, &fun.ctx);
+                let value = pretty_value(v, &fun.ctx);
+                writeln!(w, "  {}: {}", id, value,)?;
             }
-            tac::Instruction::Call(call) => {
-                for p in call.params.iter() {
-                    writeln!(w, "  PushParam {}", pretty_value(p, &fun.ctx));
+            Instruction::Call(call) => {
+                for param in call.params.iter() {
+                    let value = pretty_value(param, &fun.ctx);
+                    writeln!(w, "  PushParam {}", value)?;
                 }
 
-                writeln!(
-                    w,
-                    "  {}: LCall {}",
-                    pretty_id(id.as_ref().unwrap(), &fun.ctx),
-                    pretty_fun_name(&call.name)
-                );
-                writeln!(w, "  PopParams {}", call.pop_size);
+                let id = pretty_id(id.as_ref().unwrap(), &fun.ctx);
+                let func_name = pretty_fun_name(&call.name);
+                writeln!(w, "  {}: LCall {}", id, func_name)?;
+                writeln!(w, "  PopParams {}", call.pop_size)?;
             }
-            tac::Instruction::Op(op) => {
+            Instruction::Op(op) => {
                 match op {
                     tac::Op::Op(t, v1, v2) => {
-                        writeln!(
-                            w,
-                            "  {}: {} {} {}",
-                            pretty_id(id.as_ref().unwrap(), &fun.ctx),
-                            pretty_value(v1, &fun.ctx),
-                            pretty_type(t),
-                            pretty_value(v2, &fun.ctx)
-                        );
+                        let id = pretty_id(id.as_ref().unwrap(), &fun.ctx);
+                        let op = pretty_type(t);
+                        let val1 = pretty_value(v1, &fun.ctx);
+                        let val2 = pretty_value(v2, &fun.ctx);
+
+                        writeln!(w, "  {}: {} {} {}", id, val1, op, val2)?;
                     }
                     tac::Op::Unary(op, v1) => {
-                        writeln!(
-                            w,
-                            "  {}: {} {}",
-                            pretty_id(id.as_ref().unwrap(), &fun.ctx),
-                            pretty_unary_op(op),
-                            pretty_value(v1, &fun.ctx),
-                        );
+                        let id = pretty_id(id.as_ref().unwrap(), &fun.ctx);
+                        let op = pretty_unary_op(op);
+                        let val = pretty_value(v1, &fun.ctx);
+                        writeln!(w, "  {}: {} {}", id, op, val)?;
                     }
                 };
             }
-            tac::Instruction::ControlOp(cop) => match cop {
+            Instruction::ControlOp(cop) => match cop {
                 tac::ControlOp::Label(label) => {
-                    writeln!(w, "{}:", pretty_label(label));
+                    let label = pretty_label(label);
+                    writeln!(w, "{}:", label)?;
                 }
                 tac::ControlOp::Branch(lb) => match lb {
                     tac::Branch::GOTO(label) => {
-                        writeln!(w, "  Goto {}", pretty_label(label));
+                        let label = pretty_label(label);
+                        writeln!(w, "  Goto {}", label)?;
                     }
                     tac::Branch::IfGOTO(v, label) => {
-                        writeln!(
-                            w,
-                            "  IfZ {} Goto {}",
-                            pretty_value(v, &fun.ctx),
-                            pretty_label(label)
-                        );
+                        let value = pretty_value(v, &fun.ctx);
+                        let label = pretty_label(label);
+                        writeln!(w, "  IfZ {} Goto {}", value, label,)?;
                     }
                 },
                 tac::ControlOp::Return(v) => {
-                    writeln!(w, "  Return {}", pretty_value(v, &fun.ctx)).unwrap()
+                    let value = pretty_value(v, &fun.ctx);
+                    writeln!(w, "  Return {}", value)?;
                 }
             },
         }
     }
+
+    Ok(())
 }
 
-pub fn pretty_value(v: &tac::Value, ctx: &tac::Context) -> String {
+pub fn pretty_value(v: &Value, ctx: &Context) -> String {
     match v {
-        tac::Value::Const(tac::Const::Int(c)) => format!("{}", c),
-        tac::Value::ID(id) => pretty_id(id, &ctx),
+        Value::Const(Const::Int(c)) => format!("{}", c),
+        Value::ID(id) => pretty_id(id, &ctx),
     }
 }
 
-pub fn pretty_id(id: &tac::ID, ctx: &tac::Context) -> String {
+pub fn pretty_id(id: &ID, ctx: &Context) -> String {
     match ctx.ident_by_id(*id) {
         Some(name) => format!("{}", name),
         None => format!("t{}", id),
     }
 }
 
-pub fn pretty_label(label: &tac::Label) -> String {
+pub fn pretty_label(label: &Label) -> String {
     format!("_L{}", label)
 }
 
@@ -118,55 +112,55 @@ pub fn pretty_fun_name(name: &str) -> String {
     }
 }
 
-pub fn pretty_type(op: &tac::TypeOp) -> String {
+pub fn pretty_type(op: &TypeOp) -> String {
     match op {
-        tac::TypeOp::Arithmetic(op) => pretty_arith_op(op),
-        tac::TypeOp::Relational(op) => pretty_rel_op(op),
-        tac::TypeOp::Equality(op) => pretty_eq_op(op),
-        tac::TypeOp::Bit(op) => pretty_bit_op(op),
+        TypeOp::Arithmetic(op) => pretty_arith_op(op),
+        TypeOp::Relational(op) => pretty_rel_op(op),
+        TypeOp::Equality(op) => pretty_eq_op(op),
+        TypeOp::Bit(op) => pretty_bit_op(op),
     }
 }
 
-pub fn pretty_arith_op(op: &tac::ArithmeticOp) -> String {
+pub fn pretty_arith_op(op: &ArithmeticOp) -> String {
     match op {
-        tac::ArithmeticOp::Add => "+".to_string(),
-        tac::ArithmeticOp::Sub => "-".to_string(),
-        tac::ArithmeticOp::Mul => "*".to_string(),
-        tac::ArithmeticOp::Div => "/".to_string(),
-        tac::ArithmeticOp::Mod => "%".to_string(),
+        ArithmeticOp::Add => "+".to_string(),
+        ArithmeticOp::Sub => "-".to_string(),
+        ArithmeticOp::Mul => "*".to_string(),
+        ArithmeticOp::Div => "/".to_string(),
+        ArithmeticOp::Mod => "%".to_string(),
     }
 }
 
-pub fn pretty_rel_op(op: &tac::RelationalOp) -> String {
+pub fn pretty_rel_op(op: &RelationalOp) -> String {
     match op {
-        tac::RelationalOp::Less => "<".to_string(),
-        tac::RelationalOp::LessOrEq => "<=".to_string(),
-        tac::RelationalOp::Greater => ">".to_string(),
-        tac::RelationalOp::GreaterOrEq => ">=".to_string(),
+        RelationalOp::Less => "<".to_string(),
+        RelationalOp::LessOrEq => "<=".to_string(),
+        RelationalOp::Greater => ">".to_string(),
+        RelationalOp::GreaterOrEq => ">=".to_string(),
     }
 }
 
-pub fn pretty_eq_op(op: &tac::EqualityOp) -> String {
+pub fn pretty_eq_op(op: &EqualityOp) -> String {
     match op {
-        tac::EqualityOp::Equal => "==".to_string(),
-        tac::EqualityOp::NotEq => "!=".to_string(),
+        EqualityOp::Equal => "==".to_string(),
+        EqualityOp::NotEq => "!=".to_string(),
     }
 }
 
-pub fn pretty_bit_op(op: &tac::BitwiseOp) -> String {
+pub fn pretty_bit_op(op: &BitwiseOp) -> String {
     match op {
-        tac::BitwiseOp::And => "&".to_string(),
-        tac::BitwiseOp::Or => "|".to_string(),
-        tac::BitwiseOp::Xor => "^".to_string(),
-        tac::BitwiseOp::LShift => "<<".to_string(),
-        tac::BitwiseOp::RShift => ">>".to_string(),
+        BitwiseOp::And => "&".to_string(),
+        BitwiseOp::Or => "|".to_string(),
+        BitwiseOp::Xor => "^".to_string(),
+        BitwiseOp::LShift => "<<".to_string(),
+        BitwiseOp::RShift => ">>".to_string(),
     }
 }
 
-pub fn pretty_unary_op(op: &tac::UnOp) -> String {
+pub fn pretty_unary_op(op: &UnOp) -> String {
     match op {
-        tac::UnOp::Neg => "-".to_string(),
-        tac::UnOp::LogicNeg => "!".to_string(),
-        tac::UnOp::BitComplement => "~".to_string(),
+        UnOp::Neg => "-".to_string(),
+        UnOp::LogicNeg => "!".to_string(),
+        UnOp::BitComplement => "~".to_string(),
     }
 }

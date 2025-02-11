@@ -1,4 +1,4 @@
-use super::tac::{self, Const, Instruction, InstructionLine, Op, TypeOp, UnOp, Value, ID};
+use super::tac::{self, Instruction, InstructionLine, Op, Value, ID};
 use std::collections::HashSet;
 
 pub fn remove_unused(mut func: tac::FuncDef) -> tac::FuncDef {
@@ -19,7 +19,7 @@ pub fn remove_unused(mut func: tac::FuncDef) -> tac::FuncDef {
             }
         }
 
-        let InstructionLine(i, id) = &func.instructions[index];
+        let InstructionLine(i, ..) = &func.instructions[index];
         used(i).iter().for_each(|id| {
             u.insert(*id);
         });

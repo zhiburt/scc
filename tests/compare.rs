@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 pub mod gcc {
     pub fn compare_code(code: &str) {
         assert_eq!(compile_gcc_expr(&code), compile_code(&code));

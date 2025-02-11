@@ -98,7 +98,7 @@ impl TokenDefinition {
                     start: m.start(),
                     end: m.end(),
                 },
-                remainingText: &text[m.end()..],
+                remaining_text: &text[m.end()..],
             }),
             _ => None,
         }
@@ -109,7 +109,7 @@ struct TokenMatch<'a> {
     token: TokenType,
     value: &'a str,
     pos: Pos,
-    remainingText: &'a str,
+    remaining_text: &'a str,
 }
 
 pub struct Lexer {
@@ -186,7 +186,7 @@ impl Lexer {
         while !remain_text.is_empty() {
             match self.find_match(&remain_text) {
                 Some(m) => {
-                    remain_text = m.remainingText;
+                    remain_text = m.remaining_text;
 
                     let mut token = Lexer::create_token_from_match(m);
                     token.pos.start += offset;
@@ -232,6 +232,7 @@ impl Lexer {
     }
 }
 
+#[cfg(test)]
 mod tests {
     use super::*;
     use std::io::Cursor;

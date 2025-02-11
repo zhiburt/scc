@@ -3,31 +3,40 @@ use compare::gcc;
 
 #[test]
 fn if_statement() {
-    gcc::compare_expr(r"
+    gcc::compare_expr(
+        r"
         int a = 10;
         if (a > 0) return 10;
         else
             return 20;
-    ");
+    ",
+    );
 
-    gcc::compare_expr(r"
+    gcc::compare_expr(
+        r"
         int a = 10;
         if (a > 0) return 10;
         return 20;
-    ");
+    ",
+    );
 
-    gcc::compare_expr(r"
+    gcc::compare_expr(
+        r"
         int a = 10;
         if (a > 0) return 10;
-    ");
+    ",
+    );
 
-    gcc::compare_expr(r"
+    gcc::compare_expr(
+        r"
         int a = 10;
         if (a > 0) { a = 20; }
         return 20;
-    ");
+    ",
+    );
 
-    gcc::compare_expr(r"
+    gcc::compare_expr(
+        r"
         int a = -1;
         if (a > 0) {
             a = 20;
@@ -38,36 +47,44 @@ fn if_statement() {
         }
 
         return a;
-    ");
+    ",
+    );
 
-    gcc::compare_expr(r"
+    gcc::compare_expr(
+        r"
         if (1) {
             return 201;
         } else if (0) {
             return 10;
         } else {
         }
-    ");
+    ",
+    );
 }
 
 #[test]
 fn while_statement() {
-    gcc::compare_expr(r"
+    gcc::compare_expr(
+        r"
         int i = 0;
         while(i < 10) {
             i++;
 
         return i;
-    ");
+    ",
+    );
 
-    gcc::compare_expr(r"
+    gcc::compare_expr(
+        r"
         int i = 0;
         while(i < 10) i++;
 
         return i;
-    ");
+    ",
+    );
 
-    gcc::compare_expr(r"
+    gcc::compare_expr(
+        r"
         int sum = 0;
         int i = 0;
         while(sum < 100) {
@@ -79,18 +96,22 @@ fn while_statement() {
         }
 
         return i;
-    ");
+    ",
+    );
 
-    gcc::compare_expr(r"
+    gcc::compare_expr(
+        r"
         int sum = 0;
         int i = 0;
         while(i++ < 10) {
             sum += i;
         }
         return i;
-    ");
+    ",
+    );
 
-    gcc::compare_expr(r"
+    gcc::compare_expr(
+        r"
         int sum = 0;
         int i = 0;
         while(1) {
@@ -99,35 +120,43 @@ fn while_statement() {
             sum += i++;
         }
         return i;
-    ");
+    ",
+    );
 }
 
 #[test]
 fn for_statement() {
-    gcc::compare_expr(r"
+    gcc::compare_expr(
+        r"
         int sum = 0;
         for(int i = 0; i < 10; i++)
             sum++;
         return sum;
-    ");
+    ",
+    );
 
-    gcc::compare_expr(r"
+    gcc::compare_expr(
+        r"
         int sum = 0;
         for(int i = 0; i < 10; i++){
             sum++;
         }
         return sum;
-    ");
+    ",
+    );
 
-    gcc::compare_expr(r"
+    gcc::compare_expr(
+        r"
         int sum = 0;
         for(int i = 0; i < 10; i++)
             for(int i = 0; i < 10; i++)
                 sum += i;
         return sum;
-    ");
+    ",
+    );
 
-    gcc::compare_expr(r"
+    gcc::compare_expr(
+        r"
         int sum = 0;
         int i = 2;
         for(int i = 0; i < 10; i++){
@@ -135,23 +164,29 @@ fn for_statement() {
             sum += i;
         }
         return sum;
-    ");
+    ",
+    );
 
-    gcc::compare_expr(r"
+    gcc::compare_expr(
+        r"
         int i;
         for(i = 0; i < 10; i++)
             ;
         return i;
-    ");
+    ",
+    );
 
-    gcc::compare_expr(r"
+    gcc::compare_expr(
+        r"
         int i = 0;
         for(;i < 10;)
             i++;            
         return i;
-    ");
+    ",
+    );
 
-    gcc::compare_expr(r"
+    gcc::compare_expr(
+        r"
         int i = 0;
         for(;;)
             if(i < 10)
@@ -159,12 +194,14 @@ fn for_statement() {
             else
                 break;        
         return i;
-    ");
+    ",
+    );
 }
 
 #[test]
 fn continue_statement() {
-    gcc::compare_expr(r"
+    gcc::compare_expr(
+        r"
         int sum = 0;
         for(int i = 0; i < 10; i++)
             if(i % 2 == 0)
@@ -172,9 +209,11 @@ fn continue_statement() {
             else
                 continue;
         return sum;
-    ");
+    ",
+    );
 
-    gcc::compare_expr(r"
+    gcc::compare_expr(
+        r"
         int sum = 0;
         for(int i = 1; i < 10; i++)
             for(int j = 1; j < 10; j++)
@@ -183,7 +222,8 @@ fn continue_statement() {
                 else
                     continue;
         return sum;
-    ");
+    ",
+    );
 }
 
 #[test]
@@ -201,7 +241,8 @@ fn break_statement() {
             ",
     );
 
-    gcc::compare_expr(r"
+    gcc::compare_expr(
+        r"
         int sum = 0;
         for(int i = 1; i < 10; i++)
             for(int j = 1; j < 10; j++)
@@ -210,12 +251,14 @@ fn break_statement() {
                 else
                     break;
         return sum;
-    ");
+    ",
+    );
 }
 
 #[test]
 fn simple_fn() {
-    gcc::compare_code(r"
+    gcc::compare_code(
+        r"
         int add(int a, int b) {
             return a + b;
         }
@@ -223,12 +266,14 @@ fn simple_fn() {
         int main() {
             add(31, 12);
         }
-    ");
+    ",
+    );
 }
 
 #[test]
 fn decl_fn() {
-    gcc::compare_code(r"
+    gcc::compare_code(
+        r"
         int add(int a, int b);
         
         int main() {
@@ -238,9 +283,11 @@ fn decl_fn() {
         int add(int a, int b) {
             return a + b;
         }
-    ");
+    ",
+    );
 
-    gcc::compare_code(r"
+    gcc::compare_code(
+        r"
         int add(int a, int b) {
             return a + b;
         }
@@ -250,12 +297,14 @@ fn decl_fn() {
         }
 
         int add(int a, int b);
-    ");
+    ",
+    );
 }
 
 #[test]
 fn recursive() {
-    gcc::compare_code(r"
+    gcc::compare_code(
+        r"
         int fib(int n) {
             if (n == 0 || n == 1) {
                 return n;
@@ -268,12 +317,14 @@ fn recursive() {
             int n = 6;
             return fib(n);
         }
-    ");
+    ",
+    );
 }
 
 #[test]
 fn libc_call() {
-    gcc::compare_code(r"
+    gcc::compare_code(
+        r"
         int putchar(int c);
         
         int main() {
@@ -292,5 +343,6 @@ fn libc_call() {
             putchar(33);
             putchar(10);
         }
-    ");
+    ",
+    );
 }

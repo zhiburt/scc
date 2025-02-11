@@ -1825,8 +1825,8 @@ fn translate(
         // OR
         tac::Instruction::Op(tac::Op::Op(
             tac::TypeOp::Bit(tac::BitwiseOp::And),
-            tac::Value::ID(lhs),
-            tac::Value::ID(rhs),
+            tac::Value::ID(_),
+            tac::Value::ID(_),
         )) => unimplemented!(),
         // // ALLOC
         tac::Instruction::Alloc(tac::Value::Const(tac::Const::Int(v))) => {
@@ -2012,8 +2012,7 @@ fn translate(
             }
         }
         i => {
-            println!("{:?}", i);
-            panic!(i);
+            panic!("Unhandled instruction: {:?}", i);
         }
     }
     b

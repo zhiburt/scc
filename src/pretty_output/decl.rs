@@ -1,4 +1,4 @@
-use simple_c_compiler::ast::{BlockItem, Declaration, Exp, FuncDecl, Program, Statement, Visitor, TopLevel};
+use scc::ast::{BlockItem, Declaration, Exp, FuncDecl, Program, Statement, TopLevel, Visitor};
 
 pub fn pretty_prog(prog: &Program) -> String {
     let mut printer = Printer::new(0);
@@ -10,9 +10,7 @@ pub fn pretty_prog(prog: &Program) -> String {
                 out.push(printer.function(func));
                 printer.clear();
             }
-            TopLevel::Declaration(..) => {
-                
-            }
+            TopLevel::Declaration(..) => {}
         }
     }
 

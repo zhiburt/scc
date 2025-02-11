@@ -103,7 +103,7 @@ fn main() {
     if opt.pretty_tac {
         for f in &tac.code {
             println!();
-            pretty_output::pretty_tac(std::io::stdout(), f);
+            pretty_output::pretty_tac(std::io::stdout(), f).unwrap();
             println!();
             let intervals = il::lifeinterval::LiveIntervals::new(&f.instructions);
             writeln!(std::io::stdout(), "intervals {}\n{:?}", f.name, intervals.0).unwrap();

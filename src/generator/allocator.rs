@@ -1,4 +1,4 @@
-use super::asm::{Indirect, Offset, Part, Place, Register, RegisterX64, Size, Block, AsmX32};
+use super::asm::{AsmX32, Block, Indirect, Offset, Part, Place, Register, RegisterX64, Size};
 use crate::il::lifeinterval;
 use crate::il::tac;
 use std::collections::HashMap;
@@ -7,7 +7,7 @@ pub struct Allocator {
     m: HashMap<tac::ID, Place>,
     intervals: lifeinterval::LiveIntervals,
     pub stack_size: usize,
-    REGISTERS: &'static [RegisterX64],
+    registers: &'static [RegisterX64],
 }
 
 impl Allocator {
@@ -15,6 +15,7 @@ impl Allocator {
         use RegisterX64::*;
         use Size::*;
 
+        #[allow(non_snake_case)]
         let REGISTERS: &'static [RegisterX64] = {
             if f.name == "main" {
                 &[RAX, RBX, RCX, RDX]
@@ -37,17 +38,14 @@ impl Allocator {
         let (mut s, mut stack_start) = Self::recognize_params(&f.parameters);
 
         let mut params = Block::new();
-        for (param, place) in s.iter_mut() {
+        for (_, place) in s.iter_mut() {
             stack_start += 4;
             let stack = Place::Indirect(Indirect::new(
                 Register::Register(RegisterX64::RBP),
                 stack_start,
                 Size::Doubleword,
             ));
-            params.emit(AsmX32::Mov(
-                stack.clone(),
-                place.clone().into(),
-            ));
+            params.emit(AsmX32::Mov(stack.clone(), place.clone().into()));
 
             *place = stack;
         }
@@ -108,12 +106,15 @@ impl Allocator {
             }
         }
 
-        (Allocator {
-            m: s,
-            stack_size: stack_ptr,
-            intervals,
-            REGISTERS,
-        }, params)
+        (
+            Allocator {
+                m: s,
+                stack_size: stack_ptr,
+                intervals,
+                registers: REGISTERS,
+            },
+            params,
+        )
     }
 
     pub fn get(&self, id: usize) -> Place {
@@ -148,7 +149,7 @@ impl Allocator {
             })
             .collect::<Vec<_>>();
 
-        let mut regs = self.REGISTERS.to_vec();
+        let mut regs = self.registers.to_vec();
         regs.retain(|reg| {
             occupied.contains(&Register::Register(reg.clone()))
                 || occupied.contains(&Register::Sub(reg.clone(), Part::Doubleword)) == false

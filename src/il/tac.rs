@@ -1,5 +1,3 @@
-use super::constant_fold;
-use super::unused_code;
 use crate::ast;
 use std::collections::{HashMap, HashSet};
 
@@ -12,12 +10,16 @@ pub fn il(p: &ast::Program) -> File {
     let mut gen = Generator::new();
     let mut funcs = Vec::new();
 
-    p.0.iter().filter_map(|top| match top {
-        ast::TopLevel::Declaration(decl) => match decl { ast::Declaration::Declare{name, ..} => Some((name, decl))},
-        _ => None,
-    }).collect::<HashMap<_, _>>()
-    .into_iter()
-    .for_each(|(_, decl)| gen.global_decl(decl));
+    p.0.iter()
+        .filter_map(|top| match top {
+            ast::TopLevel::Declaration(decl) => match decl {
+                ast::Declaration::Declare { name, .. } => Some((name, decl)),
+            },
+            _ => None,
+        })
+        .collect::<HashMap<_, _>>()
+        .into_iter()
+        .for_each(|(_, decl)| gen.global_decl(decl));
 
     for top in &p.0 {
         match top {
@@ -29,7 +31,7 @@ pub fn il(p: &ast::Program) -> File {
                 gen.context.pop_scope();
                 gen = Generator::from(&gen);
             }
-            ast::TopLevel::Declaration(decl) => (),
+            ast::TopLevel::Declaration(_) => (),
         }
     }
 
@@ -182,7 +184,7 @@ impl Context {
         self.loop_ctx.last().as_ref().unwrap().begin
     }
 
-    fn clear(&mut self) {
+    pub fn clear(&mut self) {
         self.symbols.clear();
         self.scopes.clear();
         self.scopes.push(HashSet::new());
@@ -226,13 +228,17 @@ impl Generator {
         generator.context.globals = g.context.globals.clone();
 
         // copy global vars
-        for (id, val) in &generator.context.globals {
+        for (id, _) in &generator.context.globals {
             let name = g.context.ident_by_id(*id).unwrap();
-            generator.context.symbols
+            generator
+                .context
+                .symbols
                 .entry(name.to_owned())
                 .or_default()
                 .push(id.clone());
-            generator.context.list_symbols
+            generator
+                .context
+                .list_symbols
                 .entry(name.to_owned())
                 .or_default()
                 .push(id.clone());
@@ -516,7 +522,7 @@ impl Generator {
                     // Allocate the value to be able to recognize it.
                     // Do that after processing expression since there may be
                     // a variable with the same name in the above scope
-                    let var_id = self.alloc_var(name);
+                    let _var_id = self.alloc_var(name);
                 }
             }
         }
@@ -531,7 +537,7 @@ impl Generator {
 
     fn emit_statement(&mut self, st: &ast::Statement) {
         match st {
-            ast::Statement::Exp { exp: exp } => {
+            ast::Statement::Exp { exp } => {
                 if let Some(exp) = exp {
                     self.emit_expr(exp);
                 }
@@ -573,7 +579,7 @@ impl Generator {
                     self.emit(Instruction::ControlOp(ControlOp::Label(end_label)));
                 }
             }
-            ast::Statement::Compound { list: list } => self.scoped(|g| {
+            ast::Statement::Compound { list } => self.scoped(|g| {
                 if let Some(list) = list {
                     for block in list {
                         g.emit_block(block);
@@ -736,10 +742,6 @@ impl Generator {
         v
     }
 
-    pub fn clear_vars(&mut self) {
-        self.context.clear();
-    }
-
     fn alloc_tmp(&mut self) -> ID {
         self.allocated += 1;
         self.context.add_tmp()
@@ -786,13 +788,6 @@ pub enum Instruction {
     Op(Op),
     Call(Call),
     ControlOp(ControlOp),
-}
-
-#[derive(Debug)]
-enum Exp {
-    Id(ID),
-    Call(Call),
-    Op(Op),
 }
 
 pub type ID = usize;
@@ -1022,7 +1017,7 @@ struct ReturnCounter(usize, bool, usize);
 
 impl<'a> ast::Visitor<'a> for ReturnCounter {
     fn visit_statement(&mut self, st: &'a ast::Statement) {
-        if matches!(st, ast::Statement::Return {..}) {
+        if matches!(st, ast::Statement::Return { .. }) {
             self.0 += 1;
 
             if !self.1 && self.2 == 0 {

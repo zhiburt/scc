@@ -71,19 +71,22 @@ fn calls_precidence_check(prog: &ast::Program) -> bool {
                     None => (),
                 }
             }
-            ast::TopLevel::Declaration(..) => {},
+            ast::TopLevel::Declaration(..) => {}
         }
     }
 
     true
 }
 
-fn _block_check<F: FnMut(&ast::Exp)>(block: &ast::BlockItem, mut exp_call: &mut F) {
+fn _block_check<F>(block: &ast::BlockItem, exp_call: &mut F)
+where
+    F: FnMut(&ast::Exp),
+{
     match block {
         ast::BlockItem::Statement(s) => {
             _statement_check(s, exp_call);
         }
-        ast::BlockItem::Declaration(ast::Declaration::Declare { name, exp }) => {
+        ast::BlockItem::Declaration(ast::Declaration::Declare { exp, .. }) => {
             if let Some(exp) = exp {
                 exp_call(exp);
             }
@@ -91,7 +94,10 @@ fn _block_check<F: FnMut(&ast::Exp)>(block: &ast::BlockItem, mut exp_call: &mut 
     }
 }
 
-fn _statement_check<F: FnMut(&ast::Exp)>(s: &ast::Statement, mut exp_call: &mut F) {
+fn _statement_check<F>(s: &ast::Statement, exp_call: &mut F)
+where
+    F: FnMut(&ast::Exp),
+{
     match s {
         ast::Statement::Compound { list } => {
             if let Some(list) = list {
@@ -129,11 +135,11 @@ fn _statement_check<F: FnMut(&ast::Exp)>(s: &ast::Statement, mut exp_call: &mut 
             exp3,
             statement,
         } => {
-            if let ast::Declaration::Declare { name, exp } = decl {
-                if let Some(exp) = exp {
-                    exp_call(exp);
-                }
+            let ast::Declaration::Declare { exp, .. } = decl;
+            if let Some(exp) = exp {
+                exp_call(exp);
             }
+
             if let Some(exp) = exp3 {
                 exp_call(exp);
             }

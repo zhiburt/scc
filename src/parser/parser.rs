@@ -28,10 +28,6 @@ impl error::Error for CompilerError {
     }
 }
 
-fn tokens_to_types(tokens: &Vec<Token>) -> Vec<TokenType> {
-    tokens.iter().map(|t| t.token_type).collect()
-}
-
 fn parse_expr<ParsExpFunc>(
     parse: ParsExpFunc,
     opt_tokens: &[TokenType],
@@ -250,9 +246,9 @@ pub fn parse_factor(mut tokens: Vec<Token>) -> Result<(ast::Exp, Vec<Token>)> {
     let picked_token = tokens.get(0).unwrap();
     match picked_token.token_type {
         TokenType::OpenParenthesis => {
-            let mut token = tokens.remove(0);
+            tokens.remove(0);
             let (expr, mut tokens) = parse_exp(tokens).unwrap();
-            token = tokens.remove(0);
+            let token = tokens.remove(0);
             if token.token_type != TokenType::CloseParenthesis {
                 return Err(CompilerError::ParsingError);
             }
@@ -533,9 +529,9 @@ pub fn is_seem_decl(tokens: &[Token]) -> bool {
 /// TODO: should we take off the parte with parse_decl?
 /// currently we check is it decl if it's we parse it.
 /// New function is not created since it dublication of code some kinda
-pub fn parse_block_item(mut tokens: Vec<Token>) -> Result<(ast::BlockItem, Vec<Token>)> {
+pub fn parse_block_item(tokens: Vec<Token>) -> Result<(ast::BlockItem, Vec<Token>)> {
     match tokens.get(0) {
-        Some(tok) if is_seem_decl(&tokens) => {
+        Some(_) if is_seem_decl(&tokens) => {
             let (decl, tokens) = parse_decl(tokens)?;
             Ok((ast::BlockItem::Declaration(decl), tokens))
         }

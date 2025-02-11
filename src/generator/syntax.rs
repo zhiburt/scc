@@ -255,11 +255,9 @@ impl Intel {
             },
             AsmX32::Push(v) => format!("push {}", Self::fmt_value(&v)),
             AsmX32::Pop(p) => format!("pop {}", Self::fmt_place(&p)),
-            AsmX32::Cmp(rhs, lhs) => format!(
-                "cmp {1}, {0}",
-                Self::fmt_value(&lhs),
-                Self::fmt_place(&rhs),
-            ),
+            AsmX32::Cmp(rhs, lhs) => {
+                format!("cmp {1}, {0}", Self::fmt_value(&lhs), Self::fmt_place(&rhs),)
+            }
             AsmX32::Jmp(label) => format!("jmp {}", label),
             AsmX32::Je(label) => format!("je {}", label),
             AsmX32::Jne(label) => format!("jne {}", label),
