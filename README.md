@@ -58,7 +58,14 @@ int main() {
 LEX:
 
 ```text
-[Int, Identifier, OpenParenthesis, Int, Identifier, CloseParenthesis, OpenBrace, If, OpenParenthesis, Identifier, Equal, IntegerLiteral, Or, Identifier, Equal, IntegerLiteral, CloseParenthesis, OpenBrace, Return, Identifier, Semicolon, CloseBrace, Else, OpenBrace, Return, Identifier, OpenParenthesis, Identifier, Negation, IntegerLiteral, CloseParenthesis, Addition, Identifier, OpenParenthesis, Identifier, Negation, IntegerLiteral, CloseParenthesis, Semicolon, CloseBrace, CloseBrace, Int, Identifier, OpenParenthesis, CloseParenthesis, OpenBrace, Int, Identifier, Assignment, IntegerLiteral, Semicolon, Return, Identifier, OpenParenthesis, Identifier, CloseParenthesis, Semicolon, CloseBrace]
+Int, Identifier, OpenParenthesis, Int, Identifier, CloseParenthesis, OpenBrace, If,
+OpenParenthesis, Identifier, Equal, IntegerLiteral, Or, Identifier, Equal, IntegerLiteral,
+CloseParenthesis, OpenBrace, Return, Identifier, Semicolon, CloseBrace, Else, OpenBrace, Return,
+Identifier, OpenParenthesis, Identifier, Negation, IntegerLiteral, CloseParenthesis, Addition,
+Identifier, OpenParenthesis, Identifier, Negation, IntegerLiteral, CloseParenthesis, Semicolon,
+CloseBrace, CloseBrace, Int, Identifier, OpenParenthesis, CloseParenthesis, OpenBrace, Int,
+Identifier, Assignment, IntegerLiteral, Semicolon, Return, Identifier, OpenParenthesis,
+Identifier, CloseParenthesis, Semicolon, CloseBrace
 ```
 
 AST:
@@ -136,67 +143,27 @@ intervals main
 
 ASM:
 
+<table>
+<tr>
+<th> Not Optimized </th>
+<th> Optimized </th>
+</tr>
+<tr>
+<td>
+
 ```asm
-  .globl fib
+  .globl foo
   .text
-fib:
+foo:
     pushq %rbp
     movq %rsp, %rbp
-    subq $36, %rsp
     movl %edi, -4(%rbp)
-    movl $0, -16(%rbp)
-    cmpl $0, -4(%rbp)
-    sete %dil
-    andb $1, %dil
-    movzbl %dil, %edi
-    movl %edi, -8(%rbp)
-    movl $1, -12(%rbp)
-    cmpl $0, -8(%rbp)
-    je _L1
-    jmp _L3
-_L1:
-    cmpl $1, -4(%rbp)
-    sete %dil
-    andb $1, %dil
-    movzbl %dil, %edi
-    movl %edi, %edi
-    cmpl $0, %edi
-    je _L2
-    jmp _L3
-_L2:
-    movl $0, -12(%rbp)
-_L3:
-    cmpl $0, -12(%rbp)
-    je _L4
-    movl -4(%rbp), %edi
-    movl %edi, -16(%rbp)
-    jmp _L0
-    jmp _L5
-_L4:
-    movl -4(%rbp), %edi
-    movl %edi, -20(%rbp)
-    subl $1, -20(%rbp)
-    movl -20(%rbp), %edi
-    call fib
-    movl %eax, -24(%rbp)
-    movl -4(%rbp), %edi
-    movl %edi, -28(%rbp)
-    subl $2, -28(%rbp)
-    movl -28(%rbp), %edi
-    call fib
-    movl %eax, -32(%rbp)
-    movl -24(%rbp), %edi
-    movl %edi, -36(%rbp)
-    movl -32(%rbp), %edi
-    addl %edi, -36(%rbp)
-    movl -36(%rbp), %edi
-    movl %edi, -16(%rbp)
-    jmp _L0
-_L5:
-_L0:
-    movl -16(%rbp), %eax
-    addq $36, %rsp
-    movq %rbp, %rsp
+    movl %esi, -8(%rbp)
+    movl $1, %eax
+    movl $3, -4(%rbp)
+    movl $4, -4(%rbp)
+    movl $5, -4(%rbp)
+    movl $10, %eax
     popq %rbp
     ret
 
@@ -206,16 +173,189 @@ main:
     pushq %rbp
     movq %rsp, %rbp
     subq $0, %rsp
-    movl $6, %edx
-    movl %edx, %edi
-    call fib
+    movl $30, %edx
+    addl $1, %edx
+    movl %edx, %ecx
+    addl $40, %ecx
+    movl %ecx, %edx
+    addl $50, %edx
+    movl %edx, %ecx
+    addl $60, %ecx
+    movl %ecx, %edx
+    movl $30, %ecx
+    addl $2, %ecx
+    movl %ecx, %edx
+    addl $40, %edx
+    movl $1, %edi
+    movl %edx, %esi
+    call foo
     movl %eax, %ecx
-    movl %ecx, %eax
+    movl %ecx, %edx
+    movl $0, %eax
     addq $0, %rsp
     movq %rbp, %rsp
     popq %rbp
     ret
 ```
+
+</td>
+<td style="vertical-align: top;">
+
+```asm
+  .globl main
+  .text
+main:
+    pushq %rbp
+    movq %rsp, %rbp
+    subq $0, %rsp
+    movl $181, %edx
+    movl %edx, %ecx
+    movl $72, %edx
+    movl $1, %edi
+    movl %edx, %esi
+    call foo
+    movl %eax, %ecx
+    movl %ecx, %edx
+    movl $0, %eax
+    addq $0, %rsp
+    movq %rbp, %rsp
+    popq %rbp
+    ret
+
+  .globl foo
+  .text
+foo:
+    pushq %rbp
+    movq %rsp, %rbp
+    movl %edi, -4(%rbp)
+    movl %esi, -8(%rbp)
+    movl $1, %eax
+    movl $3, -4(%rbp)
+    movl $4, -4(%rbp)
+    movl $5, -4(%rbp)
+    movl $10, %eax
+    popq %rbp
+    ret
+```
+
+</td>
+</tr>
+</table>
+
+
+ASM syntax:
+
+<table>
+<tr>
+<th> GASM </th>
+<th> Intel </th>
+</tr>
+<tr>
+<td>
+
+```asm
+  .globl main
+  .text
+main:
+    pushq %rbp
+    movq %rsp, %rbp
+    subq $0, %rsp
+    movl $30, %edx
+    addl $1, %edx
+    movl %edx, %ecx
+    addl $40, %ecx
+    movl %ecx, %edx
+    addl $50, %edx
+    movl %edx, %ecx
+    addl $60, %ecx
+    movl %ecx, %edx
+    movl $30, %ecx
+    addl $2, %ecx
+    movl %ecx, %edx
+    addl $40, %edx
+    movl $1, %edi
+    movl %edx, %esi
+    call foo
+    movl %eax, %ecx
+    movl %ecx, %edx
+    movl $0, %eax
+    addq $0, %rsp
+    movq %rbp, %rsp
+    popq %rbp
+    ret
+
+  .globl foo
+  .text
+foo:
+    pushq %rbp
+    movq %rsp, %rbp
+    movl %edi, -4(%rbp)
+    movl %esi, -8(%rbp)
+    movl $1, %eax
+    movl $3, -4(%rbp)
+    movl $4, -4(%rbp)
+    movl $5, -4(%rbp)
+    movl $10, %eax
+    popq %rbp
+    ret
+```
+
+</td>
+<td style="vertical-align: top;">
+
+```asm
+
+	.intel_syntax noprefix
+	.globl main
+	.text
+main:
+	push rbp
+	mov rbp, rsp
+	sub rsp, 0
+	mov edx, 30
+	add edx, 1
+	mov ecx, edx
+	add ecx, 40
+	mov edx, ecx
+	add edx, 50
+	mov ecx, edx
+	add ecx, 60
+	mov edx, ecx
+	mov ecx, 30
+	add ecx, 2
+	mov edx, ecx
+	add edx, 40
+	mov edi, 1
+	mov esi, edx
+	call foo
+	mov ecx, eax
+	mov edx, ecx
+	mov eax, 0
+	add rsp, 0
+	mov rsp, rbp
+	pop rbp
+	ret
+
+	.intel_syntax noprefix
+	.globl foo
+	.text
+foo:
+	push rbp
+	mov rbp, rsp
+	mov dword ptr [rbp - 4], esi
+	mov dword ptr [rbp - 8], edi
+	mov eax, 1
+	mov dword ptr [rbp - 8], 3
+	mov dword ptr [rbp - 8], 4
+	mov dword ptr [rbp - 8], 5
+	mov eax, 10
+	pop rbp
+	ret
+```
+
+</td>
+</tr>
+</table>
 
 ## :negative_squared_cross_mark: Not supported yet
 
